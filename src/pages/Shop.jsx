@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { BarRow, ShareButtons } from "../components";
+import { BarRow, ImgWithSkeleton, ShareButtons } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, useToast, useWishlist } from "../context";
 import { FILTER_DEFS, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { getProductPhotoUrl, slugify } from "../utils/helpers";
@@ -132,7 +132,7 @@ export function ShopPage() {
                       </div>
                     </div>
                     <div className="origin-row-photo" onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>
-                      <img src={getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)} alt={`${p.name} — ${p.country} coffee bag`} loading="lazy" />
+                      <ImgWithSkeleton wrapClassName="origin-row-photo-wrap" src={getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)} alt={`${p.name} — ${p.country} coffee bag`} loading="lazy" />
                       <button
                         className={`wishlist-heart ${hasWishlist(p.id) ? "saved" : ""}`}
                         onClick={(e) => { e.stopPropagation(); toggleWishlist(p.id); }}

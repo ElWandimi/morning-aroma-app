@@ -1067,6 +1067,7 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 16px 34px rgba(62,44,35,0.18); transition: transform .4s var(--spring);
 }
 .origin-row-photo img { width: 100%; max-width: 260px; height: auto; display: block; border-radius: 10px; }
+.origin-row-photo-wrap { width: 100%; max-width: 260px; }
 .origin-row:hover .origin-row-photo { transform: translateY(-6px) scale(1.02); }
 .origin-row.sold-out-card .origin-row-photo img { filter: grayscale(0.55); opacity: 0.7; }
 @media (max-width: 760px) {
