@@ -1,0 +1,21 @@
+{
+  "name": "morning-aroma-server",
+  "version": "1.0.0",
+  "description": "Morning Aroma auth backend — real password hashing, JWT sessions, password reset. See ../ROADMAP.md for what's done and what's still ahead.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node test/run-e2e.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.0"
+  }
+}
