@@ -12,6 +12,7 @@ export function ShopPage() {
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const [filters, setFilters] = useState({ aroma: [], body: "", acidity: "", roast: "", moment: "", brew: "" });
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const allProducts = getAllProducts();
 
   const toggleAroma = (tag) =>
@@ -44,11 +45,18 @@ export function ShopPage() {
         <h1>Shop All Coffee</h1>
         <p className="shop-sub">Named by variety and origin — filter by how it smells, tastes, and where it fits your day.</p>
       </div>
+      <button className="shop-filter-toggle" onClick={() => setFiltersOpen(true)} aria-expanded={filtersOpen}>
+        Filter{activeCount > 0 ? "s" : ""} {activeCount > 0 && <span className="admin-nav-badge">{activeCount}</span>}
+      </button>
+      {filtersOpen && <div className="shop-filter-scrim" onClick={() => setFiltersOpen(false)} aria-hidden="true" />}
       <div className="shop-layout">
-        <aside className="shop-filters">
+        <aside className={`shop-filters ${filtersOpen ? "shop-filters-open" : ""}`}>
           <div className="filters-head">
             <h4>Filter</h4>
-            {activeCount > 0 && <button className="link-btn" onClick={clearAll}>Clear ({activeCount})</button>}
+            <span className="filters-head-actions">
+              {activeCount > 0 && <button className="link-btn" onClick={clearAll}>Clear ({activeCount})</button>}
+              <button className="shop-filter-close" onClick={() => setFiltersOpen(false)} aria-label="Close filters">✕</button>
+            </span>
           </div>
 
           <p className="filter-label">Aroma</p>
@@ -92,6 +100,8 @@ export function ShopPage() {
               <button key={t} className={`chip ${filters.brew === t ? "chip-active" : ""}`} onClick={() => setSingle("brew", t)}>{t}</button>
             ))}
           </div>
+
+          <button className="btn-primary shop-filter-apply" onClick={() => setFiltersOpen(false)}>Show {filtered.length} result{filtered.length === 1 ? "" : "s"}</button>
         </aside>
 
         <div className="shop-results">

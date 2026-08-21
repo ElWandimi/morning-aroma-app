@@ -219,6 +219,38 @@ a { color: inherit; text-decoration: none; }
 .shop-filters { position: sticky; top: 90px; background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 18px; }
 .filters-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .filters-head h4 { font-size: 1.1rem; }
+.filters-head-actions { display: flex; align-items: center; gap: 10px; }
+
+/* Mobile filter drawer: the toggle button and scrim only exist/show below 800px (the same
+   breakpoint .shop-layout already collapses at) — on desktop the filters stay exactly as they
+   were, a plain always-visible sticky sidebar, untouched. */
+.shop-filter-toggle { display: none; }
+.shop-filter-scrim { display: none; }
+.shop-filter-close { display: none; }
+.shop-filter-apply { display: none; }
+@media (max-width: 800px) {
+  .shop-filter-toggle {
+    display: flex; align-items: center; gap: 8px; margin: 0 0 18px; padding: 10px 18px;
+    background: white; border: 1px solid var(--gold); border-radius: 30px; font-weight: 700;
+    color: var(--chestnut); cursor: pointer; box-shadow: 0 4px 12px rgba(62,44,35,0.08);
+  }
+  .shop-filter-scrim { display: block; position: fixed; inset: 0; background: rgba(20,13,9,0.5); z-index: 40; }
+  .shop-filters {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(340px, 86vw); max-width: none;
+    border-radius: 0; z-index: 50; overflow-y: auto; transform: translateX(100%); visibility: hidden;
+    transition: transform .25s ease, visibility .25s; padding: 20px 18px 90px;
+  }
+  .shop-filters.shop-filters-open { transform: translateX(0); visibility: visible; }
+  .shop-filter-close {
+    display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+    border-radius: 50%; border: 1px solid var(--gold); background: white; color: var(--chestnut);
+    font-size: 0.9rem; cursor: pointer;
+  }
+  .shop-filter-apply {
+    display: block; position: sticky; bottom: 0; width: 100%; margin-top: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) { .shop-filters { transition: none; } }
 .filter-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--almond-text); font-weight: 700; margin: 14px 0 6px; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--gold); background: var(--cream); color: var(--espresso); border-radius: 20px; padding: 5px 12px; font-size: 0.78rem; cursor: pointer; text-transform: capitalize; }
