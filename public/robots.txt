@@ -1,0 +1,11 @@
+# Note: this app uses hash-based routing (e.g. example.com/#/admin), and robots.txt Disallow
+# rules can only match URL paths -- the #fragment portion is never sent to the server and is
+# invisible to robots.txt parsers by spec, so per-page Disallow rules aren't achievable here.
+# Keeping this simple and honest rather than shipping rules that look like they work but don't.
+# (The admin dashboard, checkout, and personal account pages are already excluded from
+# sitemap.xml, and admin is gated behind sign-in regardless.)
+
+User-agent: *
+Allow: /
+
+Sitemap: https://www.morningaroma.com/sitemap.xml

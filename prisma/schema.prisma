@@ -1,0 +1,361 @@
+// Morning Aroma — Prisma schema (reference, not wired to a live database)
+//
+// This models the data shapes already used throughout the frontend prototype
+// (see src/data/index.js for the static catalog shapes, and src/context/index.jsx
+// for the runtime state shapes — orders, green orders, service inquiries, audit log,
+// settings) so a real backend can be built against the same entities the UI already
+// expects, rather than designing the schema from scratch and reconciling it later.
+//
+// To actually use this: `npm install prisma @prisma/client`, point DATABASE_URL
+// (see .env.example) at a real Postgres instance, then `npx prisma migrate dev`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  STAFF // granted access to a specific subset of admin sections — see User.permissions
+  SUPER_ADMIN
+}
+
+enum Tier {
+  PREMIUM
+  EVERYDAY
+}
+
+enum OrderStatus {
+  PROCESSING
+  ROASTING
+  SHIPPED
+  DELIVERED
+  CANCELLED // customer-initiated, only reachable from PROCESSING
+  REFUNDED  // admin-initiated record; no real payment processor is wired up in this prototype
+}
+
+enum QuotationStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+enum GreenOrderStatus {
+  NEW
+  QUOTED
+  INVOICED
+  SHIPPED
+  FULFILLED
+}
+
+enum ServiceInquiryStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  role          Role      @default(CUSTOMER)
+  permissions   String[]  @default([]) // admin section names this STAFF user can access; ignored for CUSTOMER/SUPER_ADMIN
+  passwordHash  String? // null for OTP/OAuth-only accounts — never store plaintext
+  twoFactorEnabled Boolean @default(false)
+  createdAt     DateTime  @default(now())
+
+  orders        Order[]
+  greenOrders   GreenOrder[]
+  journalEntries JournalEntry[]
+  feedback      Feedback[]
+  accounts      LinkedAccount[] // for unified Google + email account linking
+  auditLogEntries AuditLogEntry[]
+}
+
+// Supports "sign up with email, later sign in with Google (same email) — no duplicates"
+model LinkedAccount {
+  id       String  @id @default(cuid())
+  provider String // "email" | "google"
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, userId])
+}
+
+model Country {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  flagEmoji     String
+  climate       String
+  soilProfile   String
+  harvestStart  Int // month index 0–11
+  harvestEnd    Int
+  auctionInfo   String
+
+  regions       Region[]
+  products      Product[]
+  greenBeans    GreenBean[]
+  liveMessages  LiveAdminMessage[]
+}
+
+model Region {
+  id        String  @id @default(cuid())
+  name      String
+  note      String
+  countryId String
+  country   Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  name         String // variety, e.g. "SL28"
+  countryId    String
+  country      Country  @relation(fields: [countryId], references: [id])
+  tier         Tier
+  priceCents   Int
+  stock        Int      @default(0)
+  note         String
+  growing      String // free-text growing/origin description shown on the product page
+  isCustom     Boolean  @default(false) // true for a product added through the admin dashboard rather than the original launch catalog
+  photoUrl     String?  // admin-uploaded photo; falls back to the country's landscape photo in the UI when absent
+
+  // sensory profile, 0–10 scale
+  aromaScore     Int
+  bodyScore      Int
+  acidityScore   Int
+  sweetnessScore Int
+  finishScore    Int
+
+  // growing profile
+  altitude     String
+  temperature  String
+  rainfall     String
+  soilType     String
+  soilPh       Float
+  shade        String
+  pests        String
+
+  // tags for filtering / matching
+  aromaTags    String[] // e.g. ["floral","citrus"]
+  bodyTag      String // "light" | "medium" | "full"
+  acidityTag   String // "low" | "medium" | "high"
+  roastLevel   String
+  brewMethods  String[]
+  momentId     String?
+  moment       Moment?  @relation(fields: [momentId], references: [id])
+  courseId     String?
+  course       Course?  @relation(fields: [courseId], references: [id])
+
+  orderItems   OrderItem[]
+  journalEntries JournalEntry[]
+  feedback     Feedback[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Green (unroasted) coffee — a separate wholesale product line sold by the kilogram to roasters
+// and serious home-roasters, distinct from the retail Product catalog above. Each lot optionally
+// mirrors one retail Product from the same origin (roastedProductId), but is priced, stocked, and
+// graded independently since the units and buyers are genuinely different.
+model GreenBean {
+  id               String   @id @default(cuid())
+  name             String
+  countryId        String
+  country          Country  @relation(fields: [countryId], references: [id])
+  roastedProductId String?  // optional link to the matching retail Product, when one exists
+  pricePerKgCents  Int
+  stockKg          Int      @default(0)
+  minOrderKg       Int
+  cuppingScore     Int
+  moisture         String
+  grade            String
+  process          String // "Washed" | "Natural" | "Honey"
+  notes            String
+  isCustom         Boolean  @default(false)
+
+  orders           GreenOrder[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model GreenOrder {
+  id                       String            @id @default(cuid())
+  userId                   String?
+  user                     User?             @relation(fields: [userId], references: [id])
+  name                     String
+  email                    String
+  company                  String?
+  message                  String?
+  beanId                   String
+  bean                     GreenBean         @relation(fields: [beanId], references: [id])
+  quantityKg               Int
+  pricePerKgCentsAtOrder   Int // snapshot price at time of order, not live bean price
+  totalCents               Int
+  status                   GreenOrderStatus  @default(NEW)
+  createdAt                DateTime          @default(now())
+}
+
+model Moment {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  icon        String
+  benefit     String
+  description String
+  brewGuideId String?
+  brewGuide   BrewGuide? @relation(fields: [brewGuideId], references: [id])
+
+  products    Product[]
+}
+
+model BrewGuide {
+  id      String   @id @default(cuid())
+  slug    String   @unique
+  name    String
+  icon    String
+  flavor  String
+  steps   String[]
+  courseId String?
+  course  Course?  @relation(fields: [courseId], references: [id])
+
+  moments Moment[]
+}
+
+model Course {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  name       String
+  category   String
+  blurb      String
+  instructor String
+  lessons    Int
+
+  products    Product[]
+  brewGuides  BrewGuide[]
+  recipeCard  RecipeCard?
+}
+
+model RecipeCard {
+  id          String   @id @default(cuid())
+  courseId    String   @unique
+  course      Course   @relation(fields: [courseId], references: [id])
+  ratio       String
+  ingredients String[]
+  steps       String[]
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  status     OrderStatus @default(PROCESSING)
+  createdAt  DateTime    @default(now())
+
+  items      OrderItem[]
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  quantity   Int
+  priceCentsAtPurchase Int // snapshot price at time of order, not live product price
+}
+
+model JournalEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  rating    Int // 1–5
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  rating    Int
+  aroma     Int
+  texture   Int
+  tags      String[]
+  note      String?
+  reviewed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model QuotationRequest {
+  id        String          @id @default(cuid())
+  name      String
+  email     String
+  variety   String
+  quantity  String?
+  message   String?
+  status    QuotationStatus @default(NEW)
+  createdAt DateTime        @default(now())
+}
+
+model LiveAdminMessage {
+  id        String   @id @default(cuid())
+  countryId String
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  text      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model ServiceInquiry {
+  id         String                @id @default(cuid())
+  name       String
+  email      String
+  company    String?
+  interest   String // which service, e.g. "Remote Roasting Consultation"
+  message    String?
+  status     ServiceInquiryStatus  @default(NEW)
+  agreedFeeCents Int? // set once a fee is negotiated; enables generating an invoice for this inquiry
+  createdAt  DateTime              @default(now())
+}
+
+// Append-only history of admin actions (price/stock changes, product add/remove, permission
+// changes, etc.) shown in the Audit Log admin section. Capped at 200 entries client-side in the
+// prototype; a real backend should decide its own retention policy rather than hard-capping.
+model AuditLogEntry {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String // short label, e.g. "Price changed"
+  detail    String // human-readable specifics, e.g. "geisha-panama → $44.00"
+  createdAt DateTime @default(now())
+}
+
+model SiteSettings {
+  id                  String  @id @default("singleton")
+  tagline             String  @default("Where quality meets its scent.")
+  contactEmail        String  @default("hello@morningaroma.com")
+  whatsappNumber      String?
+  phoneNumber         String?
+  announcementEnabled Boolean @default(false)
+  announcementText    String?
+
+  // business identity, printed on every generated invoice PDF
+  businessName        String  @default("Morning Aroma Coffee Roasters Ltd.")
+  businessAddress     String?
+  taxId               String?
+  taxRatePercent      Float   @default(0) // 0 = no tax line shown on invoices
+
+  invoiceNotes        String? // default footer note on an invoice when the order/inquiry has none of its own
+
+  instagramHandle     String?
+  facebookUrl         String?
+}

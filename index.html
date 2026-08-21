@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Morning Aroma — Where quality meets its scent.</title>
+    <meta name="description" content="Morning Aroma — traceable, fairly-priced specialty coffee. Shop by variety, learn to brew, and explore where every bag comes from." />
+    <meta name="theme-color" content="#3E2C23" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:title" content="Morning Aroma" />
+    <meta property="og:description" content="Traceable, fairly-priced specialty coffee — shop by variety, learn to brew, and explore where every bag comes from." />
+    <meta property="og:image" content="https://www.morningaroma.com/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.morningaroma.com/" />
+    <meta property="og:site_name" content="Morning Aroma" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Morning Aroma" />
+    <meta name="twitter:description" content="Traceable, fairly-priced specialty coffee — shop by variety, learn to brew, and explore where every bag comes from." />
+    <meta name="twitter:image" content="https://www.morningaroma.com/og-image.jpg" />
+    <!-- Preconnect + preload the same fonts the app applies at runtime, so the browser's preload
+         scanner starts fetching them immediately during HTML parse, in parallel with the JS
+         bundle download, rather than only starting after React mounts and a useEffect fires. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- The hero poster is the first meaningful visual content on the homepage, shown instantly
+         while the (much larger) hero video itself downloads. Preloaded for the same reason as the
+         fonts above: without this, the browser only discovers it needs this image after the JS
+         bundle has downloaded, parsed, and mounted React — this lets the preload scanner fetch it
+         in parallel with that instead. Not preloading the video itself deliberately: at ~450KB,
+         forcing every visitor to fetch it before knowing whether they'll stay on the page isn't a
+         clear win the way a ~37KB poster image is. -->
+    <link rel="preload" as="image" href="/video/hero-poster.jpg" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" />
+    <style>
+      /* Inline and self-contained on purpose — this must render before the app's own stylesheet
+         (bundled into the JS) has loaded, so it can't depend on anything external. Removed
+         automatically the instant React mounts and takes over #root, no manual cleanup needed. */
+      #ma-preload {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: #FDF8F0; font-family: Georgia, 'Times New Roman', serif; color: #3E2C23; gap: 14px; z-index: 9999;
+      }
+      #ma-preload .ma-preload-cup {
+        width: 40px; height: 40px; border: 3px solid #E8D5B5; border-top-color: #8B5A3A; border-radius: 50%;
+        animation: ma-preload-spin 0.9s linear infinite;
+      }
+      #ma-preload p { margin: 0; font-size: 1.1rem; letter-spacing: 0.02em; }
+      @keyframes ma-preload-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { #ma-preload .ma-preload-cup { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="ma-preload" aria-hidden="true">
+        <div class="ma-preload-cup"></div>
+        <p>Morning Aroma</p>
+      </div>
+    </div>
+    <noscript>
+      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#FDF8F0;color:#3E2C23;font-family:Georgia,serif;text-align:center;padding:24px;">
+        <p>Morning Aroma needs JavaScript enabled to run. Please enable it in your browser settings and reload the page.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
