@@ -4,6 +4,7 @@ const { query } = require("../db");
 const { hashPassword, verifyPassword, isPasswordStrongEnough } = require("../utils/password");
 const { signAccessToken, generateResetToken, hashResetToken } = require("../utils/tokens");
 const { requireAuth } = require("../middleware/requireAuth");
+const { sendWelcomeEmail, sendPasswordResetEmail } = require("../utils/email");
 
 const router = express.Router();
 
@@ -69,6 +70,12 @@ router.post("/register", async (req, res) => {
     [cleanEmail, name.trim(), passwordHash, role]
   );
   const user = result.rows[0];
+  // Fire-and-forget: registration succeeding must never depend on email sending succeeding.
+  // Right now this can't actually fail (it's a console.log, see utils/email.js), but writing it
+  // this way now means the moment a real provider is connected and this can genuinely fail
+  // (network issue, rate limit), a slow or broken email send still won't block or crash the
+  // response the user is actually waiting on.
+  sendWelcomeEmail(user).catch((err) => console.error("Failed to send welcome email:", err));
   res.status(201).json({ user: publicUser(user), token: signAccessToken(user) });
 });
 
@@ -115,15 +122,7 @@ router.post("/password-reset/request", async (req, res) => {
     const { raw, hash } = generateResetToken();
     const expires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
     await query("UPDATE users SET reset_token_hash = $1, reset_token_expires = $2 WHERE id = $3", [hash, expires, user.id]);
-
-    // TODO(Tier 2 — real email delivery): this is where the raw token should be emailed to the
-    // user as a reset link, e.g. https://morningaroma.com/#/reset-password?token=<raw>. No email
-    // provider is wired up yet (see ROADMAP.md). Logging it server-side only, and only outside
-    // production, so this endpoint is genuinely testable end-to-end right now without silently
-    // pretending an email went out.
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[dev only] Password reset token for ${email}: ${raw}`);
-    }
+    sendPasswordResetEmail(email, raw).catch((err) => console.error("Failed to send password reset email:", err));
   }
   res.json(genericResponse);
 });

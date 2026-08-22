@@ -42,6 +42,17 @@ Nothing else matters for going live until these are real, not simulated.
             in-memory-only data — a real registered customer will not show up there. OTP login,
             "Continue with Google", and 2FA also remain demo-only, each blocked on its own
             separate piece (real email delivery; a Google Cloud OAuth app; 2FA design work).
+      - [ ] **Requirement captured for when Google OAuth is real** (project owner's request):
+            registering via email+password must NOT create a duplicate account if that email
+            already has an account via Google, and vice versa — one email should always resolve
+            to one account regardless of which method was used to sign in. Not implemented yet
+            because "Continue with Google" is still fake/local-only right now and doesn't share
+            any storage with the real email+password accounts, so there's no actual collision to
+            prevent yet — building linking logic against a placeholder that's getting replaced
+            wouldn't be real work. Implement this as part of the real Google OAuth integration
+            itself: on Google sign-in, check for an existing user by email first before creating
+            a new one (and the reverse: /auth/register should recognize an email that already
+            exists via Google, once that's a real possibility).
 - [ ] **Payments** — Paystack integration (decided by the project owner — a strong fit given the
       business is Kenya-based; Paystack has real M-Pesa support there, which Stripe doesn't).
       **Blocked on:** a real Paystack account (business details + bank account for payouts — the
@@ -64,9 +75,15 @@ managing real customers — right now Admin > Customers shows fake demo accounts
 - [ ] **Real database** — Postgres. Same Prisma schema as the auth work above covers this; not a
       separate task, just the natural extension once auth is live (orders, products, etc. move
       from the frontend's in-memory state to real tables).
-- [ ] **Real email delivery** — order confirmations, password reset emails, the notification
-      preference toggles (already built, currently honest no-ops). Needs an email provider decision
-      (Resend / Postmark / SendGrid) — small decision, can wait until auth is further along.
+- [ ] **Real email delivery** — order confirmations, the notification preference toggles (already
+      built, currently honest no-ops). Needs an email provider decision (Resend / Postmark /
+      SendGrid) — small decision, can wait until auth is further along.
+      **Already built and staged, ready to connect the moment a provider is chosen:** welcome
+      email and password reset email content both live in `server/src/utils/email.js`, with real
+      subject lines and copy, wired into the register and password-reset-request endpoints as
+      fire-and-forget calls. Right now they log to the server console outside production instead
+      of actually sending — the one line that needs to change once a provider exists is inside
+      that file's `logInDevOnly` function, not anywhere in routes/.
 - [ ] **Real file storage** for admin product photo uploads (S3 / Cloudinary). Currently base64
       data URLs in memory — fine for the prototype, won't scale once there's a real backend.
 - [ ] **Server-side rendering or pre-rendering** — for true per-page social cards/structured data
@@ -97,6 +114,14 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Welcome email content built and staged** (real subject/copy, fires on registration) —
+  can't actually send yet, no provider connected, but genuinely ready to the moment one is.
+  Password-reset email content moved into the same module for consistency. Confirmed the very
+  first successful admin login worked end to end in production; fixed a real crash
+  (React error #310 — a conditional hook call in AdminDashboard) hit on that first real login.
+  Captured the project owner's requirement that one email should resolve to one account
+  regardless of Google vs. password sign-in, attached to the real Google OAuth work it depends on
+  rather than built against the current placeholder.
 - **Frontend wired to the real auth backend.** Real register/login/session-persistence/logout.
   Login modal redesigned with a real Sign in / Create account toggle. Fixed the "demo admin" hint
   and OTP mode's copy, both of which would have been actively misleading after this change.

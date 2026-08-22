@@ -30,12 +30,18 @@ async function main() {
     fetch(base + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(async (r) => ({ status: r.status, body: await r.json() }));
 
   console.log("Register:");
+  let regLog = "";
+  const originalLogForReg = console.log;
+  console.log = (...args) => { regLog += args.join(" ") + "\n"; originalLogForReg(...args); };
   const reg = await post("/auth/register", { email: "test@morningaroma.local", password: "correcthorsebattery", name: "Test User" });
+  console.log = originalLogForReg;
   check("returns 201", reg.status === 201);
   check("returns a user object with expected shape", reg.body.user && reg.body.user.email === "test@morningaroma.local");
   check("the very first user on an empty database becomes super_admin", reg.body.user && reg.body.user.role === "super_admin");
   check("returns a token", typeof reg.body.token === "string" && reg.body.token.length > 20);
   check("never returns the password hash", !("password_hash" in (reg.body.user || {})) && !("passwordHash" in (reg.body.user || {})));
+  check("a welcome email fires on successful registration", regLog.includes("Welcome email to test@morningaroma.local"));
+  check("welcome email addresses the user by their actual registered name", regLog.includes("Hi Test User,"));
   const token = reg.body.token;
 
   console.log("\nSecond registration (bootstrap should not apply again):");
@@ -101,7 +107,7 @@ async function main() {
   console.log = (...args) => { capturedLog += args.join(" ") + "\n"; originalLog(...args); };
   await post("/auth/password-reset/request", { email: "test@morningaroma.local" });
   console.log = originalLog;
-  const match = capturedLog.match(/Password reset token for test@morningaroma\.local: ([a-f0-9]+)/);
+  const match = capturedLog.match(/reset-password\?token=([a-f0-9]+)/);
   check("dev-mode log actually contains a real reset token", !!match);
   const resetToken = match ? match[1] : null;
 
