@@ -1693,6 +1693,22 @@ export function AdminDashboard() {
     }
   };
 
+  // Super admins see every section. Staff only see Overview (a safe, read-only landing page,
+  // always available regardless of what else they're granted) plus whatever sections they've
+  // been explicitly given access to. Computed and the effect below run unconditionally, before
+  // any early return -- calling a hook only on some renders (e.g. only once `user` is populated)
+  // violates React's Rules of Hooks and throws "rendered more hooks than during the previous
+  // render". This used to be harmless when auth was synchronous/fake and `user` was always
+  // immediately available one way or the other; real, async session restoration means there's
+  // now a genuine render where `user` is still null followed by one where it's populated, which
+  // is exactly the transition that exposes this class of bug.
+  const visibleSections = user && user.role === "super_admin" ? ADMIN_SECTIONS : ["Overview", ...((user && user.permissions) || [])];
+  useEffect(() => {
+    // Guards against a staff member's permission being revoked while a restricted section was
+    // still selected — falls back to Overview instead of rendering a section they can no longer see.
+    if (user && !visibleSections.includes(section)) setSection("Overview");
+  }, [user, section, visibleSections.join(",")]);
+
   if (!user || (user.role !== "super_admin" && user.role !== "staff")) {
     return (
       <div className="journey-locked">
@@ -1704,16 +1720,6 @@ export function AdminDashboard() {
       </div>
     );
   }
-
-  // Super admins see every section. Staff only see Overview (a safe, read-only landing page,
-  // always available regardless of what else they're granted) plus whatever sections they've
-  // been explicitly given access to.
-  const visibleSections = user.role === "super_admin" ? ADMIN_SECTIONS : ["Overview", ...(user.permissions || [])];
-  useEffect(() => {
-    // Guards against a staff member's permission being revoked while a restricted section was
-    // still selected — falls back to Overview instead of rendering a section they can no longer see.
-    if (!visibleSections.includes(section)) setSection("Overview");
-  }, [section, visibleSections.join(",")]);
 
   return (
     <div className="admin-page">
