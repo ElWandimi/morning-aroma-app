@@ -14,31 +14,50 @@ Tier 3 items are individually easier to build.
 
 Nothing else matters for going live until these are real, not simulated.
 
-- [ ] **Auth backend** — real password hashing, sessions/JWT, server-side validation.
-      **Status: deployed and live.** `server/` is running as its own Railway service
-      (`upbeat-rebirth-production.up.railway.app`), connected to a real Postgres database
-      provisioned in the same Railway project, migration applied, `/health` confirmed responding
-      (2026-08-22).
+- [x] **Auth backend** — real password hashing, sessions/JWT, server-side validation.
+      **Status: deployed, live, and now wired to the frontend.** `server/` is running as its own
+      Railway service (`upbeat-rebirth-production.up.railway.app`), connected to a real Postgres
+      database, migration applied, `/health` confirmed responding.
       - [x] Schema for real use — built with raw SQL + `pg` instead of Prisma (see
             `server/README.md` for why: Prisma's client needs a binary this dev environment
             couldn't download; the original `prisma/schema.prisma` at repo root stays as the full
             data-model reference for what's still ahead)
-      - [x] POST /auth/register (bcrypt password hashing)
+      - [x] POST /auth/register (bcrypt password hashing) — plus first-user-becomes-admin
+            bootstrap logic, since a real database starts genuinely empty, unlike the old seeded
+            in-memory demo
       - [x] POST /auth/login (issues a JWT)
       - [x] GET /auth/me (JWT-protected, returns current user)
       - [x] POST /auth/logout
       - [x] Password reset flow (request + confirm) — token logic fully built and tested; still
             logs the token to the server console instead of emailing it, since no email provider
             is connected yet (see Tier 2)
-      - [x] Deploy: Postgres provisioned on Railway, migration run, env vars set
-            (JWT_SECRET, NODE_ENV, FRONTEND_URL, DATABASE_URL referencing the Postgres service),
-            live and responding at /health
-      - [ ] Wire the existing frontend login modal to call these real endpoints instead of the
-            in-memory demo logic — **this is the next real step**
-- [ ] **Payments** — Stripe integration. **Blocked on:** a real Stripe account (business details +
-      bank account for payouts — the project owner needs to create this; can't be done by Claude).
-      Once the account exists: checkout flow wired to Stripe Checkout or Elements, webhook handling
-      for order confirmation, real order records tied to real payment status.
+      - [x] Deploy: Postgres provisioned on Railway, migration run, env vars set, live and
+            responding at /health
+      - [x] Frontend wired to the real backend: register/login/session-persistence/logout in
+            `AuthProvider` now call the real API (`src/utils/api.js`); the login modal has a real
+            Sign in / Create account toggle. **Requires `VITE_API_URL` set on the frontend's
+            Railway service** — see deployment notes.
+      - [ ] **New, split out as its own item (Tier 1.5 below):** admin user-management API. The
+            Customers section's user list and role/permission management still operate on demo,
+            in-memory-only data — a real registered customer will not show up there. OTP login,
+            "Continue with Google", and 2FA also remain demo-only, each blocked on its own
+            separate piece (real email delivery; a Google Cloud OAuth app; 2FA design work).
+- [ ] **Payments** — Paystack integration (decided by the project owner — a strong fit given the
+      business is Kenya-based; Paystack has real M-Pesa support there, which Stripe doesn't).
+      **Blocked on:** a real Paystack account (business details + bank account for payouts — the
+      project owner needs to create this; can't be done by Claude). Once the account exists:
+      checkout flow wired to Paystack's Inline JS or Checkout, webhook handling for order
+      confirmation, real order records tied to real payment status.
+
+## Tier 1.5 — Admin user management (found while wiring the frontend, not originally listed)
+
+Doesn't block a customer signing up and buying something for real, but does block admin actually
+managing real customers — right now Admin > Customers shows fake demo accounts, not real ones.
+
+- [ ] `GET /users` (admin-only, JWT-protected) — list real registered users
+- [ ] `PATCH /users/:id` (admin-only) — change role/permissions on a real account
+- [ ] Wire `AdminCustomers` to these instead of the in-memory `users` list currently in
+      `AuthProvider`
 
 ## Tier 2 — Needed alongside Tier 1 for a real backend
 
@@ -78,6 +97,13 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Frontend wired to the real auth backend.** Real register/login/session-persistence/logout.
+  Login modal redesigned with a real Sign in / Create account toggle. Fixed the "demo admin" hint
+  and OTP mode's copy, both of which would have been actively misleading after this change.
+  Discovered and scoped a new gap while doing this: admin user management (Customers section)
+  still needs its own backend work — split out as Tier 1.5. Payments decision noted: Paystack,
+  not Stripe (project owner's call, better fit for a Kenya-based business) — updated across
+  ROADMAP/SECURITY/README/.env.example rather than leaving stale references.
 - **Auth backend deployed and live** — Postgres provisioned on Railway, migration applied, server
   running as its own service, `/health` responding. Frontend not wired to it yet.
 - Created this roadmap. Built and tested the Tier 1 auth backend (register/login/me/logout/

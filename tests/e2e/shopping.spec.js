@@ -42,12 +42,18 @@ test.describe("Cart and checkout", () => {
     await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
     await page.getByRole("button", { name: "Sign in / Create account" }).click();
 
-    // Sign in with the demo admin account. Email code is the default tab now (it's the real
-    // sign-up path for a new customer); switch to the password tab for the demo admin login.
-    await page.getByRole("button", { name: "Email & password (demo)" }).click();
-    await page.getByPlaceholder("you@example.com").first().fill("elwandimi@gmail.com");
-    await page.getByPlaceholder("••••••••").fill("Kenya1234");
-    await page.getByRole("button", { name: "Sign in" }).click();
+    // Use the email-code preview mode rather than email & password -- that mode is now backed by
+    // the real deployed backend (see ROADMAP.md), which this test environment has no guarantee of
+    // being configured to reach, and there's no pre-seeded account to sign into anymore now that
+    // auth is real. The preview mode needs neither: it's self-contained in the browser, and this
+    // test's actual purpose is just to be signed in for the checkout flow below, not to test
+    // admin-specific behavior.
+    await page.getByRole("button", { name: "Email code (preview)" }).click();
+    await page.getByPlaceholder("you@example.com").first().fill(`e2e-test-${Date.now()}@example.com`);
+    await page.getByRole("button", { name: "Send me a code" }).click();
+    const code = await page.locator(".otp-demo-code strong").innerText();
+    await page.getByLabel("6-digit code").fill(code);
+    await page.getByRole("button", { name: "Verify & sign in" }).click();
 
     await page.getByRole("button", { name: "Continue to shipping" }).click();
     await page.getByLabel("Full name").fill("Test Customer");

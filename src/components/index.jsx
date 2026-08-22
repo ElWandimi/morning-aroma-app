@@ -89,10 +89,16 @@ function GoogleIcon() {
 }
 
 export function LoginModal({ open, onClose }) {
-  const { login, resetPassword, loginWithOtp, loginWithGoogle, error, setError, pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor } = useAuth();
+  const { login, register, resetPassword, loginWithOtp, loginWithGoogle, error, setError, pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState("otp"); // password | otp — otp is the real sign-up path (password is demo/admin-testing only)
+  const [name, setName] = useState("");
+  // Password mode is real now (backed by the actual deployed backend — see ROADMAP.md) and is
+  // genuinely the most reliable path, so it's the default again. OTP is still demo-only pending
+  // real email delivery to send the code.
+  const [mode, setMode] = useState("password"); // password | otp
+  const [authIntent, setAuthIntent] = useState("signin"); // signin | signup — only meaningful in password mode
+  const [submitting, setSubmitting] = useState(false);
   const [twoFAStep, setTwoFAStep] = useState(false);
   const [googlePicker, setGooglePicker] = useState(false);
   const [googleCustomEmail, setGoogleCustomEmail] = useState("");
@@ -358,18 +364,20 @@ export function LoginModal({ open, onClose }) {
 
             <div className="mode-toggle">
               <button className={mode === "password" ? "active" : ""} onClick={() => { setMode("password"); setError(""); }}>
-                <span className="mode-toggle-icon" aria-hidden="true">🔑</span> Email &amp; password (demo)
+                <span className="mode-toggle-icon" aria-hidden="true">🔑</span> Email &amp; password
               </button>
               <button className={mode === "otp" ? "active" : ""} onClick={() => { setMode("otp"); resetOtp(); }}>
-                <span className="mode-toggle-icon" aria-hidden="true">✉️</span> Email code
+                <span className="mode-toggle-icon" aria-hidden="true">✉️</span> Email code (preview)
               </button>
             </div>
 
             {mode === "password" ? (
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  const result = login(email, password);
+                  setSubmitting(true);
+                  const result = authIntent === "signup" ? await register(email, password, name) : await login(email, password);
+                  setSubmitting(false);
                   if (result.ok && result.requiresTwoFactor) {
                     setTwoFAStep(true);
                     sendCode();
@@ -378,6 +386,19 @@ export function LoginModal({ open, onClose }) {
                   }
                 }}
               >
+                <div className="mode-toggle" style={{ marginBottom: 18 }}>
+                  <button type="button" className={authIntent === "signin" ? "active" : ""} onClick={() => { setAuthIntent("signin"); setError(""); }}>Sign in</button>
+                  <button type="button" className={authIntent === "signup" ? "active" : ""} onClick={() => { setAuthIntent("signup"); setError(""); }}>Create account</button>
+                </div>
+                {authIntent === "signup" && (
+                  <>
+                    <label htmlFor="login-name">Name</label>
+                    <div className="login-input-group">
+                      <span className="login-input-icon" aria-hidden="true">🙂</span>
+                      <input id="login-name" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="Your name" autoComplete="name" maxLength={100} required />
+                    </div>
+                  </>
+                )}
                 <label htmlFor="login-email-pw">Email</label>
                 <div className="login-input-group">
                   <span className="login-input-icon" aria-hidden="true">✉️</span>
@@ -386,19 +407,34 @@ export function LoginModal({ open, onClose }) {
                 <label htmlFor="login-password">Password</label>
                 <div className="login-input-group">
                   <span className="login-input-icon" aria-hidden="true">🔒</span>
-                  <input id="login-password" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••••" autoComplete="current-password" maxLength={128} required />
+                  <input
+                    id="login-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
+                    placeholder={authIntent === "signup" ? "At least 8 characters" : "••••••••"}
+                    autoComplete={authIntent === "signup" ? "new-password" : "current-password"}
+                    minLength={authIntent === "signup" ? 8 : undefined}
+                    maxLength={128}
+                    required
+                  />
                 </div>
                 {error && <p className="form-error">{error}</p>}
-                <button type="submit" className="btn-primary full">Sign in</button>
-                <button type="button" className="link-btn" style={{ marginTop: 8, marginLeft: 0, display: "block" }} onClick={startResetFlow}>Forgot password?</button>
-                <p className="hint">Demo super admin — elwandimi@gmail.com / Kenya1234 (2FA enabled — try it!)</p>
-                <p className="hint">New here? <button type="button" className="link-btn" style={{ padding: 0 }} onClick={() => setMode("otp")}>Use email code instead</button> to create your account — no password needed.</p>
+                <button type="submit" className="btn-primary full" disabled={submitting}>
+                  {submitting ? "Please wait…" : authIntent === "signup" ? "Create account" : "Sign in"}
+                </button>
+                {authIntent === "signin" && (
+                  <button type="button" className="link-btn" style={{ marginTop: 8, marginLeft: 0, display: "block" }} onClick={startResetFlow}>Forgot password?</button>
+                )}
+                {authIntent === "signup" && (
+                  <p className="hint">First account on a fresh deployment becomes admin automatically — see ROADMAP.md.</p>
+                )}
               </form>
             ) : (
               <div>
                 <label htmlFor="login-email-otp">Email</label>
                 <input id="login-email-otp" value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" autoComplete="username" maxLength={254} disabled={otpSent} />
-                {!otpSent && <p className="hint" style={{ marginTop: -4 }}>New to Morning Aroma? Enter your email above — we'll create your account automatically, no separate sign-up step.</p>}
+                {!otpSent && <p className="hint" style={{ marginTop: -4 }}>Quick preview mode — signs you in without a password, but doesn't create a real saved account. Use "Email & password" above for a real one.</p>}
                 {!otpSent ? (
                   <button className="btn-primary full" onClick={sendCode} disabled={!email}>
                     Send me a code
@@ -624,7 +660,7 @@ export function TranslateSuggestBanner() {
 }
 
 export function Nav({ onOpenLogin, onOpenSearch }) {
-  const { user, logout } = useAuth();
+  const { user, logout, sessionLoading } = useAuth();
   const { go } = useRoute();
   const { count, setOpen: setCartOpen } = useCart();
   const { count: wishlistCount, setOpen: setWishlistOpen } = useWishlist();
@@ -684,6 +720,8 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
               <span className="dot" /> <a href="#" onClick={(e) => { e.preventDefault(); go("journey"); }}>{user.name}</a> <span className="role">· {user.role.replace("_", " ")}</span>
               <button className="link-btn" onClick={logout}>Sign out</button>
             </div>
+          ) : sessionLoading ? (
+            <span className="nav-session-check" aria-hidden="true" />
           ) : (
             <button className="btn-outline" onClick={onOpenLogin}>Sign in</button>
           )}

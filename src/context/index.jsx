@@ -1,17 +1,51 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { COUNTRY_HISTORY, DEMO_ADMIN, GREEN_BEANS, KENYA_LIVE_MESSAGES_SEED, KNOWN_ROUTES, PAGE_TO_SLUG, PRODUCTS, SLUG_TO_PAGE } from "../data";
 import { fmtPrice, getStorageConsent, logPageView, nameFromEmail, slugify, storage } from "../utils/helpers";
+import { api } from "../utils/api";
 
 export const AuthCtx = createContext(null);
 
+// Real register/login/session/logout, backed by the actual deployed backend (server/, see
+// ROADMAP.md). Deliberately NOT real yet, pending their own backend work: OTP/email-code login,
+// "Continue with Google", 2FA, and the admin Customers section's user list / role management --
+// all of that still operates on demo, in-memory-only data, same as before this change. That
+// split is intentional and called out at each function below, not an oversight -- registering a
+// real account and having it actually persist in Postgres is the part that matters most right
+// now; the rest genuinely needs its own backend endpoints this round didn't build.
 export function AuthProvider({ children }) {
+  // Still-demo user list, used only by Admin > Customers for staff/role management -- these are
+  // NOT the real accounts in the real database. A customer who registers for real through the
+  // login modal will not appear here. See ROADMAP.md Tier 1.5 (admin user-management API) for
+  // when this gets connected to something real.
   const [users, setUsers] = useState([
     { email: DEMO_ADMIN.email, name: DEMO_ADMIN.name, role: DEMO_ADMIN.role, twoFactorEnabled: true, createdAt: "2025-11-02", notificationsEnabled: true },
   ]);
   const [passwords, setPasswords] = useState({ [DEMO_ADMIN.email]: DEMO_ADMIN.password });
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [error, setError] = useState("");
   const [pendingTwoFactorUser, setPendingTwoFactorUser] = useState(null);
+
+  // On mount, try to restore a real session from a previously-saved token -- without this, a real
+  // registered/logged-in user would be signed out every time they refresh the page, which is a
+  // meaningfully worse experience than the old demo (which never persisted anything anyway, so
+  // there was nothing to lose before). Gated behind the same storage-consent check as everything
+  // else that touches localStorage in this app.
+  useEffect(() => {
+    if (getStorageConsent() !== "accepted") { setSessionLoading(false); return; }
+    const saved = storage.get("ma_auth_token", null);
+    if (!saved) { setSessionLoading(false); return; }
+    api.me(saved)
+      .then(({ user: realUser }) => { setUser(realUser); setToken(saved); })
+      .catch(() => { storage.set("ma_auth_token", null); }) // expired/invalid token — fail silently, just stay signed out
+      .finally(() => setSessionLoading(false));
+  }, []);
+
+  const persistToken = (newToken) => {
+    setToken(newToken);
+    if (getStorageConsent() === "accepted") storage.set("ma_auth_token", newToken);
+  };
 
   const findOrCreateUser = (email, displayName) => {
     const clean = email.trim().toLowerCase();
@@ -29,29 +63,40 @@ export function AuthProvider({ children }) {
     return found || { email: clean, name: displayName || nameFromEmail(clean), role: "customer", twoFactorEnabled: false, createdAt: new Date().toISOString().slice(0, 10), notificationsEnabled: true };
   };
 
-  // Returns { ok: boolean, requiresTwoFactor?: boolean }. On success without 2FA, signs in immediately.
-  // On success with 2FA enabled for that account, holds the user in `pendingTwoFactorUser`
-  // until completeTwoFactor() is called — this is the actual second factor gate.
-  const login = (email, password) => {
-    const clean = email.trim().toLowerCase();
-    if (passwords[clean] != null && password === passwords[clean]) {
-      const acct = users.find((u) => u.email === clean) || findOrCreateUser(clean);
+  // Real registration against the actual backend. Returns { ok, error? } rather than throwing, so
+  // the login modal can show a message inline without needing its own try/catch.
+  const register = async (email, password, name) => {
+    try {
+      const { user: realUser, token: realToken } = await api.register(email, password, name);
       setError("");
-      if (acct.twoFactorEnabled) {
-        setPendingTwoFactorUser(acct);
-        return { ok: true, requiresTwoFactor: true };
-      }
-      setUser(acct);
-      return { ok: true, requiresTwoFactor: false };
+      setUser(realUser);
+      persistToken(realToken);
+      return { ok: true };
+    } catch (e) {
+      setError(e.message);
+      return { ok: false, error: e.message };
     }
-    setError("Those details don't match our records. Try the demo admin credentials.");
-    return { ok: false };
   };
 
-  // Sets (or resets) a password for an email, creating the account if it doesn't exist yet.
-  // The actual identity verification (proving the requester owns that email) happens via the
-  // OTP step in LoginModal's reset flow *before* this is called — this function just performs
-  // the write once that's confirmed.
+  // Real login against the actual backend. NOTE: this is now async (returns a Promise), unlike
+  // the old demo version -- every call site needs to await it. 2FA is intentionally NOT part of
+  // this real flow yet (the backend doesn't implement it) -- signs straight in on success.
+  const login = async (email, password) => {
+    try {
+      const { user: realUser, token: realToken } = await api.login(email, password);
+      setError("");
+      setUser(realUser);
+      persistToken(realToken);
+      return { ok: true, requiresTwoFactor: false };
+    } catch (e) {
+      setError(e.message);
+      return { ok: false };
+    }
+  };
+
+  // Still demo/local-only -- OTP-based passwordless login needs real email delivery to send the
+  // code, which isn't connected yet (see ROADMAP.md Tier 2). Kept working as before so that path
+  // isn't broken, but it does NOT create a real, persisted account the way register()/login() now do.
   const resetPassword = (email, newPassword) => {
     const clean = email.trim().toLowerCase();
     findOrCreateUser(clean);
@@ -77,6 +122,7 @@ export function AuthProvider({ children }) {
     setUser((prev) => (prev && prev.email === email ? { ...prev, notificationsEnabled: enabled } : prev));
   };
 
+  // Still demo/local-only, same reason as resetPassword above.
   const loginWithOtp = (email) => {
     const acct = findOrCreateUser(email);
     setUser(acct);
@@ -84,6 +130,8 @@ export function AuthProvider({ children }) {
     return true;
   };
 
+  // Still demo/local-only -- needs a real Google Cloud OAuth app (client ID/secret), which is a
+  // manual setup step outside what Claude can do, not just more code.
   const loginWithGoogle = (email, displayName) => {
     const acct = findOrCreateUser(email, displayName);
     setUser(acct);
@@ -91,7 +139,11 @@ export function AuthProvider({ children }) {
     return true;
   };
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    if (token) api.logout(token).catch(() => {}); // best-effort; stateless JWT means there's nothing to actually invalidate server-side yet
+    setUser(null);
+    persistToken(null);
+  };
 
   const setRole = (email, role) => {
     setUsers((prev) => prev.map((u) => (u.email === email ? { ...u, role, permissions: role === "staff" ? (u.permissions || []) : [] } : u)));
@@ -115,9 +167,9 @@ export function AuthProvider({ children }) {
   return (
     <AuthCtx.Provider
       value={{
-        user, users, login, resetPassword, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
+        user, users, login, register, resetPassword, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
         pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor, setTwoFactorEnabled, setNotificationsEnabled,
-        exportUsers, restoreUsers,
+        exportUsers, restoreUsers, sessionLoading,
       }}
     >
       {children}

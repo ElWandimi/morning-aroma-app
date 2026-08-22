@@ -1,0 +1,47 @@
+// Talks to the real backend deployed in server/ (see ROADMAP.md for what's live). The base URL
+// comes from an environment variable rather than being hardcoded, since it's genuinely different
+// between local development and the deployed Railway service, and Vite requires the VITE_ prefix
+// to expose an env var to client-side code at all.
+const API_URL = import.meta.env.VITE_API_URL;
+
+if (!API_URL && import.meta.env.PROD) {
+  // Fails loudly in a production build rather than silently sending requests to nowhere -- an
+  // empty API_URL would make every fetch call below resolve against the frontend's own origin,
+  // which would fail in a confusing way (404s that look unrelated to the real cause) rather than
+  // a clear error pointing at the actual missing configuration.
+  console.error("VITE_API_URL is not set — the app cannot reach the auth backend. Set it in the frontend service's environment variables.");
+}
+
+async function request(path, options = {}) {
+  const res = await fetch(`${API_URL || ""}${path}`, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...options.headers },
+  });
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    body = {};
+  }
+  if (!res.ok) {
+    const error = new Error(body.error || "Something went wrong. Please try again.");
+    error.status = res.status;
+    throw error;
+  }
+  return body;
+}
+
+export const api = {
+  register: (email, password, name) =>
+    request("/auth/register", { method: "POST", body: JSON.stringify({ email, password, name }) }),
+  login: (email, password) =>
+    request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  me: (token) =>
+    request("/auth/me", { headers: { Authorization: `Bearer ${token}` } }),
+  logout: (token) =>
+    request("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  requestPasswordReset: (email) =>
+    request("/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email }) }),
+  confirmPasswordReset: (token, newPassword) =>
+    request("/auth/password-reset/confirm", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
+};

@@ -1222,4 +1222,5 @@ a { color: inherit; text-decoration: none; }
 .analytics-bar.green { background: linear-gradient(180deg, var(--green), #4d5a38); }
 .analytics-bar-label { font-size: 0.65rem; color: var(--almond-text); margin-top: 6px; white-space: nowrap; }
 .admin-backup-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.nav-session-check { display: inline-block; width: 84px; height: 39px; }
 `;

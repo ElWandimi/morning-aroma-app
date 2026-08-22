@@ -29,8 +29,8 @@ async function query(text, params = []) {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     sql = sql.replace(
-      "INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3)",
-      "INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     );
     values = [id, ...values, createdAt];
   } else {

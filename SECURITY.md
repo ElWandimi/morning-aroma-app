@@ -24,7 +24,7 @@ secure but isn't can be worse than one that's honest about its limits.
   through normal bundled imports, not injected `<script>` tags.
 - **Payment fields are inert.** The checkout "payment" step collects fake card details for
   demonstration only. Nothing is transmitted, validated, or stored — it exists purely to
-  show where a real payment processor (Stripe) would integrate.
+  show where a real payment processor (Paystack, per the project owner's decision) would integrate.
 - **Autocomplete hints are set correctly** on auth fields (`username`, `current-password`,
   `one-time-code`) so password managers and mobile OS autofill behave as users expect.
 
@@ -65,8 +65,8 @@ at minimum:
   tables or access schemas it doesn't need.
 
 **Payments**
-- Real payment processing must go through a PCI-DSS-compliant processor (Stripe, as the
-  brief specifies) using their hosted fields or Elements — raw card numbers should never
+- Real payment processing must go through a PCI-DSS-compliant processor (Paystack, per the
+  project owner's decision) using their hosted fields or Inline JS — raw card numbers should never
   touch this application's own servers.
 
 **Transport & headers**

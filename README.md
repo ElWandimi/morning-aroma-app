@@ -97,10 +97,10 @@ needs on top of this before it protects anything real.
 
 | Area | This prototype | A production build |
 |---|---|---|
-| Data | In-memory JS state, resets on refresh | PostgreSQL / Redis (see `prisma/schema.prisma`) |
-| Auth | Client-side mock (no real email/Google) | NextAuth.js, real OTP + Google OAuth, server-side session checks |
+| Data | In-memory JS state, resets on refresh | PostgreSQL (see `prisma/schema.prisma` for the full reference; `server/migrations/` has what's actually live so far — just the `users` table) |
+| Auth | Client-side mock (no real email/Google) | **Real backend deployed** (`server/` — bcrypt, JWT, password reset), live on Railway. Frontend not wired to it yet — see `ROADMAP.md`. OTP and Google OAuth still need email delivery / a Google Cloud OAuth app respectively, neither connected yet |
 | Admin access | Client-side role check only | Server-side authorization on every request |
-| Payment | UI only — **nothing is charged or stored** | Stripe |
+| Payment | UI only — **nothing is charged or stored** | Paystack (per the project owner's decision — strong fit for a Kenya-based business, real M-Pesa support) |
 | Content (History, Academy, etc.) | Hardcoded in `src/App.jsx`, editable via Admin → Content for Moments/Courses | Headless CMS (Strapi/Sanity) |
 | Recipe cards | Generated client-side as real PDFs (via `jspdf`) | Same approach works in production, or server-rendered |
 | Images | Real photography (Unsplash, hotlinked) | Same, ideally served via Cloudinary/S3 for control and optimization |
@@ -115,8 +115,10 @@ of this as production-ready**, especially the Admin Dashboard's access control.
 ## Environment variables
 
 None are required to run this prototype — it's genuinely `npm install && npm run dev` with no setup.
-[`.env.example`](./.env.example) documents what a real backend (database, Redis, NextAuth, Stripe, a
-CMS) would need, for whoever builds that next.
+[`.env.example`](./.env.example) documents the original hypothetical full-backend plan; the real
+backend that actually exists lives in `server/`, is simpler than that plan, and has its own
+[`server/.env.example`](./server/.env.example) — see [`ROADMAP.md`](./ROADMAP.md) for what's
+actually built versus still ahead.
 
 ## Data model
 

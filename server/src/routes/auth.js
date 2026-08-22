@@ -51,10 +51,22 @@ router.post("/register", async (req, res) => {
   // enumerate which emails have accounts at all.
   if (existing.rows.length > 0) return res.status(409).json({ error: "An account with that email already exists." });
 
+  // Bootstrap: the very first account created on a fresh deployment becomes super_admin
+  // automatically. Unlike the old in-memory demo (which had a hardcoded seeded admin), a real
+  // database starts genuinely empty -- without this, there would be no way to ever reach the
+  // admin dashboard at all. Only applies when the users table is completely empty, so it can't be
+  // used to grant admin access later by any other means. Known, accepted tradeoff: two people
+  // registering at the exact same instant on a truly empty database could theoretically both see
+  // a count of zero and both become admin -- a real race condition, but not a realistic risk for
+  // how this actually gets deployed (one business owner, registering their own first account).
+  const countResult = await query("SELECT COUNT(*) AS count FROM users", []);
+  const isFirstUser = parseInt(countResult.rows[0].count, 10) === 0;
+  const role = isFirstUser ? "super_admin" : "customer";
+
   const passwordHash = await hashPassword(password);
   const result = await query(
-    "INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING *",
-    [cleanEmail, name.trim(), passwordHash]
+    "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
+    [cleanEmail, name.trim(), passwordHash, role]
   );
   const user = result.rows[0];
   res.status(201).json({ user: publicUser(user), token: signAccessToken(user) });

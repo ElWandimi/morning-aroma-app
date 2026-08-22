@@ -32,10 +32,16 @@ async function main() {
   console.log("Register:");
   const reg = await post("/auth/register", { email: "test@morningaroma.local", password: "correcthorsebattery", name: "Test User" });
   check("returns 201", reg.status === 201);
-  check("returns a user object with expected shape", reg.body.user && reg.body.user.email === "test@morningaroma.local" && reg.body.user.role === "customer");
+  check("returns a user object with expected shape", reg.body.user && reg.body.user.email === "test@morningaroma.local");
+  check("the very first user on an empty database becomes super_admin", reg.body.user && reg.body.user.role === "super_admin");
   check("returns a token", typeof reg.body.token === "string" && reg.body.token.length > 20);
   check("never returns the password hash", !("password_hash" in (reg.body.user || {})) && !("passwordHash" in (reg.body.user || {})));
   const token = reg.body.token;
+
+  console.log("\nSecond registration (bootstrap should not apply again):");
+  const reg2 = await post("/auth/register", { email: "second@morningaroma.local", password: "correcthorsebattery", name: "Second User" });
+  check("returns 201", reg2.status === 201);
+  check("the second user is a normal customer, not admin", reg2.body.user && reg2.body.user.role === "customer");
 
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });
