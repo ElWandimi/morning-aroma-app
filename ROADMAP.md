@@ -15,19 +15,26 @@ Tier 3 items are individually easier to build.
 Nothing else matters for going live until these are real, not simulated.
 
 - [ ] **Auth backend** — real password hashing, sessions/JWT, server-side validation.
-      **Status: starting now.** Building as `/server`, a separate Node/Express service in this
-      same repo, deployed as a second Railway service alongside the existing frontend one.
-      - [ ] Prisma schema adapted for real use (already had a reference version at
-            `prisma/schema.prisma` at repo root — moving/adapting into `/server/prisma/`)
-      - [ ] POST /auth/register (bcrypt password hashing)
-      - [ ] POST /auth/login (issues a JWT)
-      - [ ] GET /auth/me (JWT-protected, returns current user)
-      - [ ] POST /auth/logout
-      - [ ] Password reset flow (request + confirm) — needs a decision on email provider before
-            this can send a real email; can build the token logic now and stub the "send" step
+      **Status: deployed and live.** `server/` is running as its own Railway service
+      (`upbeat-rebirth-production.up.railway.app`), connected to a real Postgres database
+      provisioned in the same Railway project, migration applied, `/health` confirmed responding
+      (2026-08-22).
+      - [x] Schema for real use — built with raw SQL + `pg` instead of Prisma (see
+            `server/README.md` for why: Prisma's client needs a binary this dev environment
+            couldn't download; the original `prisma/schema.prisma` at repo root stays as the full
+            data-model reference for what's still ahead)
+      - [x] POST /auth/register (bcrypt password hashing)
+      - [x] POST /auth/login (issues a JWT)
+      - [x] GET /auth/me (JWT-protected, returns current user)
+      - [x] POST /auth/logout
+      - [x] Password reset flow (request + confirm) — token logic fully built and tested; still
+            logs the token to the server console instead of emailing it, since no email provider
+            is connected yet (see Tier 2)
+      - [x] Deploy: Postgres provisioned on Railway, migration run, env vars set
+            (JWT_SECRET, NODE_ENV, FRONTEND_URL, DATABASE_URL referencing the Postgres service),
+            live and responding at /health
       - [ ] Wire the existing frontend login modal to call these real endpoints instead of the
-            in-memory demo logic
-      - [ ] Deploy: provision Postgres on Railway, set env vars, push
+            in-memory demo logic — **this is the next real step**
 - [ ] **Payments** — Stripe integration. **Blocked on:** a real Stripe account (business details +
       bank account for payouts — the project owner needs to create this; can't be done by Claude).
       Once the account exists: checkout flow wired to Stripe Checkout or Elements, webhook handling
@@ -71,7 +78,10 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
-- **[this session]** Created this roadmap. Starting Tier 1 auth backend.
+- **Auth backend deployed and live** — Postgres provisioned on Railway, migration applied, server
+  running as its own service, `/health` responding. Frontend not wired to it yet.
+- Created this roadmap. Built and tested the Tier 1 auth backend (register/login/me/logout/
+  password-reset), 25/25 tests passing against a local test harness.
 - Fixed Shop product-grid loading skeleton (revisited an earlier deferral).
 - Fixed Shop filters dominating the mobile screen — collapsed into a drawer below 800px, found
   from a real device screenshot.
