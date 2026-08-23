@@ -103,6 +103,79 @@ async function main() {
   const patchMissing = await patch("/users/00000000-0000-0000-0000-000000000000", { role: "staff" }, token);
   check("returns 404", patchMissing.status === 404);
 
+  console.log("\nPOST /orders without a token:");
+  const orderNoAuth = await post("/orders", { items: [{ id: "sl28-kenya", qty: 2, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" });
+  check("returns 401", orderNoAuth.status === 401);
+
+  console.log("\nPOST /orders with no items:");
+  const orderNoItems = await post("/orders", { items: [], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  check("returns 400", orderNoItems.status === 400);
+
+  console.log("\nPOST /orders with an invalid quantity:");
+  const orderBadQty = await post("/orders", { items: [{ id: "sl28-kenya", qty: 0, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  check("returns 400", orderBadQty.status === 400);
+
+  console.log("\nPOST /orders missing shipping city:");
+  const orderNoCity = await post("/orders", { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "" }, customerToken);
+  check("returns 400", orderNoCity.status === 400);
+
+  console.log("\nPOST /orders — a real, valid order:");
+  const order = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 2, unitPriceCents: 1500 }, { id: "geisha-panama", qty: 1, unitPriceCents: 3200 }], shippingName: "Second User", shippingAddress: "123 Coffee St", shippingCity: "Nairobi" },
+    customerToken
+  );
+  check("returns 201", order.status === 201);
+  check("total is genuinely recalculated server-side from the line items (2×1500 + 1×3200 = 6200), not just echoed back", order.body.order && order.body.order.totalCents === 6200);
+  check("order number is formatted MA-<number>", order.body.order && /^MA-\d+$/.test(order.body.order.orderNumber));
+  check("defaults to Processing / unpaid", order.body.order && order.body.order.status === "Processing" && order.body.order.paymentStatus === "unpaid");
+  const orderId = order.body.order.id;
+
+  console.log("\nGET /orders/mine as the customer who placed it:");
+  const mine = await get("/orders/mine", customerToken);
+  check("returns 200", mine.status === 200);
+  check("returns exactly the order just placed", mine.body.orders && mine.body.orders.length === 1 && mine.body.orders[0].id === orderId);
+
+  console.log("\nGET /orders as a non-admin:");
+  const allOrdersAsCustomer = await get("/orders", customerToken);
+  check("returns 403", allOrdersAsCustomer.status === 403);
+
+  console.log("\nGET /orders as admin — sees every order with customer info attached:");
+  const allOrders = await get("/orders", token);
+  check("returns 200", allOrders.status === 200);
+  check("includes the order with the customer's real email attached", allOrders.body.orders.some((o) => o.id === orderId && o.customerEmail === "second@morningaroma.local"));
+
+  console.log("\nPATCH /orders/:id/status as a non-admin:");
+  const statusAsCustomer = await patch(`/orders/${orderId}/status`, { status: "Shipped" }, customerToken);
+  check("returns 403", statusAsCustomer.status === 403);
+
+  console.log("\nPATCH /orders/:id/status with an invalid status:");
+  const statusBad = await patch(`/orders/${orderId}/status`, { status: "Teleporting" }, token);
+  check("returns 400", statusBad.status === 400);
+
+  console.log("\nPATCH /orders/:id/status — admin moves it to Roasting:");
+  const statusOk = await patch(`/orders/${orderId}/status`, { status: "Roasting" }, token);
+  check("returns 200", statusOk.status === 200);
+  check("status actually changed", statusOk.body.order && statusOk.body.order.status === "Roasting");
+
+  console.log("\nPOST /orders/:id/cancel once it's past Processing:");
+  const cancelTooLate = await post(`/orders/${orderId}/cancel`, {}, customerToken);
+  check("returns 400 -- can't self-cancel once roasting has started", cancelTooLate.status === 400);
+
+  console.log("\nPOST /orders/:id/cancel on someone else's order:");
+  const secondOrder = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Test User", shippingAddress: "456 Bean Ave", shippingCity: "Nairobi" },
+    token // placed by the admin account, not the customer
+  );
+  const cancelWrongOwner = await post(`/orders/${secondOrder.body.order.id}/cancel`, {}, customerToken);
+  check("returns 400 -- can't cancel an order that isn't yours", cancelWrongOwner.status === 400);
+
+  console.log("\nPOST /orders/:id/cancel on your own order while still Processing:");
+  const cancelOk = await post(`/orders/${secondOrder.body.order.id}/cancel`, {}, token);
+  check("returns 200", cancelOk.status === 200);
+  check("status is now Cancelled", cancelOk.body.order && cancelOk.body.order.status === "Cancelled");
+
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });
   check("returns 409", dup.status === 409);

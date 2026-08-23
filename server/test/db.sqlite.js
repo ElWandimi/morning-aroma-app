@@ -10,6 +10,12 @@ const path = require("path");
 const db = new DatabaseSync(":memory:");
 db.exec(fs.readFileSync(path.join(__dirname, "schema.sqlite.sql"), "utf8"));
 
+// Postgres generates order_number from a real sequence (order_number_seq, START 1000); SQLite has
+// no equivalent, so this test-only counter stands in for it -- starts at the same value purely so
+// test assertions reading a formatted "MA-<number>" look the same shape as they would in
+// production, not because the actual number matters for anything.
+let nextOrderNumber = 1000;
+
 // The handful of real Postgres/SQLite dialect differences this test setup needs to bridge:
 // - $1, $2, ... placeholders -> SQLite's ?
 // - Postgres relies on a column DEFAULT (gen_random_uuid()) for id and now() for timestamps;
@@ -38,6 +44,17 @@ async function query(text, params = []) {
       "INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     );
     values = [id, ...values, createdAt];
+  } else if (/INSERT INTO orders/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = crypto.randomUUID();
+    const orderNumber = nextOrderNumber++;
+    const createdAt = new Date().toISOString();
+    sql = sql
+      .replace(/\s+/g, " ")
+      .replace(
+        "INSERT INTO orders (user_id, items, total_cents, shipping_name, shipping_address, shipping_city) VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO orders (id, order_number, user_id, items, total_cents, shipping_name, shipping_address, shipping_city, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      );
+    values = [id, orderNumber, values[0], values[1], values[2], values[3], values[4], values[5], createdAt];
   } else {
     sql = sql.replace(/\$(\d+)/g, "?").replace(/\bnow\(\)/gi, "datetime('now')");
   }
@@ -47,19 +64,22 @@ async function query(text, params = []) {
   const stmt = db.prepare(sql.trim());
 
   // The reverse of the stringify-on-bind above: pg would hand production code a real JS array
-  // for a TEXT[] column automatically; SQLite gives back the raw JSON string it's actually
-  // stored as, so parse it back before returning -- otherwise every row coming out of this test
-  // adapter would have `permissions` as a string, when routes/users.js (correctly, for
-  // production) expects and returns a real array.
-  const parsePermissions = (row) => {
-    if (row && typeof row.permissions === "string") {
-      try { row.permissions = JSON.parse(row.permissions); } catch { /* leave as-is if malformed */ }
+  // for a TEXT[] column, or a parsed object/array for a JSONB column, automatically; SQLite gives
+  // back the raw JSON string it's actually stored as either way, so parse both back before
+  // returning -- otherwise every row coming out of this test adapter would have `permissions`
+  // and `items` as strings, when routes/users.js and routes/orders.js (correctly, for
+  // production) expect and return real arrays.
+  const parseJsonColumns = (row) => {
+    for (const col of ["permissions", "items"]) {
+      if (row && typeof row[col] === "string") {
+        try { row[col] = JSON.parse(row[col]); } catch { /* leave as-is if malformed */ }
+      }
     }
     return row;
   };
 
   if (isSelect || isReturning) {
-    const rows = (isReturning ? [stmt.get(...values)] : stmt.all(...values)).map(parsePermissions);
+    const rows = (isReturning ? [stmt.get(...values)] : stmt.all(...values)).map(parseJsonColumns);
     return { rows: rows.filter(Boolean) };
   }
   stmt.run(...values);

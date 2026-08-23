@@ -14,6 +14,27 @@ launch (payments is the other).
 - `POST /auth/password-reset/request` — always returns the same generic message whether or not
   the email has an account, to avoid leaking which emails are registered
 - `POST /auth/password-reset/confirm`
+- `GET /users` (admin-only) — list every real registered account
+- `PATCH /users/:id` (admin-only) — change a real account's role/permissions
+- `POST /orders` — create an order for the signed-in user
+- `GET /orders/mine` — the signed-in user's own orders
+- `GET /orders` (admin-only) — every order, with the customer's email/name attached
+- `PATCH /orders/:id/status` (admin-only) — move an order through Processing → Roasting → Shipped
+  → Delivered (or Cancelled/Refunded)
+- `POST /orders/:id/cancel` — a customer cancelling their own order, only while it's still
+  Processing (matches the existing frontend's restriction: once fulfillment has started, only
+  admin can change status further)
+
+## Known limitation: order totals aren't fully price-verified yet
+
+`POST /orders` recomputes the total from the submitted per-item prices rather than trusting a
+submitted grand total directly, which blocks the most obvious form of tampering (mismatched
+items/total). But the per-item prices themselves still come from the client, not a real product
+catalog — products and pricing haven't been migrated to this database yet (they're still frontend
+static data, per ROADMAP.md). This is real order *persistence* (orders survive a refresh, admin
+can see them, a customer's order history is genuinely theirs) — not yet a fully trustworthy
+checkout from a pricing-integrity standpoint. Real price verification needs the product catalog
+to exist here too, which is its own, larger piece of work.
 
 ## What's *not* here yet
 
@@ -23,7 +44,8 @@ launch (payments is the other).
   step is missing.
 - **2FA and Google OAuth.** The frontend has UI for both already; this backend doesn't implement
   either side yet.
-- **The frontend isn't wired to this yet.** It still runs on the old in-memory demo login. That's
+- **The frontend isn't wired to orders yet.** Auth (register/login/session) has been wired since
+  an earlier round — checkout still runs on the old in-memory demo order data. That's
   the next step once this is deployed.
 
 ## Local development

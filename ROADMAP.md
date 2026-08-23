@@ -87,9 +87,20 @@ Nothing else matters for going live until these are real, not simulated.
 
 ## Tier 2 — Needed alongside Tier 1 for a real backend
 
-- [ ] **Real database** — Postgres. Same Prisma schema as the auth work above covers this; not a
-      separate task, just the natural extension once auth is live (orders, products, etc. move
-      from the frontend's in-memory state to real tables).
+- [x] **Real database, orders** — Postgres, `server/migrations/002_orders.sql`. `POST /orders`,
+      `GET /orders/mine`, `GET /orders` (admin), `PATCH /orders/:id/status` (admin),
+      `POST /orders/:id/cancel` (customer, Processing-only, matching the existing frontend
+      restriction). Orders now genuinely persist — survive a refresh, admin can see them, a
+      customer's order history is really theirs. **Not wired to the frontend yet** — checkout
+      still creates fake in-memory orders; this is backend-only so far, same split as auth was.
+      21 new backend tests, 66/66 passing overall.
+- [ ] **Real database, products/pricing** — still frontend static data, not in Postgres. This is
+      what blocks real price integrity on orders (see the limitation noted below) and would also
+      need to happen before Products/Inventory admin edits could persist for real.
+- [ ] **Order total price integrity** — `POST /orders` recomputes the total from submitted
+      per-item prices (blocking the obvious tamper of a mismatched total), but those per-item
+      prices still come from the client, not a verified catalog, since products/pricing aren't in
+      this database yet. Depends on the item above.
 - [ ] **Real email delivery** — order confirmations, the notification preference toggles (already
       built, currently honest no-ops). Needs an email provider decision (Resend / Postmark /
       SendGrid) — small decision, can wait until auth is further along.
@@ -129,6 +140,14 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real order persistence (backend only).** Orders now survive a refresh and live in Postgres —
+  a genuine, honest improvement even though products/pricing aren't in this database yet, so
+  order totals aren't fully price-verified server-side (documented clearly, not hidden). Chose
+  this over starting speculative Paystack integration code, since no Paystack account exists yet
+  and untested payment-API code carries real risk; this is foundational infrastructure payment
+  integration will need regardless, and — unlike calling a real payment provider — fully testable
+  right now the same way everything else has been. Not wired to the frontend yet, same
+  backend-first/frontend-second split as auth. 21 new backend tests, 66/66 passing overall.
 - **Tier 1.5 complete — admin user management is real.** GET/PATCH /users, admin-only, enforced
   server-side with a role check that re-queries current state rather than trusting a possibly-
   stale JWT. Refuses to demote the last admin. Admin Customers/Overview/Analytics all read from

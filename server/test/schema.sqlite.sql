@@ -14,3 +14,17 @@ CREATE TABLE users (
   reset_token_expires    TEXT,
   created_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE orders (
+  id                  TEXT PRIMARY KEY,
+  order_number        INTEGER NOT NULL UNIQUE,
+  user_id             TEXT NOT NULL REFERENCES users(id),
+  items               TEXT NOT NULL,
+  total_cents         INTEGER NOT NULL,
+  shipping_name       TEXT NOT NULL,
+  shipping_address    TEXT NOT NULL,
+  shipping_city       TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'Processing',
+  payment_status      TEXT NOT NULL DEFAULT 'unpaid',
+  created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
