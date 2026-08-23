@@ -8,7 +8,7 @@ export function CheckoutPage() {
   const { user } = useAuth();
   const { items, updateQty, remove, totalCents, clearCart } = useCart();
   const { go } = useRoute();
-  const { addOrder } = useOrders();
+  const { createOrder } = useOrders();
   const { getPrice, getAllProducts } = useAdmin();
   const { format } = useCurrency();
   const [loginOpen, setLoginOpen] = useState(false);
@@ -16,6 +16,8 @@ export function CheckoutPage() {
   const [shipping, setShipping] = useState({ name: "", address: "", city: "", country: "", phone: "" });
   const [payment, setPayment] = useState({ cardName: "", cardNumber: "", expiry: "", cvc: "" });
   const [confirmedOrder, setConfirmedOrder] = useState(null);
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [placeOrderError, setPlaceOrderError] = useState("");
 
   if (items.length === 0 && step < 4) {
     return (
@@ -28,12 +30,27 @@ export function CheckoutPage() {
 
   const goNext = () => setStep((s) => Math.min(s + 1, 4));
 
-  const placeOrder = (e) => {
+  const placeOrder = async (e) => {
     e.preventDefault();
-    const order = addOrder(user.email, items.map((i) => ({ id: i.id, qty: i.qty })));
-    clearCart();
-    setConfirmedOrder(order);
-    setStep(4);
+    setPlacingOrder(true);
+    setPlaceOrderError("");
+    // unitPriceCents is captured now, at the moment of ordering -- locking in what was actually
+    // charged, rather than the order forever pointing at "whatever this product currently costs"
+    // the way the old in-memory version effectively did.
+    const result = await createOrder({
+      items: items.map((i) => ({ id: i.id, qty: i.qty, unitPriceCents: getPrice(i.id) })),
+      shippingName: shipping.name,
+      shippingAddress: shipping.address,
+      shippingCity: shipping.city,
+    });
+    setPlacingOrder(false);
+    if (result.ok) {
+      clearCart();
+      setConfirmedOrder(result.order);
+      setStep(4);
+    } else {
+      setPlaceOrderError(result.error);
+    }
   };
 
   return (
@@ -135,7 +152,8 @@ export function CheckoutPage() {
             </div>
           </div>
           <div className="drawer-total"><span>Total due</span><span>{format(totalCents)}</span></div>
-          <button className="btn-primary full" type="submit">Place Order (demo)</button>
+          {placeOrderError && <p className="form-error">{placeOrderError}</p>}
+          <button className="btn-primary full" type="submit" disabled={placingOrder}>{placingOrder ? "Placing order…" : "Place Order (demo)"}</button>
         </form>
       )}
 
@@ -143,7 +161,7 @@ export function CheckoutPage() {
         <div className="checkout-confirmed">
           <span className="bean-shape" style={{ margin: "0 auto 16px" }} />
           <p className="eyebrow">order confirmed</p>
-          <h2>Thank you — {confirmedOrder.id} is roasting soon</h2>
+          <h2>Thank you — {confirmedOrder.orderNumber} is roasting soon</h2>
           <p className="quiz-copy">A confirmation would normally land in your inbox. For now, find it any time in My Aroma Journey.</p>
           <div className="checkout-confirmed-actions">
             <button className="btn-primary" onClick={() => go("journey")}>View my orders</button>

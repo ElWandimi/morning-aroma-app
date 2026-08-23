@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { LoginModal, ShareButtons } from "../components";
-import { useAdmin, useAuth, useOrders, useRoute, useToast } from "../context";
+import { useAdmin, useAuth, useRoute, useToast } from "../context";
 import { ADMIN_SECTIONS, COUNTRIES, COURSES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
 import { exportToCSV, fmtPrice, resizeImageFile, storage } from "../utils/helpers";
 import { useClickOutside, useEscapeKey } from "../hooks";
@@ -77,10 +77,8 @@ export function AdminPager({ page, setPage, totalPages }) {
 }
 
 export function AdminOverview() {
-  const { allOrders } = useOrders();
-  const { getPrice, quotations, feedbackList, greenOrders, serviceInquiries, getAllProducts, realUsers: users } = useAdmin();
-  const orders = allOrders();
-  const retailRevenueCents = orders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0), 0);
+  const { quotations, feedbackList, greenOrders, serviceInquiries, getAllProducts, realUsers: users, realOrders: orders } = useAdmin();
+  const retailRevenueCents = orders.reduce((sum, o) => sum + o.totalCents, 0);
   const greenRevenueCents = greenOrders.reduce((sum, o) => sum + o.totalCents, 0);
   const consultingRevenueCents = serviceInquiries.reduce((sum, s) => sum + (s.agreedFeeCents || 0), 0);
   const revenueCents = retailRevenueCents + greenRevenueCents + consultingRevenueCents;
@@ -154,14 +152,15 @@ export function AdminOverview() {
 }
 
 export function AdminAnalytics() {
-  const { allOrders } = useOrders();
-  const { getPrice, greenOrders, serviceInquiries, getAllProducts, realUsers: users } = useAdmin();
-  const orders = allOrders();
+  const { greenOrders, serviceInquiries, getAllProducts, realUsers: users, realOrders: orders } = useAdmin();
 
   const revenueByDate = {};
   orders.forEach((o) => {
-    const total = o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0);
-    revenueByDate[o.date] = (revenueByDate[o.date] || 0) + total;
+    // Real orders return a full ISO timestamp (createdAt), not the old fake data's bare
+    // YYYY-MM-DD string -- truncate to the date portion here, at the one place this actually
+    // gets grouped by day, same fix already applied to signupsByDate below for the same reason.
+    const day = o.createdAt.slice(0, 10);
+    revenueByDate[day] = (revenueByDate[day] || 0) + o.totalCents;
   });
   greenOrders.forEach((o) => { revenueByDate[o.date] = (revenueByDate[o.date] || 0) + o.totalCents; });
   const revenueDates = Object.keys(revenueByDate).sort();
@@ -172,7 +171,7 @@ export function AdminAnalytics() {
   const signupDates = Object.keys(signupsByDate).sort();
   const maxSignups = Math.max(...signupDates.map((d) => signupsByDate[d]), 1);
 
-  const retailRevenueCents = orders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0), 0);
+  const retailRevenueCents = orders.reduce((sum, o) => sum + o.totalCents, 0);
   const greenRevenueCents = greenOrders.reduce((sum, o) => sum + o.totalCents, 0);
   const consultingRevenueCents = serviceInquiries.reduce((sum, s) => sum + (s.agreedFeeCents || 0), 0);
   const totalRevenueCents = retailRevenueCents + greenRevenueCents + consultingRevenueCents || 1;
@@ -306,34 +305,49 @@ export function AdminAnalytics() {
 }
 
 export function AdminOrders() {
-  const { allOrders, updateStatus } = useOrders();
-  const { getPrice } = useAdmin();
+  const { realOrders: allOrdersSorted, realOrdersLoading: loading, realOrdersError: loadError, refetchRealOrders, updateOrderStatus } = useAdmin();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
-  const allOrdersSorted = allOrders();
   const filtered = allOrdersSorted.filter((o) => {
     const q = query.toLowerCase();
-    return !q || o.id.toLowerCase().includes(q) || o.customerEmail.toLowerCase().includes(q) || o.status.toLowerCase().includes(q);
+    return !q || o.orderNumber.toLowerCase().includes(q) || o.customerEmail.toLowerCase().includes(q) || o.status.toLowerCase().includes(q);
   });
-  const orderTotal = (o) => o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0);
+  // totalCents is now captured server-side at order time (locked-in pricing), not recomputed
+  // from current catalog prices the way the old in-memory version had to.
   const toggleSort = (field) => {
     if (sortBy === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortBy(field); setSortDir(field === "date" ? "desc" : "desc"); }
   };
   const orders = [...filtered].sort((a, b) => {
-    const av = sortBy === "total" ? orderTotal(a) : a.date;
-    const bv = sortBy === "total" ? orderTotal(b) : b.date;
+    const av = sortBy === "total" ? a.totalCents : a.createdAt;
+    const bv = sortBy === "total" ? b.totalCents : b.createdAt;
     const cmp = av < bv ? -1 : av > bv ? 1 : 0;
     return sortDir === "asc" ? cmp : -cmp;
   });
   const { page, setPage, pageItems, totalPages } = usePagination(orders, 10);
   const STATUSES = ["Processing", "Roasting", "Shipped", "Delivered", "Cancelled", "Refunded"];
   const exportOrders = () => exportToCSV("orders", ["Order", "Customer", "Date", "Items", "Total (USD)", "Status"], orders.map((o) => [
-    o.id, o.customerEmail, o.date, o.items.reduce((s, it) => s + it.qty, 0),
-    (orderTotal(o) / 100).toFixed(2), o.status,
+    o.orderNumber, o.customerEmail, o.createdAt.slice(0, 10), o.items.reduce((s, it) => s + it.qty, 0),
+    (o.totalCents / 100).toFixed(2), o.status,
   ]));
   const sortArrow = (field) => (sortBy === field ? (sortDir === "asc" ? " ↑" : " ↓") : "");
+
+  const changeStatus = async (o, status) => {
+    const result = await updateOrderStatus(o.id, status);
+    if (!result.ok) window.alert(result.error); // a plain alert, not a toast -- this component has no useToast() wired in, and adding one just for this single error path isn't worth it given how rare a failure here should be
+  };
+
+  if (loading) return <p className="hint">Loading orders…</p>;
+  if (loadError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load orders: {loadError}</p>
+        <button className="btn-outline" onClick={refetchRealOrders}>Try again</button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h3 className="matched-head">All orders ({orders.length}{query ? ` of ${allOrdersSorted.length}` : ""})</h3>
@@ -351,26 +365,23 @@ export function AdminOrders() {
             <span className="admin-sortable" onClick={() => toggleSort("total")}>Total{sortArrow("total")}</span>
             <span>Status</span>
           </div>
-          {pageItems.map((o) => {
-            const total = orderTotal(o);
-            return (
-              <div key={o.id} className="admin-row">
-                <span>{o.id}</span>
-                <span>{o.customerEmail}</span>
-                <span>{o.date}</span>
-                <span>{o.items.reduce((s, it) => s + it.qty, 0)} items</span>
-                <span>{fmtPrice(total)}</span>
-                <span className="admin-inline-edit">
-                  <select value={o.status} onChange={(e) => updateStatus(o.customerEmail, o.id, e.target.value)}>
-                    {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
-                  </select>
-                  {o.status !== "Cancelled" && o.status !== "Refunded" && (
-                    <button className="link-btn" onClick={() => { if (window.confirm(`Mark ${o.id} as refunded? This is a record only — no real payment is processed.`)) { updateStatus(o.customerEmail, o.id, "Refunded"); } }}>Refund</button>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {pageItems.map((o) => (
+            <div key={o.id} className="admin-row">
+              <span>{o.orderNumber}</span>
+              <span>{o.customerEmail}</span>
+              <span>{o.createdAt.slice(0, 10)}</span>
+              <span>{o.items.reduce((s, it) => s + it.qty, 0)} items</span>
+              <span>{fmtPrice(o.totalCents)}</span>
+              <span className="admin-inline-edit">
+                <select value={o.status} onChange={(e) => changeStatus(o, e.target.value)}>
+                  {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </select>
+                {o.status !== "Cancelled" && o.status !== "Refunded" && (
+                  <button className="link-btn" onClick={() => { if (window.confirm(`Mark ${o.orderNumber} as refunded? This is a record only — no real payment is processed.`)) { changeStatus(o, "Refunded"); } }}>Refund</button>
+                )}
+              </span>
+            </div>
+          ))}
           <AdminPager page={page} setPage={setPage} totalPages={totalPages} />
         </div>
       )}
@@ -379,8 +390,7 @@ export function AdminOrders() {
 }
 
 export function AdminInvoices() {
-  const { allOrders } = useOrders();
-  const { getPrice, greenOrders, serviceInquiries, settings, setServiceInquiryFee, getAllProducts } = useAdmin();
+  const { realOrders: orders, greenOrders, serviceInquiries, settings, setServiceInquiryFee, getAllProducts } = useAdmin();
   const { addToast } = useToast();
   const [feeDrafts, setFeeDrafts] = useState({});
   const business = {
@@ -401,12 +411,14 @@ export function AdminInvoices() {
     const allProducts = getAllProducts();
     const lineItems = o.items.map((it) => {
       const p = allProducts.find((prod) => prod.id === it.id);
-      const unitPriceCents = getPrice(it.id);
-      return { description: p ? `${p.name} — ${p.country}` : it.id, qty: it.qty, unitPriceCents, totalCents: unitPriceCents * it.qty };
+      // Uses the price actually locked in at order time (it.unitPriceCents), not whatever the
+      // product costs right now -- an invoice for a past order should reflect what was actually
+      // charged, even if the catalog price has since changed.
+      return { description: p ? `${p.name} — ${p.country}` : it.id, qty: it.qty, unitPriceCents: it.unitPriceCents, totalCents: it.unitPriceCents * it.qty };
     });
     const totalCents = lineItems.reduce((s, li) => s + li.totalCents, 0);
     generateInvoicePDF({
-      invoiceNumber: o.id, date: o.date,
+      invoiceNumber: o.orderNumber, date: o.createdAt.slice(0, 10),
       billTo: { name: o.customerEmail, email: o.customerEmail },
       lineItems, totalCents, notes: `Order status: ${o.status}`, business,
     });
@@ -438,14 +450,13 @@ export function AdminInvoices() {
     addToast("Invoice downloaded");
   };
 
-  const orders = allOrders();
   const [orderQuery, setOrderQuery] = useState("");
   const [greenQuery, setGreenQuery] = useState("");
   const [serviceQuery, setServiceQuery] = useState("");
 
   const filteredOrders = orders.filter((o) => {
     const q = orderQuery.toLowerCase();
-    return !q || o.id.toLowerCase().includes(q) || o.customerEmail.toLowerCase().includes(q);
+    return !q || o.orderNumber.toLowerCase().includes(q) || o.customerEmail.toLowerCase().includes(q);
   });
   const filteredGreenOrders = greenOrders.filter((o) => {
     const q = greenQuery.toLowerCase();
@@ -457,7 +468,7 @@ export function AdminInvoices() {
   });
 
   const exportOrderInvoicesList = () => exportToCSV("order-invoices", ["Order", "Customer", "Date", "Total (USD)"], filteredOrders.map((o) => [
-    o.id, o.customerEmail, o.date, (o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0) / 100).toFixed(2),
+    o.orderNumber, o.customerEmail, o.createdAt.slice(0, 10), (o.totalCents / 100).toFixed(2),
   ]));
   const exportGreenInvoicesList = () => exportToCSV("green-order-invoices", ["Order", "Buyer", "Date", "Total (USD)"], filteredGreenOrders.map((o) => [
     o.id, o.company || o.name, o.date, (o.totalCents / 100).toFixed(2),
@@ -469,7 +480,7 @@ export function AdminInvoices() {
   return (
     <div>
       <h3 className="matched-head">Invoices</h3>
-      <p className="hint" style={{ marginTop: -6 }}>Generates a real, downloadable PDF invoice from live data — nothing is pre-stored, so it always reflects current pricing.</p>
+      <p className="hint" style={{ marginTop: -6 }}>Generates a real, downloadable PDF invoice from live data. Customer order invoices reflect the price actually charged at order time; consultation invoices use the agreed fee entered below.</p>
 
       <h4 className="admin-subhead">Customer orders ({filteredOrders.length}{orderQuery ? ` of ${orders.length}` : ""})</h4>
       {orders.length > 0 && <AdminTableToolbar query={orderQuery} setQuery={setOrderQuery} onExport={exportOrderInvoicesList} placeholder="Search by order or customer…" />}
@@ -480,15 +491,12 @@ export function AdminInvoices() {
       ) : (
         <div className="admin-table admin-table-invoices">
           <div className="admin-row admin-header"><span>Order</span><span>Customer</span><span>Date</span><span>Total</span><span></span></div>
-          {filteredOrders.map((o) => {
-            const total = o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0);
-            return (
-              <div key={o.id} className="admin-row">
-                <span>{o.id}</span><span>{o.customerEmail}</span><span>{o.date}</span><span>{fmtPrice(total)}</span>
-                <span><button className="link-btn" onClick={() => downloadOrderInvoice(o)}>Download PDF</button></span>
-              </div>
-            );
-          })}
+          {filteredOrders.map((o) => (
+            <div key={o.id} className="admin-row">
+              <span>{o.orderNumber}</span><span>{o.customerEmail}</span><span>{o.createdAt.slice(0, 10)}</span><span>{fmtPrice(o.totalCents)}</span>
+              <span><button className="link-btn" onClick={() => downloadOrderInvoice(o)}>Download PDF</button></span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -546,9 +554,7 @@ const STAFF_PERMISSIONS = ADMIN_SECTIONS.filter((s) => s !== "Overview");
 
 export function AdminCustomers() {
   const { token } = useAuth();
-  const { realUsers: users, realUsersLoading: loading, realUsersError: loadError, refetchRealUsers } = useAdmin();
-  const { ordersFor } = useOrders();
-  const { getPrice } = useAdmin();
+  const { realUsers: users, realUsersLoading: loading, realUsersError: loadError, refetchRealUsers, realOrders } = useAdmin();
   const { addToast } = useToast();
   const [query, setQuery] = useState("");
   const [editingPermsFor, setEditingPermsFor] = useState(null);
@@ -650,20 +656,17 @@ export function AdminCustomers() {
               {viewingOrdersFor === u.email && (
                 <div className="admin-permissions-row">
                   {(() => {
-                    const custOrders = ordersFor(u.email);
+                    const custOrders = realOrders.filter((o) => o.customerEmail === u.email);
                     if (custOrders.length === 0) return <p className="hint" style={{ margin: 0 }}>{u.name} hasn't placed any orders yet.</p>;
-                    const lifetimeCents = custOrders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0), 0);
+                    const lifetimeCents = custOrders.reduce((sum, o) => sum + o.totalCents, 0);
                     return (
                       <>
                         <p className="hint" style={{ margin: "0 0 8px" }}>{custOrders.length} order{custOrders.length === 1 ? "" : "s"} · {fmtPrice(lifetimeCents)} lifetime</p>
-                        {custOrders.map((o) => {
-                          const total = o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0);
-                          return (
-                            <p key={o.id} className="hint" style={{ margin: "4px 0" }}>
-                              <strong>{o.id}</strong> · {o.date} · {o.items.reduce((s, it) => s + it.qty, 0)} items · {fmtPrice(total)} · {o.status}
-                            </p>
-                          );
-                        })}
+                        {custOrders.map((o) => (
+                          <p key={o.id} className="hint" style={{ margin: "4px 0" }}>
+                            <strong>{o.orderNumber}</strong> · {o.createdAt.slice(0, 10)} · {o.items.reduce((s, it) => s + it.qty, 0)} items · {fmtPrice(o.totalCents)} · {o.status}
+                          </p>
+                        ))}
                       </>
                     );
                   })()}
@@ -1522,7 +1525,6 @@ export function AdminContent() {
 
 export function AdminSettings() {
   const { settings, setSettings, exportAdminData, restoreAdminData } = useAdmin();
-  const { exportOrders, restoreOrders } = useOrders();
   const { exportUsers, restoreUsers } = useAuth();
   const { addToast } = useToast();
   const [draft, setDraft] = useState(settings);
@@ -1531,8 +1533,13 @@ export function AdminSettings() {
 
   const save = () => { setSettings(draft); addToast("Settings saved"); };
 
+  // Covers only what's still genuinely in-memory (catalog/admin overrides, the vestigial demo
+  // users list). Orders and real customer accounts live in Postgres now and aren't part of this
+  // app-level JSON backup at all -- a real database needs a real backup strategy (e.g. Railway's
+  // own database backups), not an ad-hoc download, same reasoning already applied when users
+  // moved to the real backend.
   const downloadBackup = () => {
-    const backup = { version: 1, exportedAt: new Date().toISOString(), admin: exportAdminData(), orders: exportOrders(), users: exportUsers() };
+    const backup = { version: 1, exportedAt: new Date().toISOString(), admin: exportAdminData(), users: exportUsers() };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1548,7 +1555,7 @@ export function AdminSettings() {
   const handleRestoreFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!window.confirm("Restore from this backup? This replaces current catalog changes, orders, and customer accounts with what's in the file — not merged, replaced.")) {
+    if (!window.confirm("Restore from this backup? This replaces current catalog changes and the demo customer list with what's in the file — not merged, replaced. Real orders and real customer accounts (in Postgres) aren't affected by this.")) {
       e.target.value = "";
       return;
     }
@@ -1559,7 +1566,6 @@ export function AdminSettings() {
       try {
         const parsed = JSON.parse(reader.result);
         if (parsed.admin) restoreAdminData(parsed.admin);
-        if (parsed.orders) restoreOrders(parsed.orders);
         if (parsed.users) restoreUsers(parsed.users);
         addToast("Backup restored");
       } catch {
@@ -1705,8 +1711,7 @@ function NotificationBell({ pendingCount, visibleSections, notificationTypes, on
 export function AdminDashboard() {
   const { user } = useAuth();
   const { go } = useRoute();
-  const { quotations, serviceInquiries, greenOrders, feedbackList, liveChats, settings } = useAdmin();
-  const { allOrders } = useOrders();
+  const { quotations, serviceInquiries, greenOrders, feedbackList, liveChats, settings, realOrders } = useAdmin();
   const [section, setSection] = useState("Overview");
   const [loginOpen, setLoginOpen] = useState(false);
 
@@ -1715,7 +1720,7 @@ export function AdminDashboard() {
   // list with rows in it.
   const pendingCount = (s) => {
     switch (s) {
-      case "Orders": return allOrders().filter((o) => o.status === "Processing").length;
+      case "Orders": return realOrders.filter((o) => o.status === "Processing").length;
       case "Quotations": return quotations.filter((q) => q.status !== "Closed").length;
       case "Service Inquiries": return serviceInquiries.filter((si) => si.status === "New").length;
       case "Green Orders": return greenOrders.filter((o) => o.status === "New").length;

@@ -77,13 +77,14 @@ Nothing else matters for going live until these are real, not simulated.
       users fetch in `AdminDataProvider` (`realUsers`/`realUsersLoading`/`realUsersError`/
       `refetchRealUsers`) rather than each section fetching independently — keeps the customer
       count, signup chart, and customer list from ever disagreeing with each other.
-- [ ] **New gap found while doing this:** Settings > Backup (JSON export/import) still operates on
-      the old fake in-memory `users` list in `AuthProvider`, which is now mostly vestigial —
-      real customers live in Postgres and aren't covered by this app-level backup at all. Not
-      urgent (the backup feature still correctly covers everything else that's still genuinely
-      in-memory: product/catalog overrides, orders), and a real database like Postgres should
-      have its own proper backup strategy (e.g. Railway's built-in database backups) rather than
-      an ad-hoc JSON download of user records — deliberately not building that here.
+- [x] **Gap found while doing this, now fixed:** Settings > Backup (JSON export/import) still
+      called `exportOrders()`/`restoreOrders()`, which stopped existing once orders also became
+      real (see Tier 2 below) — a real crash waiting to happen the moment anyone clicked Download
+      Backup. Fixed by removing those calls and correcting the confirm-dialog text. The backup
+      still covers only what's genuinely in-memory now (catalog/admin overrides, the vestigial
+      demo users list) — real customers and real orders both live in Postgres and aren't covered
+      by this app-level backup at all, deliberately: a real database should have its own proper
+      backup strategy (e.g. Railway's built-in database backups), not an ad-hoc JSON download.
 
 ## Tier 2 — Needed alongside Tier 1 for a real backend
 
@@ -91,9 +92,14 @@ Nothing else matters for going live until these are real, not simulated.
       `GET /orders/mine`, `GET /orders` (admin), `PATCH /orders/:id/status` (admin),
       `POST /orders/:id/cancel` (customer, Processing-only, matching the existing frontend
       restriction). Orders now genuinely persist — survive a refresh, admin can see them, a
-      customer's order history is really theirs. **Not wired to the frontend yet** — checkout
-      still creates fake in-memory orders; this is backend-only so far, same split as auth was.
-      21 new backend tests, 66/66 passing overall.
+      customer's order history is really theirs. **Frontend wired.** Checkout creates a real
+      order, capturing each item's actual price at order time (not the old in-memory version's
+      effective "whatever the product costs whenever you look" behavior). Journey shows real
+      order history with real cancel. Admin Orders/Invoices/Overview/Analytics/Customers all read
+      from one centralized real fetch (`realOrders` in `AdminDataProvider`, same pattern as
+      `realUsers`) rather than each section risking a different view of the same data.
+      21 backend tests from building the API, 66/66 passing overall — no new backend tests needed
+      for the frontend wiring itself, since the endpoints were already covered.
 - [ ] **Real database, products/pricing** — still frontend static data, not in Postgres. This is
       what blocks real price integrity on orders (see the limitation noted below) and would also
       need to happen before Products/Inventory admin edits could persist for real.
@@ -140,6 +146,14 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Checkout, Journey, and every admin order view now wired to the real backend.** Placing an
+  order, viewing order history, cancelling, and every admin order/invoice/revenue view all use
+  real data now — nothing left creating or reading fake in-memory orders. Caught and fixed a real
+  bug while doing this: AdminAnalytics' revenue-by-date chart had the exact same bare-date-string
+  bug already found and fixed for signups last round, in a second spot that round hadn't touched.
+  Also found and fixed a real crash risk in Settings > Backup — it still called functions that no
+  longer exist after this rewrite (exportOrders/restoreOrders), which would have thrown the
+  moment anyone clicked Download Backup.
 - **Real order persistence (backend only).** Orders now survive a refresh and live in Postgres —
   a genuine, honest improvement even though products/pricing aren't in this database yet, so
   order totals aren't fully price-verified server-side (documented clearly, not hidden). Chose

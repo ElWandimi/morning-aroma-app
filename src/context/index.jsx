@@ -297,39 +297,51 @@ export const useJournal = () => useContext(JournalCtx);
 export const OrdersCtx = createContext(null);
 
 export function OrdersProvider({ children }) {
-  const [byEmail, setByEmail] = useState({
-    [DEMO_ADMIN.email]: [
-      { id: "MA-1042", date: "2026-07-18", items: [{ id: "sl28-kenya", qty: 2 }, { id: "typica-guatemala", qty: 1 }], status: "Delivered" },
-      { id: "MA-1108", date: "2026-08-01", items: [{ id: "geisha-panama", qty: 1 }], status: "Roasting" },
-    ],
-  });
-  const addOrder = (email, items) => {
-    const order = { id: `MA-${1000 + Math.floor(Math.random() * 9000)}`, date: new Date().toISOString().slice(0, 10), items, status: "Processing" };
-    setByEmail((prev) => ({ ...prev, [email]: [order, ...(prev[email] || [])] }));
-    return order;
+  const { token, user } = useAuth();
+  const [myOrders, setMyOrders] = useState([]);
+  const [myOrdersLoading, setMyOrdersLoading] = useState(true);
+  const [myOrdersError, setMyOrdersError] = useState("");
+
+  const refetchMyOrders = () => {
+    if (!token) { setMyOrdersLoading(false); return; }
+    setMyOrdersLoading(true);
+    setMyOrdersError("");
+    api.getMyOrders(token)
+      .then(({ orders }) => setMyOrders(orders))
+      .catch((e) => setMyOrdersError(e.message))
+      .finally(() => setMyOrdersLoading(false));
   };
-  const ordersFor = (email) => byEmail[email] || [];
-  const allOrders = () =>
-    Object.entries(byEmail).flatMap(([email, list]) => list.map((o) => ({ ...o, customerEmail: email })));
-  const updateStatus = (email, orderId, status) => {
-    setByEmail((prev) => ({
-      ...prev,
-      [email]: (prev[email] || []).map((o) => (o.id === orderId ? { ...o, status } : o)),
-    }));
+  useEffect(() => {
+    if (user) refetchMyOrders();
+    else { setMyOrders([]); setMyOrdersLoading(false); }
+  }, [token, user && user.email]);
+
+  // Both return { ok, order? / error? } rather than throwing, so callers (Checkout, Journey) can
+  // show an inline error without needing their own try/catch around every call site.
+  const createOrder = async (orderData) => {
+    try {
+      const { order } = await api.createOrder(token, orderData);
+      setMyOrders((prev) => [order, ...prev]);
+      return { ok: true, order };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
-  const exportOrders = () => byEmail;
-  const restoreOrders = (data) => { if (data && typeof data === "object") setByEmail(data); };
-  // Customer self-service cancellation is intentionally restricted to "Processing" -- the only
-  // stage before roasting begins. Once an order has moved to Roasting or beyond, only admin can
-  // set a status (including Cancelled/Refunded) via updateStatus, matching how real fulfillment
-  // windows work: you can call off an order before it's started, not after.
-  const cancelOrder = (email, orderId) => {
-    setByEmail((prev) => ({
-      ...prev,
-      [email]: (prev[email] || []).map((o) => (o.id === orderId && o.status === "Processing" ? { ...o, status: "Cancelled" } : o)),
-    }));
+  const cancelOrder = async (orderId) => {
+    try {
+      const { order } = await api.cancelOrder(token, orderId);
+      setMyOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
-  return <OrdersCtx.Provider value={{ addOrder, ordersFor, allOrders, updateStatus, cancelOrder, exportOrders, restoreOrders }}>{children}</OrdersCtx.Provider>;
+
+  return (
+    <OrdersCtx.Provider value={{ myOrders, myOrdersLoading, myOrdersError, refetchMyOrders, createOrder, cancelOrder }}>
+      {children}
+    </OrdersCtx.Provider>
+  );
 }
 
 export const useOrders = () => useContext(OrdersCtx);
@@ -363,6 +375,32 @@ export function AdminDataProvider({ children }) {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealUsers();
     else setRealUsersLoading(false);
   }, [token, user && user.role]);
+
+  const [realOrders, setRealOrders] = useState([]);
+  const [realOrdersLoading, setRealOrdersLoading] = useState(true);
+  const [realOrdersError, setRealOrdersError] = useState("");
+  const refetchRealOrders = () => {
+    if (!token) { setRealOrdersLoading(false); return; }
+    setRealOrdersLoading(true);
+    setRealOrdersError("");
+    api.getAllOrders(token)
+      .then(({ orders }) => setRealOrders(orders))
+      .catch((e) => { if (e.status !== 403) setRealOrdersError(e.message); }) // same reasoning as realUsers above -- a non-admin 403ing here is expected, not a real error
+      .finally(() => setRealOrdersLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealOrders();
+    else setRealOrdersLoading(false);
+  }, [token, user && user.role]);
+  const updateOrderStatus = async (orderId, status) => {
+    try {
+      await api.updateOrderStatus(token, orderId, status);
+      refetchRealOrders();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 
   const [priceOverrides, setPriceOverrides] = useState({});
   const [tierOverrides, setTierOverrides] = useState({});
@@ -644,6 +682,7 @@ export function AdminDataProvider({ children }) {
         getPrice, setPrice,
         getTier, setTier,
         realUsers, realUsersLoading, realUsersError, refetchRealUsers,
+        realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus,
         getStock, setStock,
         getAllProducts, addProduct, removeProduct, setProductPhoto,
         getGreenPrice, setGreenPrice,

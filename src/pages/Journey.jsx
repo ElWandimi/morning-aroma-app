@@ -59,8 +59,7 @@ export function JourneyPage() {
     return best;
   })();
 
-  const { ordersFor, cancelOrder } = useOrders();
-  const orders = ordersFor(user.email);
+  const { myOrders: orders, myOrdersLoading, myOrdersError, refetchMyOrders, cancelOrder } = useOrders();
 
   const submitEntry = (e) => {
     e.preventDefault();
@@ -179,7 +178,14 @@ export function JourneyPage() {
       )}
 
       <h3 className="matched-head">Order history</h3>
-      {orders.length === 0 ? (
+      {myOrdersLoading ? (
+        <p className="hint">Loading your orders…</p>
+      ) : myOrdersError ? (
+        <div>
+          <p className="form-error">Couldn't load your orders: {myOrdersError}</p>
+          <button className="btn-outline small" onClick={refetchMyOrders}>Try again</button>
+        </div>
+      ) : orders.length === 0 ? (
         <div className="empty-state">
           <p>No orders yet — your roast is one click away.</p>
           <button className="btn-outline small" onClick={() => go("shop")}>Browse the shop</button>
@@ -189,10 +195,10 @@ export function JourneyPage() {
           {orders.map((o) => (
             <div key={o.id} className="order-card">
               <div className="order-head">
-                <span>{o.id}</span>
+                <span>{o.orderNumber}</span>
                 <span className="order-status">{o.status}</span>
               </div>
-              <p className="hint">{o.date}</p>
+              <p className="hint">{o.createdAt.slice(0, 10)}</p>
               <ul className="order-items">
                 {o.items.map((it) => {
                   const p = allProducts.find((p) => p.id === it.id);
@@ -216,10 +222,10 @@ export function JourneyPage() {
                 <button
                   className="link-btn"
                   style={{ marginLeft: 10 }}
-                  onClick={() => {
-                    if (window.confirm(`Cancel order ${o.id}? This can't be undone.`)) {
-                      cancelOrder(user.email, o.id);
-                      addToast("Order cancelled");
+                  onClick={async () => {
+                    if (window.confirm(`Cancel order ${o.orderNumber}? This can't be undone.`)) {
+                      const result = await cancelOrder(o.id);
+                      addToast(result.ok ? "Order cancelled" : result.error);
                     }
                   }}
                 >

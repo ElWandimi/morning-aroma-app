@@ -44,9 +44,6 @@ to exist here too, which is its own, larger piece of work.
   step is missing.
 - **2FA and Google OAuth.** The frontend has UI for both already; this backend doesn't implement
   either side yet.
-- **The frontend isn't wired to orders yet.** Auth (register/login/session) has been wired since
-  an earlier round — checkout still runs on the old in-memory demo order data. That's
-  the next step once this is deployed.
 
 ## Local development
 

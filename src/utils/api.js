@@ -48,4 +48,14 @@ export const api = {
     request("/users", { headers: { Authorization: `Bearer ${token}` } }),
   updateUser: (token, id, updates) =>
     request(`/users/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
+  createOrder: (token, order) =>
+    request("/orders", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(order) }),
+  getMyOrders: (token) =>
+    request("/orders/mine", { headers: { Authorization: `Bearer ${token}` } }),
+  getAllOrders: (token) =>
+    request("/orders", { headers: { Authorization: `Bearer ${token}` } }),
+  updateOrderStatus: (token, id, status) =>
+    request(`/orders/${id}/status`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }),
+  cancelOrder: (token, id) =>
+    request(`/orders/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
 };
