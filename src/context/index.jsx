@@ -336,9 +336,18 @@ export function OrdersProvider({ children }) {
       return { ok: false, error: e.message };
     }
   };
+  const verifyPayment = async (orderId, reference) => {
+    try {
+      const { order } = await api.verifyPayment(token, orderId, reference);
+      setMyOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
+      return { ok: true, order };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 
   return (
-    <OrdersCtx.Provider value={{ myOrders, myOrdersLoading, myOrdersError, refetchMyOrders, createOrder, cancelOrder }}>
+    <OrdersCtx.Provider value={{ myOrders, myOrdersLoading, myOrdersError, refetchMyOrders, createOrder, cancelOrder, verifyPayment }}>
       {children}
     </OrdersCtx.Provider>
   );

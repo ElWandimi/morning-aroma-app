@@ -4,19 +4,44 @@ import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute } from "..
 import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { getProductPhotoUrl } from "../utils/helpers";
 
+const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+if (!PAYSTACK_PUBLIC_KEY && import.meta.env.PROD) {
+  // Same pattern as VITE_API_URL in utils/api.js -- fails loudly in a production build rather
+  // than letting a missing key surface later as a confusing runtime error at the moment someone
+  // actually tries to pay.
+  console.error("VITE_PAYSTACK_PUBLIC_KEY is not set — checkout cannot reach Paystack. Set it in the frontend service's environment variables.");
+}
+
+// Loads Paystack's real InlineJS v2 script on demand -- only when a customer actually reaches the
+// payment step, not on every page load site-wide. Safe to call more than once; only loads the
+// script the first time, since window.PaystackPop existing already means it's already loaded.
+function loadPaystackScript() {
+  if (window.PaystackPop) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://js.paystack.co/v2/inline.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Couldn't load Paystack. Check your connection and try again."));
+    document.body.appendChild(script);
+  });
+}
+
 export function CheckoutPage() {
   const { user } = useAuth();
   const { items, updateQty, remove, totalCents, clearCart } = useCart();
   const { go } = useRoute();
-  const { createOrder } = useOrders();
+  const { createOrder, verifyPayment } = useOrders();
   const { getPrice, getAllProducts } = useAdmin();
-  const { format } = useCurrency();
+  const { format, rates, ratesLoading } = useCurrency();
   const [loginOpen, setLoginOpen] = useState(false);
   const [step, setStep] = useState(0); // index into CHECKOUT_STEPS
   const [shipping, setShipping] = useState({ name: "", address: "", city: "", country: "", phone: "" });
-  const [payment, setPayment] = useState({ cardName: "", cardNumber: "", expiry: "", cvc: "" });
   const [confirmedOrder, setConfirmedOrder] = useState(null);
-  const [placingOrder, setPlacingOrder] = useState(false);
+  // The order is created once, on the first payment attempt, and reused across retries -- so a
+  // cancelled or failed Paystack popup doesn't leave behind multiple duplicate unpaid orders for
+  // the same cart. "idle" | "creating-order" | "awaiting-payment" | "verifying"
+  const [pendingOrder, setPendingOrder] = useState(null);
+  const [payingStatus, setPayingStatus] = useState("idle");
   const [placeOrderError, setPlaceOrderError] = useState("");
 
   if (items.length === 0 && step < 4) {
@@ -30,27 +55,74 @@ export function CheckoutPage() {
 
   const goNext = () => setStep((s) => Math.min(s + 1, 4));
 
-  const placeOrder = async (e) => {
-    e.preventDefault();
-    setPlacingOrder(true);
+  const startPayment = async () => {
     setPlaceOrderError("");
-    // unitPriceCents is captured now, at the moment of ordering -- locking in what was actually
-    // charged, rather than the order forever pointing at "whatever this product currently costs"
-    // the way the old in-memory version effectively did.
-    const result = await createOrder({
-      items: items.map((i) => ({ id: i.id, qty: i.qty, unitPriceCents: getPrice(i.id) })),
-      shippingName: shipping.name,
-      shippingAddress: shipping.address,
-      shippingCity: shipping.city,
-    });
-    setPlacingOrder(false);
-    if (result.ok) {
-      clearCart();
-      setConfirmedOrder(result.order);
-      setStep(4);
-    } else {
-      setPlaceOrderError(result.error);
+    let order = pendingOrder;
+
+    if (!order) {
+      setPayingStatus("creating-order");
+      // unitPriceCents is captured now, at the moment of ordering -- locking in what was actually
+      // charged, rather than the order forever pointing at "whatever this product currently costs".
+      const result = await createOrder({
+        items: items.map((i) => ({ id: i.id, qty: i.qty, unitPriceCents: getPrice(i.id) })),
+        shippingName: shipping.name,
+        shippingAddress: shipping.address,
+        shippingCity: shipping.city,
+      });
+      if (!result.ok) {
+        setPlaceOrderError(result.error);
+        setPayingStatus("idle");
+        return;
+      }
+      order = result.order;
+      setPendingOrder(order);
     }
+
+    try {
+      await loadPaystackScript();
+    } catch (e) {
+      setPlaceOrderError(e.message);
+      setPayingStatus("idle");
+      return;
+    }
+
+    setPayingStatus("awaiting-payment");
+    // Converts the order's locked-in USD total to KES using the same live rate CurrencyProvider
+    // already fetched for display -- so what Paystack actually charges matches what the customer
+    // saw on screen. The backend independently re-verifies this against its own rate lookup with
+    // a tolerance for drift (see server/src/routes/orders.js) rather than trusting this number
+    // directly -- this is only what gets *requested*, not what gets trusted as paid.
+    const amountKesCents = Math.round((order.totalCents / 100) * rates.KES * 100);
+    // Unique per attempt (not just per order) -- Date.now() means a retry after a cancelled
+    // popup gets its own reference rather than reusing one Paystack (or this app's own database
+    // constraint on paystack_reference) might already have a record of.
+    const reference = `${order.orderNumber}-${Date.now()}`;
+
+    const popup = new window.PaystackPop();
+    popup.newTransaction({
+      key: PAYSTACK_PUBLIC_KEY,
+      email: user.email,
+      amount: amountKesCents,
+      currency: "KES",
+      reference,
+      onSuccess: async () => {
+        setPayingStatus("verifying");
+        const verifyResult = await verifyPayment(order.id, reference);
+        if (verifyResult.ok) {
+          clearCart();
+          setConfirmedOrder(verifyResult.order);
+          setStep(4);
+        } else {
+          setPlaceOrderError(verifyResult.error);
+          setPayingStatus("idle");
+        }
+      },
+      onCancel: () => setPayingStatus("idle"),
+      onError: (error) => {
+        setPlaceOrderError(error.message || "Something went wrong with the payment. Please try again.");
+        setPayingStatus("idle");
+      },
+    });
   };
 
   return (
@@ -134,27 +206,24 @@ export function CheckoutPage() {
       )}
 
       {step === 3 && (
-        <form className="checkout-form" onSubmit={placeOrder}>
+        <div className="checkout-form">
           <h3>Payment</h3>
-          <p className="hint payment-note">This is a design prototype — no real payment is processed or stored. Use any fake details.</p>
-          <label htmlFor="pay-name">Name on card</label>
-          <input id="pay-name" autoComplete="cc-name" value={payment.cardName} onChange={(e) => setPayment({ ...payment, cardName: e.target.value })} required />
-          <label htmlFor="pay-number">Card number</label>
-          <input id="pay-number" autoComplete="cc-number" value={payment.cardNumber} onChange={(e) => setPayment({ ...payment, cardNumber: e.target.value })} placeholder="4242 4242 4242 4242" required />
-          <div className="form-row-2">
-            <div>
-              <label htmlFor="pay-expiry">Expiry</label>
-              <input id="pay-expiry" autoComplete="cc-exp" value={payment.expiry} onChange={(e) => setPayment({ ...payment, expiry: e.target.value })} placeholder="MM/YY" required />
-            </div>
-            <div>
-              <label htmlFor="pay-cvc">CVC</label>
-              <input id="pay-cvc" autoComplete="cc-csc" value={payment.cvc} onChange={(e) => setPayment({ ...payment, cvc: e.target.value })} placeholder="123" required />
-            </div>
-          </div>
+          <p className="hint payment-note">Pay securely with Paystack — card, M-Pesa, and more.</p>
           <div className="drawer-total"><span>Total due</span><span>{format(totalCents)}</span></div>
           {placeOrderError && <p className="form-error">{placeOrderError}</p>}
-          <button className="btn-primary full" type="submit" disabled={placingOrder}>{placingOrder ? "Placing order…" : "Place Order (demo)"}</button>
-        </form>
+          {ratesLoading ? (
+            <p className="hint">Preparing checkout…</p>
+          ) : !rates.KES ? (
+            <p className="form-error">Couldn't load current exchange rates, so we can't safely charge you the right amount. Please refresh the page and try again.</p>
+          ) : (
+            <button className="btn-primary full" onClick={startPayment} disabled={payingStatus !== "idle"}>
+              {payingStatus === "creating-order" ? "Preparing your order…"
+                : payingStatus === "awaiting-payment" ? "Waiting for payment…"
+                : payingStatus === "verifying" ? "Confirming payment…"
+                : "Pay with Paystack"}
+            </button>
+          )}
+        </div>
       )}
 
       {step === 4 && confirmedOrder && (

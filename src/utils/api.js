@@ -58,4 +58,6 @@ export const api = {
     request(`/orders/${id}/status`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }),
   cancelOrder: (token, id) =>
     request(`/orders/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  verifyPayment: (token, id, reference) =>
+    request(`/orders/${id}/verify-payment`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reference }) }),
 };

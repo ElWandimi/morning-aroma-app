@@ -66,11 +66,16 @@ Nothing else matters for going live until these are real, not simulated.
             check, so the same payment can never settle two different orders even under a race.
             13 new tests, 78/78 passing overall, using a dedicated Paystack mock since this dev
             environment can't reach api.paystack.co any more than it could reach Railway directly.
-      - [ ] **Frontend not wired yet** — checkout still shows the old fake payment form. Loading
-            Paystack's InlineJS (V2 — there's a real V1→V2 API change, confirmed against current
-            docs rather than assumed from training data), computing the KES amount from the same
-            live rate `CurrencyProvider` already uses for display, and calling verify-payment on
-            success is the next step.
+      - [x] Frontend wired. Checkout loads Paystack's real InlineJS (V2 — there's a real V1→V2
+            API change, confirmed against current docs rather than assumed from training data)
+            on demand, only once a customer reaches the payment step. The order is created once,
+            on the first payment attempt, and reused across retries — so a cancelled or failed
+            Paystack popup doesn't leave behind duplicate unpaid orders for the same cart. Amount
+            charged is computed from the same live USD→KES rate `CurrencyProvider` already uses
+            for display, so what Paystack actually charges matches what the customer saw on
+            screen. **Not deployed yet** — needs `VITE_PAYSTACK_PUBLIC_KEY` set on the frontend's
+            Railway service and `PAYSTACK_SECRET_KEY` set on the backend's, plus migration
+            `003_paystack.sql` run against the live database, none of which have happened yet.
       - [ ] Webhook handling for payment confirmation (a second, more reliable confirmation path
             alongside the frontend-triggered verify call — Paystack recommends webhooks as the
             primary source of truth, since they fire even if the customer closes the tab right
@@ -162,6 +167,12 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Checkout wired to real Paystack.** The fake card-details form is gone, replaced with a real
+  "Pay with Paystack" flow — creates the order once (reused across retries, so a cancelled popup
+  doesn't leave behind duplicate unpaid orders), loads Paystack's script on demand only at the
+  payment step, converts to KES using the same live rate already shown for display, and verifies
+  with the real backend endpoint from the previous round. Not deployed yet — real keys and the
+  new migration still need to be set up on Railway.
 - **Real Paystack account created — payment verification backend built.** Researched the current
   API directly rather than from memory (there's a real V1→V2 InlineJS change that would have
   produced subtly wrong code otherwise). Built and tested the server-side verification endpoint:
