@@ -327,9 +327,9 @@ export function AdminOrders() {
   });
   const { page, setPage, pageItems, totalPages } = usePagination(orders, 10);
   const STATUSES = ["Processing", "Roasting", "Shipped", "Delivered", "Cancelled", "Refunded"];
-  const exportOrders = () => exportToCSV("orders", ["Order", "Customer", "Date", "Items", "Total (USD)", "Status"], orders.map((o) => [
+  const exportOrders = () => exportToCSV("orders", ["Order", "Customer", "Date", "Items", "Total (USD)", "Payment", "Status"], orders.map((o) => [
     o.orderNumber, o.customerEmail, o.createdAt.slice(0, 10), o.items.reduce((s, it) => s + it.qty, 0),
-    (o.totalCents / 100).toFixed(2), o.status,
+    (o.totalCents / 100).toFixed(2), o.paymentStatus, o.status,
   ]));
   const sortArrow = (field) => (sortBy === field ? (sortDir === "asc" ? " ↑" : " ↓") : "");
 
@@ -357,12 +357,13 @@ export function AdminOrders() {
       ) : orders.length === 0 ? (
         <p className="hint">No orders match "{query}".</p>
       ) : (
-        <div className="admin-table">
+        <div className="admin-table admin-table-orders">
           <div className="admin-row admin-header">
             <span>Order</span><span>Customer</span>
             <span className="admin-sortable" onClick={() => toggleSort("date")}>Date{sortArrow("date")}</span>
             <span>Items</span>
             <span className="admin-sortable" onClick={() => toggleSort("total")}>Total{sortArrow("total")}</span>
+            <span>Payment</span>
             <span>Status</span>
           </div>
           {pageItems.map((o) => (
@@ -372,6 +373,7 @@ export function AdminOrders() {
               <span>{o.createdAt.slice(0, 10)}</span>
               <span>{o.items.reduce((s, it) => s + it.qty, 0)} items</span>
               <span>{fmtPrice(o.totalCents)}</span>
+              <span className={`payment-badge ${o.paymentStatus}`}>{o.paymentStatus}</span>
               <span className="admin-inline-edit">
                 <select value={o.status} onChange={(e) => changeStatus(o, e.target.value)}>
                   {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}

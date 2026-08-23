@@ -629,6 +629,11 @@ a { color: inherit; text-decoration: none; }
 .role-badge.super_admin { background: var(--chestnut); color: var(--cream); }
 .role-badge.premium { background: var(--espresso); color: var(--gold); }
 .role-badge.everyday { background: var(--gold); color: var(--espresso); }
+.admin-table-orders .admin-row { grid-template-columns: 0.9fr 1.3fr 0.9fr 0.7fr 0.8fr 0.9fr 1.2fr; }
+.payment-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; text-transform: capitalize; }
+.payment-badge.unpaid { background: #fdecea; color: #b3261e; }
+.payment-badge.paid { background: #e6f4ea; color: #1e7e34; }
+.payment-badge.refunded { background: var(--steam); color: var(--chestnut); }
 
 .admin-card-list { display: flex; flex-direction: column; gap: 12px; }
 .admin-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-left: 3px solid var(--terracotta-btn); border-radius: 12px; padding: 16px; box-shadow: 0 6px 16px rgba(62,44,35,0.07); transition: box-shadow .15s ease; }
