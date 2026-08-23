@@ -26,5 +26,9 @@ CREATE TABLE orders (
   shipping_city       TEXT NOT NULL,
   status              TEXT NOT NULL DEFAULT 'Processing',
   payment_status      TEXT NOT NULL DEFAULT 'unpaid',
+  paystack_reference  TEXT UNIQUE,
+  paid_amount_cents   INTEGER,
+  paid_currency       TEXT,
+  paid_at             TEXT,
   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );

@@ -78,12 +78,28 @@ async function query(text, params = []) {
     return row;
   };
 
-  if (isSelect || isReturning) {
-    const rows = (isReturning ? [stmt.get(...values)] : stmt.all(...values)).map(parseJsonColumns);
-    return { rows: rows.filter(Boolean) };
+  try {
+    if (isSelect || isReturning) {
+      const rows = (isReturning ? [stmt.get(...values)] : stmt.all(...values)).map(parseJsonColumns);
+      return { rows: rows.filter(Boolean) };
+    }
+    stmt.run(...values);
+    return { rows: [] };
+  } catch (e) {
+    // Postgres reports a unique-constraint violation as e.code === "23505"; SQLite reports a
+    // completely different shape (message text + errcode 2067). Translated here so production
+    // code (which checks e.code === "23505", the real Postgres behavior) is exercised faithfully
+    // in tests, rather than needing a SQLite-specific branch inside route logic that will never
+    // actually run in production. Wraps both the get/all path (RETURNING clauses go through
+    // stmt.get) and the plain run path -- a constraint can be violated by either, depending on
+    // whether the query happens to have a RETURNING clause.
+    if (e.message && e.message.includes("UNIQUE constraint failed")) {
+      const translated = new Error(e.message);
+      translated.code = "23505";
+      throw translated;
+    }
+    throw e;
   }
-  stmt.run(...values);
-  return { rows: [] };
 }
 
 module.exports = { query };

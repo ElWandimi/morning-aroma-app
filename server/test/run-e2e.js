@@ -4,10 +4,14 @@
 // auth.js) is ever loaded.
 process.env.JWT_SECRET = "test-secret-at-least-32-characters-long-for-testing";
 process.env.NODE_ENV = "test";
+process.env.PAYSTACK_SECRET_KEY = "sk_test_fake_key_for_testing_only";
 
 const path = require("path");
 const dbPath = require.resolve(path.join(__dirname, "../src/db.js"));
 require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: require("./db.sqlite.js") };
+const paystackPath = require.resolve(path.join(__dirname, "../src/utils/paystack.js"));
+const paystackMock = require("./paystack.mock.js");
+require.cache[paystackPath] = { id: paystackPath, filename: paystackPath, loaded: true, exports: paystackMock };
 
 const app = require("../src/app");
 
@@ -175,6 +179,58 @@ async function main() {
   const cancelOk = await post(`/orders/${secondOrder.body.order.id}/cancel`, {}, token);
   check("returns 200", cancelOk.status === 200);
   check("status is now Cancelled", cancelOk.body.order && cancelOk.body.order.status === "Cancelled");
+
+  // orderId's order totals 6200 cents ($62.00). At the mock's fixed rate (130 KES/USD), the
+  // expected charge is 62 * 130 * 100 = 806000 KES cents.
+  console.log("\nPOST /orders/:id/verify-payment without a token:");
+  const verifyNoAuth = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_1" });
+  check("returns 401", verifyNoAuth.status === 401);
+
+  console.log("\nPOST /orders/:id/verify-payment for someone else's order:");
+  const verifyWrongOwner = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_1" }, token); // token is the admin, not the customer who owns orderId
+  check("returns 404 -- not leaking that the order exists but belongs to someone else", verifyWrongOwner.status === 404);
+
+  console.log("\nPOST /orders/:id/verify-payment with no reference:");
+  const verifyNoRef = await post(`/orders/${orderId}/verify-payment`, {}, customerToken);
+  check("returns 400", verifyNoRef.status === 400);
+
+  console.log("\nPOST /orders/:id/verify-payment — Paystack reports the transaction failed:");
+  paystackMock.setNextVerifyResponse({ status: "failed", currency: "KES", amount: 806000 });
+  const verifyFailed = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_failed" }, customerToken);
+  check("returns 400", verifyFailed.status === 400);
+
+  console.log("\nPOST /orders/:id/verify-payment — wrong currency:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "NGN", amount: 806000 });
+  const verifyWrongCurrency = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_wrong_currency" }, customerToken);
+  check("returns 400", verifyWrongCurrency.status === 400);
+
+  console.log("\nPOST /orders/:id/verify-payment — amount way outside tolerance (tampering):");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 1000 }); // paid ~10 KES against an 8,060 KES order
+  const verifyTampered = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_tampered" }, customerToken);
+  check("returns 400", verifyTampered.status === 400);
+
+  console.log("\nPOST /orders/:id/verify-payment — a genuine, correct payment:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 806000 });
+  const verifyOk = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_real_payment" }, customerToken);
+  check("returns 200", verifyOk.status === 200);
+  check("order is now marked paid", verifyOk.body.order && verifyOk.body.order.paymentStatus === "paid");
+  check("real paystack reference stored", verifyOk.body.order && verifyOk.body.order.paystackReference === "ref_real_payment");
+  check("actual paid amount/currency stored, not just the expected ones", verifyOk.body.order && verifyOk.body.order.paidAmountCents === 806000 && verifyOk.body.order.paidCurrency === "KES");
+
+  console.log("\nPOST /orders/:id/verify-payment — trying to pay the same order again:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 806000 });
+  const verifyAgain = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_second_attempt" }, customerToken);
+  check("returns 400 -- already paid", verifyAgain.status === 400);
+
+  console.log("\nPOST /orders/:id/verify-payment — reusing a reference that already paid a different order:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 13000 }); // exact match for the $1.00 order below (100 cents * 130 rate)
+  const thirdOrder = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 100 }], shippingName: "Second User", shippingAddress: "123 Coffee St", shippingCity: "Nairobi" },
+    customerToken
+  );
+  const verifyReusedRef = await post(`/orders/${thirdOrder.body.order.id}/verify-payment`, { reference: "ref_real_payment" }, customerToken);
+  check("returns 400 -- this reference already settled a different order", verifyReusedRef.status === 400);
 
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });

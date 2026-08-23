@@ -24,6 +24,12 @@ launch (payments is the other).
 - `POST /orders/:id/cancel` — a customer cancelling their own order, only while it's still
   Processing (matches the existing frontend's restriction: once fulfillment has started, only
   admin can change status further)
+- `POST /orders/:id/verify-payment` — confirms a Paystack payment for the caller's own order.
+  Requires `{ reference }`. Never trusts the frontend's report of success — always re-verifies
+  with Paystack's real API using `PAYSTACK_SECRET_KEY`, checks the transaction actually succeeded,
+  the currency is KES, and the amount is within 5% of what's owed (exchange rates drift between
+  order and payment, so this can't require an exact match). Requires `PAYSTACK_SECRET_KEY` set —
+  see `.env.example`.
 
 ## Known limitation: order totals aren't fully price-verified yet
 

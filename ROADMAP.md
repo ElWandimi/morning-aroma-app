@@ -55,10 +55,26 @@ Nothing else matters for going live until these are real, not simulated.
             exists via Google, once that's a real possibility).
 - [ ] **Payments** — Paystack integration (decided by the project owner — a strong fit given the
       business is Kenya-based; Paystack has real M-Pesa support there, which Stripe doesn't).
-      **Blocked on:** a real Paystack account (business details + bank account for payouts — the
-      project owner needs to create this; can't be done by Claude). Once the account exists:
-      checkout flow wired to Paystack's Inline JS or Checkout, webhook handling for order
-      confirmation, real order records tied to real payment status.
+      Real Paystack account now exists, charging in KES.
+      - [x] `POST /orders/:id/verify-payment` — never trusts a client-reported success; always
+            re-confirms with Paystack's real Verify Transaction API using the secret key. Checks
+            transaction status, currency (must be KES), and amount within a 5% tolerance of the
+            order's USD total converted at a live exchange rate (an exact match would be wrong —
+            rates genuinely drift between order and payment; the tolerance catches real tampering
+            without false-rejecting normal drift). Database-level unique constraint on the
+            Paystack reference (`server/migrations/003_paystack.sql`), not just an app-level
+            check, so the same payment can never settle two different orders even under a race.
+            13 new tests, 78/78 passing overall, using a dedicated Paystack mock since this dev
+            environment can't reach api.paystack.co any more than it could reach Railway directly.
+      - [ ] **Frontend not wired yet** — checkout still shows the old fake payment form. Loading
+            Paystack's InlineJS (V2 — there's a real V1→V2 API change, confirmed against current
+            docs rather than assumed from training data), computing the KES amount from the same
+            live rate `CurrencyProvider` already uses for display, and calling verify-payment on
+            success is the next step.
+      - [ ] Webhook handling for payment confirmation (a second, more reliable confirmation path
+            alongside the frontend-triggered verify call — Paystack recommends webhooks as the
+            primary source of truth, since they fire even if the customer closes the tab right
+            after paying).
 
 ## Tier 1.5 — Admin user management (found while wiring the frontend, not originally listed)
 
@@ -146,6 +162,15 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real Paystack account created — payment verification backend built.** Researched the current
+  API directly rather than from memory (there's a real V1→V2 InlineJS change that would have
+  produced subtly wrong code otherwise). Built and tested the server-side verification endpoint:
+  never trusts a client-reported success, always re-confirms with Paystack directly, tolerance-
+  based amount checking to handle genuine exchange-rate drift without either false-rejecting
+  normal cases or accepting real tampering, and a database-level (not just app-level) guarantee
+  against the same payment reference settling two different orders. Found and fixed two real bugs
+  in the test harness itself while building this, not just in the feature code. Frontend not wired
+  yet — same backend-first split as auth and orders before it.
 - **Checkout, Journey, and every admin order view now wired to the real backend.** Placing an
   order, viewing order history, cancelling, and every admin order/invoice/revenue view all use
   real data now — nothing left creating or reading fake in-memory orders. Caught and fixed a real
