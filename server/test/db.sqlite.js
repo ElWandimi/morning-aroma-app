@@ -19,11 +19,16 @@ db.exec(fs.readFileSync(path.join(__dirname, "schema.sqlite.sql"), "utf8"));
 //   so that part needs no translation.
 async function query(text, params = []) {
   let sql = text;
-  // node:sqlite's binding is stricter than pg's -- it won't accept a raw JS Date object the way
-  // pg does (pg converts it to a Postgres timestamp automatically). Converting here is purely a
-  // test-adapter accommodation; the production code in routes/auth.js passes a Date object
-  // directly to query(), unchanged, exactly as it should for the real pg-based db.js.
-  let values = params.map((v) => (v instanceof Date ? v.toISOString() : v));
+  // node:sqlite's binding is stricter than pg's -- it won't accept a raw JS Date object or Array
+  // the way pg does (pg converts a Date to a Postgres timestamp, and a JS array to a native
+  // Postgres TEXT[] array, automatically). Converting here is purely a test-adapter
+  // accommodation; the production code in routes/ passes these values straight through
+  // unchanged, exactly as it should for the real pg-based db.js.
+  let values = params.map((v) => {
+    if (v instanceof Date) return v.toISOString();
+    if (Array.isArray(v)) return JSON.stringify(v);
+    return v;
+  });
 
   if (/INSERT INTO users/i.test(sql) && /RETURNING \*/i.test(sql)) {
     const id = crypto.randomUUID();
@@ -41,8 +46,20 @@ async function query(text, params = []) {
   const isSelect = /^\s*SELECT/i.test(sql);
   const stmt = db.prepare(sql.trim());
 
+  // The reverse of the stringify-on-bind above: pg would hand production code a real JS array
+  // for a TEXT[] column automatically; SQLite gives back the raw JSON string it's actually
+  // stored as, so parse it back before returning -- otherwise every row coming out of this test
+  // adapter would have `permissions` as a string, when routes/users.js (correctly, for
+  // production) expects and returns a real array.
+  const parsePermissions = (row) => {
+    if (row && typeof row.permissions === "string") {
+      try { row.permissions = JSON.parse(row.permissions); } catch { /* leave as-is if malformed */ }
+    }
+    return row;
+  };
+
   if (isSelect || isReturning) {
-    const rows = isReturning ? [stmt.get(...values)] : stmt.all(...values);
+    const rows = (isReturning ? [stmt.get(...values)] : stmt.all(...values)).map(parsePermissions);
     return { rows: rows.filter(Boolean) };
   }
   stmt.run(...values);

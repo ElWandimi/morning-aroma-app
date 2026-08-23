@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
+const usersRoutes = require("./routes/users");
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.use("/auth", authRoutes);
+app.use("/users", usersRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

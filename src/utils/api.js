@@ -44,4 +44,8 @@ export const api = {
     request("/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email }) }),
   confirmPasswordReset: (token, newPassword) =>
     request("/auth/password-reset/confirm", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
+  getUsers: (token) =>
+    request("/users", { headers: { Authorization: `Bearer ${token}` } }),
+  updateUser: (token, id, updates) =>
+    request(`/users/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
 };

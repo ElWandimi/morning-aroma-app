@@ -62,13 +62,28 @@ Nothing else matters for going live until these are real, not simulated.
 
 ## Tier 1.5 — Admin user management (found while wiring the frontend, not originally listed)
 
-Doesn't block a customer signing up and buying something for real, but does block admin actually
-managing real customers — right now Admin > Customers shows fake demo accounts, not real ones.
+**Status: done.** Admin > Customers, Overview, and Analytics all show real registered customers now.
 
-- [ ] `GET /users` (admin-only, JWT-protected) — list real registered users
-- [ ] `PATCH /users/:id` (admin-only) — change role/permissions on a real account
-- [ ] Wire `AdminCustomers` to these instead of the in-memory `users` list currently in
-      `AuthProvider`
+- [x] `GET /users` (admin-only, JWT-protected) — list real registered users. Enforced by a
+      dedicated `requireAdmin` middleware that re-queries the current role from the database on
+      every request, rather than trusting the JWT's embedded role (which can be stale until next
+      login) — access revocation takes effect immediately, not whenever the person happens to log
+      in again.
+- [x] `PATCH /users/:id` (admin-only) — change role/permissions on a real account. Validates role
+      and permission values against real allow-lists (not just "is it a string"), and refuses to
+      demote the last remaining super_admin — without that check it'd be possible to lock every
+      admin out of the dashboard with no way back short of a direct database edit.
+- [x] Wired `AdminCustomers`, `AdminOverview`, and `AdminAnalytics` to a single centralized real
+      users fetch in `AdminDataProvider` (`realUsers`/`realUsersLoading`/`realUsersError`/
+      `refetchRealUsers`) rather than each section fetching independently — keeps the customer
+      count, signup chart, and customer list from ever disagreeing with each other.
+- [ ] **New gap found while doing this:** Settings > Backup (JSON export/import) still operates on
+      the old fake in-memory `users` list in `AuthProvider`, which is now mostly vestigial —
+      real customers live in Postgres and aren't covered by this app-level backup at all. Not
+      urgent (the backup feature still correctly covers everything else that's still genuinely
+      in-memory: product/catalog overrides, orders), and a real database like Postgres should
+      have its own proper backup strategy (e.g. Railway's built-in database backups) rather than
+      an ad-hoc JSON download of user records — deliberately not building that here.
 
 ## Tier 2 — Needed alongside Tier 1 for a real backend
 
@@ -114,6 +129,16 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Tier 1.5 complete — admin user management is real.** GET/PATCH /users, admin-only, enforced
+  server-side with a role check that re-queries current state rather than trusting a possibly-
+  stale JWT. Refuses to demote the last admin. Admin Customers/Overview/Analytics all read from
+  one centralized real fetch now instead of each showing potentially different data. Found and
+  fixed a real bug this surfaced: the signups-by-date chart assumed a bare YYYY-MM-DD date
+  string, which the real backend's full ISO timestamp would have silently broken (every signup
+  landing in its own bucket instead of grouping by day). New known gap documented, not fixed:
+  Settings > Backup still covers only the still-fake parts of the app (products, orders) — real
+  customer data has no app-level backup and shouldn't, since a real database needs a real backup
+  strategy, not a JSON download.
 - **Welcome email content built and staged** (real subject/copy, fires on registration) —
   can't actually send yet, no provider connected, but genuinely ready to the moment one is.
   Password-reset email content moved into the same module for consistency. Confirmed the very

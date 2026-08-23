@@ -5,6 +5,7 @@ import { ADMIN_SECTIONS, COUNTRIES, COURSES, FILTER_DEFS, GREEN_BEANS, MOMENTS, 
 import { exportToCSV, fmtPrice, resizeImageFile, storage } from "../utils/helpers";
 import { useClickOutside, useEscapeKey } from "../hooks";
 import { generateInvoicePDF } from "../utils/pdf";
+import { api } from "../utils/api";
 
 export function CountUp({ text }) {
   const ref = useRef(null);
@@ -76,9 +77,8 @@ export function AdminPager({ page, setPage, totalPages }) {
 }
 
 export function AdminOverview() {
-  const { users } = useAuth();
   const { allOrders } = useOrders();
-  const { getPrice, quotations, feedbackList, greenOrders, serviceInquiries, getAllProducts } = useAdmin();
+  const { getPrice, quotations, feedbackList, greenOrders, serviceInquiries, getAllProducts, realUsers: users } = useAdmin();
   const orders = allOrders();
   const retailRevenueCents = orders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + getPrice(it.id) * it.qty, 0), 0);
   const greenRevenueCents = greenOrders.reduce((sum, o) => sum + o.totalCents, 0);
@@ -154,9 +154,8 @@ export function AdminOverview() {
 }
 
 export function AdminAnalytics() {
-  const { users } = useAuth();
   const { allOrders } = useOrders();
-  const { getPrice, greenOrders, serviceInquiries, getAllProducts } = useAdmin();
+  const { getPrice, greenOrders, serviceInquiries, getAllProducts, realUsers: users } = useAdmin();
   const orders = allOrders();
 
   const revenueByDate = {};
@@ -169,7 +168,7 @@ export function AdminAnalytics() {
   const maxRevenue = Math.max(...revenueDates.map((d) => revenueByDate[d]), 1);
 
   const signupsByDate = {};
-  users.forEach((u) => { if (u.createdAt) signupsByDate[u.createdAt] = (signupsByDate[u.createdAt] || 0) + 1; });
+  users.forEach((u) => { if (u.createdAt) { const day = u.createdAt.slice(0, 10); signupsByDate[day] = (signupsByDate[day] || 0) + 1; } });
   const signupDates = Object.keys(signupsByDate).sort();
   const maxSignups = Math.max(...signupDates.map((d) => signupsByDate[d]), 1);
 
@@ -546,13 +545,16 @@ export function AdminInvoices() {
 const STAFF_PERMISSIONS = ADMIN_SECTIONS.filter((s) => s !== "Overview");
 
 export function AdminCustomers() {
-  const { users, setRole, setPermissions } = useAuth();
+  const { token } = useAuth();
+  const { realUsers: users, realUsersLoading: loading, realUsersError: loadError, refetchRealUsers } = useAdmin();
   const { ordersFor } = useOrders();
   const { getPrice } = useAdmin();
   const { addToast } = useToast();
   const [query, setQuery] = useState("");
   const [editingPermsFor, setEditingPermsFor] = useState(null);
   const [viewingOrdersFor, setViewingOrdersFor] = useState(null);
+  const [pendingId, setPendingId] = useState(null); // which row's PATCH is currently in flight, to disable its own buttons and prevent a double-submit
+
   const filtered = users.filter((u) => {
     const q = query.toLowerCase();
     return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
@@ -560,11 +562,41 @@ export function AdminCustomers() {
   const { page, setPage, pageItems, totalPages } = usePagination(filtered, 10);
   const exportCustomers = () => exportToCSV("customers", ["Name", "Email", "Role", "Permissions"], filtered.map((u) => [u.name, u.email, u.role, (u.permissions || []).join("; ")]));
 
+  // Every role/permission change goes through this -- re-fetches the shared realUsers list on
+  // success (rather than optimistically patching local state) specifically so Overview and
+  // Analytics, which read the exact same centralized list, never show a stale customer count or
+  // signup chart relative to what Customers just changed. Surfaces the real backend error on
+  // failure instead of pretending it worked -- concretely, the backend refuses to demote the last
+  // remaining admin, and that specific, helpful message needs to actually reach the person who
+  // clicked the button, not get swallowed.
+  const updateUser = async (u, updates, successMessage) => {
+    setPendingId(u.id);
+    try {
+      await api.updateUser(token, u.id, updates);
+      refetchRealUsers();
+      if (successMessage) addToast(successMessage);
+    } catch (e) {
+      addToast(e.message);
+    } finally {
+      setPendingId(null);
+    }
+  };
+
   const togglePermission = (u, section) => {
     const current = u.permissions || [];
     const next = current.includes(section) ? current.filter((s) => s !== section) : [...current, section];
-    setPermissions(u.email, next);
+    updateUser(u, { permissions: next });
   };
+
+  if (loading) return <p className="hint">Loading customers…</p>;
+  if (loadError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load customers: {loadError}</p>
+        <button className="btn-outline" onClick={refetchRealUsers}>Try again</button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -578,7 +610,7 @@ export function AdminCustomers() {
             <span>Name</span><span>Email</span><span>Role</span><span>Actions</span>
           </div>
           {pageItems.map((u) => (
-            <React.Fragment key={u.email}>
+            <React.Fragment key={u.id}>
               <div className="admin-row">
                 <span>{u.name}</span>
                 <span>{u.email}</span>
@@ -588,16 +620,16 @@ export function AdminCustomers() {
                     {viewingOrdersFor === u.email ? "Hide orders" : "View orders"}
                   </button>
                   {u.role === "super_admin" ? (
-                    <button className="link-btn" onClick={() => { setRole(u.email, "customer"); addToast(`${u.name} is no longer an admin`); }}>Revoke admin</button>
+                    <button className="link-btn" disabled={pendingId === u.id} onClick={() => updateUser(u, { role: "customer" }, `${u.name} is no longer an admin`)}>Revoke admin</button>
                   ) : u.role === "staff" ? (
                     <>
-                      <button className="link-btn" onClick={() => setEditingPermsFor(editingPermsFor === u.email ? null : u.email)}>Edit access</button>
-                      <button className="link-btn" onClick={() => { setRole(u.email, "customer"); addToast(`${u.name} is no longer staff`); }}>Revoke staff</button>
+                      <button className="link-btn" disabled={pendingId === u.id} onClick={() => setEditingPermsFor(editingPermsFor === u.email ? null : u.email)}>Edit access</button>
+                      <button className="link-btn" disabled={pendingId === u.id} onClick={() => updateUser(u, { role: "customer" }, `${u.name} is no longer staff`)}>Revoke staff</button>
                     </>
                   ) : (
                     <>
-                      <button className="link-btn" onClick={() => { setRole(u.email, "staff"); setEditingPermsFor(u.email); }}>Make staff</button>
-                      <button className="link-btn" onClick={() => { setRole(u.email, "super_admin"); addToast(`${u.name} is now an admin`); }}>Make admin</button>
+                      <button className="link-btn" disabled={pendingId === u.id} onClick={() => { updateUser(u, { role: "staff", permissions: [] }); setEditingPermsFor(u.email); }}>Make staff</button>
+                      <button className="link-btn" disabled={pendingId === u.id} onClick={() => updateUser(u, { role: "super_admin" }, `${u.name} is now an admin`)}>Make admin</button>
                     </>
                   )}
                 </span>

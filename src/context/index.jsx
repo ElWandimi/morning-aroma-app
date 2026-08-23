@@ -167,7 +167,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthCtx.Provider
       value={{
-        user, users, login, register, resetPassword, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
+        user, token, users, login, register, resetPassword, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
         pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor, setTwoFactorEnabled, setNotificationsEnabled,
         exportUsers, restoreUsers, sessionLoading,
       }}
@@ -337,7 +337,33 @@ export const useOrders = () => useContext(OrdersCtx);
 export const AdminCtx = createContext(null);
 
 export function AdminDataProvider({ children }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const [realUsers, setRealUsers] = useState([]);
+  const [realUsersLoading, setRealUsersLoading] = useState(true);
+  const [realUsersError, setRealUsersError] = useState("");
+  const refetchRealUsers = () => {
+    if (!token) { setRealUsersLoading(false); return; }
+    setRealUsersLoading(true);
+    setRealUsersError("");
+    api.getUsers(token)
+      .then(({ users: fetched }) => setRealUsers(fetched))
+      .catch((e) => {
+        // A non-admin's token 403ing here is expected and not a real error -- their dashboard
+        // access is already gated elsewhere, so surfacing "you're not allowed" for a section they
+        // were never going to see serves no one. Anything else (network issue, a genuine 500) is
+        // a real failure for an actual admin and should stay visible with a way to retry, not
+        // fail the exact same silent way as the expected case.
+        if (e.status !== 403) setRealUsersError(e.message);
+      })
+      .finally(() => setRealUsersLoading(false));
+  };
+  // Only fetch once there's actually a signed-in admin/staff user, not on every token change for
+  // every visitor -- a plain customer's token would just get a 403 here for no benefit.
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealUsers();
+    else setRealUsersLoading(false);
+  }, [token, user && user.role]);
+
   const [priceOverrides, setPriceOverrides] = useState({});
   const [tierOverrides, setTierOverrides] = useState({});
   const [stockOverrides, setStockOverrides] = useState({});
@@ -617,6 +643,7 @@ export function AdminDataProvider({ children }) {
       value={{
         getPrice, setPrice,
         getTier, setTier,
+        realUsers, realUsersLoading, realUsersError, refetchRealUsers,
         getStock, setStock,
         getAllProducts, addProduct, removeProduct, setProductPhoto,
         getGreenPrice, setGreenPrice,

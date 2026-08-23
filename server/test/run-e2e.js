@@ -28,6 +28,12 @@ async function main() {
     }).then(async (r) => ({ status: r.status, body: await r.json() }));
   const get = (path, token) =>
     fetch(base + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  const patch = (path, body, token) =>
+    fetch(base + path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    }).then(async (r) => ({ status: r.status, body: await r.json() }));
 
   console.log("Register:");
   let regLog = "";
@@ -48,6 +54,54 @@ async function main() {
   const reg2 = await post("/auth/register", { email: "second@morningaroma.local", password: "correcthorsebattery", name: "Second User" });
   check("returns 201", reg2.status === 201);
   check("the second user is a normal customer, not admin", reg2.body.user && reg2.body.user.role === "customer");
+  const customerId = reg2.body.user.id;
+  const customerToken = reg2.body.token;
+
+  console.log("\nGET /users without a token:");
+  const usersNoAuth = await get("/users");
+  check("returns 401", usersNoAuth.status === 401);
+
+  console.log("\nGET /users as a non-admin customer:");
+  const usersAsCustomer = await get("/users", customerToken);
+  check("returns 403, not 401 -- they're authenticated, just not authorized", usersAsCustomer.status === 403);
+
+  console.log("\nGET /users as the real admin:");
+  const usersAsAdmin = await get("/users", token);
+  check("returns 200", usersAsAdmin.status === 200);
+  check("returns both real registered users", Array.isArray(usersAsAdmin.body.users) && usersAsAdmin.body.users.length === 2);
+  check("never returns a password hash", usersAsAdmin.body.users.every((u) => !("password_hash" in u) && !("passwordHash" in u)));
+
+  console.log("\nPATCH /users/:id as a non-admin customer:");
+  const patchAsCustomer = await patch(`/users/${customerId}`, { role: "staff" }, customerToken);
+  check("returns 403", patchAsCustomer.status === 403);
+
+  console.log("\nPATCH /users/:id with an invalid role:");
+  const patchBadRole = await patch(`/users/${customerId}`, { role: "supreme-leader" }, token);
+  check("returns 400", patchBadRole.status === 400);
+
+  console.log("\nPATCH /users/:id with invalid permissions:");
+  const patchBadPerms = await patch(`/users/${customerId}`, { role: "staff", permissions: ["Not A Real Section"] }, token);
+  check("returns 400", patchBadPerms.status === 400);
+
+  console.log("\nPATCH /users/:id — promote the customer to staff with real permissions:");
+  const promote = await patch(`/users/${customerId}`, { role: "staff", permissions: ["Orders", "Inventory"] }, token);
+  check("returns 200", promote.status === 200);
+  check("role actually changed", promote.body.user && promote.body.user.role === "staff");
+  check("permissions actually saved, in the right shape (a real array, not a JSON string)", Array.isArray(promote.body.user.permissions) && promote.body.user.permissions.includes("Orders") && promote.body.user.permissions.includes("Inventory"));
+
+  console.log("\nPATCH /users/:id — demoting staff back to customer clears their permissions:");
+  const demote = await patch(`/users/${customerId}`, { role: "customer" }, token);
+  check("returns 200", demote.status === 200);
+  check("permissions cleared on demotion", Array.isArray(demote.body.user.permissions) && demote.body.user.permissions.length === 0);
+
+  console.log("\nPATCH /users/:id — refuse to demote the last remaining admin:");
+  const adminId = reg.body.user.id;
+  const demoteLastAdmin = await patch(`/users/${adminId}`, { role: "customer" }, token);
+  check("returns 400, not 200 -- would lock everyone out of the admin dashboard", demoteLastAdmin.status === 400);
+
+  console.log("\nPATCH /users/:id for a non-existent user:");
+  const patchMissing = await patch("/users/00000000-0000-0000-0000-000000000000", { role: "staff" }, token);
+  check("returns 404", patchMissing.status === 404);
 
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });
