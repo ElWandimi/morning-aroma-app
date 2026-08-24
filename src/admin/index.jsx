@@ -691,7 +691,7 @@ const ACIDITY_RATING = { low: 3, medium: 5, high: 8 };
 const emptyProductForm = { name: "", country: COUNTRIES[0].name, tier: "everyday", price: "", stock: "", note: "", growing: "", aroma: [], body: "light", acidity: "medium", roast: "light", brew: [] };
 
 export function AdminProducts() {
-  const { getPrice, setPrice, getTier, getStock, setStock, getAllProducts, addProduct, removeProduct, setProductPhoto } = useAdmin();
+  const { getPrice, setPrice, getTier, getStock, setStock, getAllProducts, addProduct, removeProduct, setProductPhoto, realProductsLoading: loading, realProductsError: loadError, refetchRealProducts } = useAdmin();
   const { addToast } = useToast();
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState("");
@@ -713,16 +713,22 @@ export function AdminProducts() {
   });
 
   const startEdit = (p) => { setEditing(p.id); setDraft((getPrice(p.id) / 100).toFixed(2)); };
-  const save = (id) => {
+  const save = async (id) => {
     const cents = Math.round(parseFloat(draft) * 100);
-    if (!isNaN(cents) && cents > 0) { setPrice(id, cents); addToast("Price updated live"); }
+    if (!isNaN(cents) && cents > 0) {
+      const result = await setPrice(id, cents);
+      addToast(result.ok ? "Price updated" : result.error);
+    }
     setEditing(null);
   };
 
   const startStockEdit = (p) => { setEditingStock(p.id); setStockDraft(String(getStock(p.id))); };
-  const saveStock = (id) => {
+  const saveStock = async (id) => {
     const qty = parseInt(stockDraft, 10);
-    if (!isNaN(qty)) { setStock(id, qty); addToast("Stock updated live"); }
+    if (!isNaN(qty)) {
+      const result = await setStock(id, qty);
+      addToast(result.ok ? "Stock updated" : result.error);
+    }
     setEditingStock(null);
   };
 
@@ -747,15 +753,15 @@ export function AdminProducts() {
     setUploadingPhotoFor(id);
     try {
       const dataUrl = await resizeImageFile(file);
-      setProductPhoto(id, dataUrl);
-      addToast("Photo updated");
+      const result = await setProductPhoto(id, dataUrl);
+      addToast(result.ok ? "Photo updated" : result.error);
     } catch (err) {
       addToast(err.message);
     }
     setUploadingPhotoFor(null);
   };
 
-  const submitNewProduct = (e) => {
+  const submitNewProduct = async (e) => {
     e.preventDefault();
     setFormError("");
     const priceCents = Math.round(parseFloat(form.price) * 100);
@@ -766,7 +772,7 @@ export function AdminProducts() {
     if (form.aroma.length === 0) { setFormError("Select at least one aroma tag."); return; }
     if (form.brew.length === 0) { setFormError("Select at least one brew method."); return; }
 
-    const result = addProduct({
+    const result = await addProduct({
       name: form.name.trim(), country: form.country, tier: form.tier,
       priceCents, stock,
       note: form.note.trim() || "A new addition to the catalog.",
@@ -783,9 +789,23 @@ export function AdminProducts() {
     setShowAddForm(false);
   };
 
-  const exportProducts = () => exportToCSV("products", ["Name", "Country", "Tier", "Price (USD)", "Stock", "Custom"], filtered.map((p) => [
-    p.name, p.country, getTier(p.id), (getPrice(p.id) / 100).toFixed(2), getStock(p.id), p.isCustom ? "Yes" : "No",
+  // No more "Custom" column -- once every product is a real, uniform database row, there's no
+  // longer a meaningful distinction between the original 9 and anything admin has added since,
+  // the way there was when the original 9 came from static frontend data and admin additions were
+  // a separate in-memory list layered on top.
+  const exportProducts = () => exportToCSV("products", ["Name", "Country", "Tier", "Price (USD)", "Stock"], filtered.map((p) => [
+    p.name, p.country, getTier(p.id), (getPrice(p.id) / 100).toFixed(2), getStock(p.id),
   ]));
+
+  if (loading) return <p className="hint">Loading products…</p>;
+  if (loadError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load products: {loadError}</p>
+        <button className="btn-outline" onClick={refetchRealProducts}>Try again</button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -894,7 +914,7 @@ export function AdminProducts() {
           return (
             <React.Fragment key={p.id}>
             <div className="admin-row">
-              <span>{p.name}{p.isCustom && <span className="role-badge" style={{ marginLeft: 6 }}>custom</span>}</span>
+              <span>{p.name}</span>
               <span>{p.country}</span>
               <span className={`role-badge ${getTier(p.id)}`}>{getTier(p.id)}</span>
               {editing === p.id ? (
@@ -933,7 +953,7 @@ export function AdminProducts() {
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleExistingPhotoChange(p.id, e)} disabled={uploadingPhotoFor === p.id} />
                     </label>
                     <button className="link-btn" onClick={() => setSharingFor(sharingFor === p.id ? null : p.id)}>Share</button>
-                    <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${p.name}? It will disappear from Shop but stay visible in past orders.`)) { removeProduct(p.id); addToast(`${p.name} discontinued`); } }}>Discontinue</button>
+                    <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${p.name}? It will disappear from Shop but stay visible in past orders.`)) { removeProduct(p.id).then((result) => addToast(result.ok ? `${p.name} discontinued` : result.error)); } }}>Discontinue</button>
                   </>
                 )}
               </span>
@@ -955,7 +975,7 @@ export function AdminProducts() {
 const emptyGreenForm = { name: "", country: COUNTRIES[0].name, price: "", stock: "", minOrder: "5", cuppingScore: "84", process: "Washed", notes: "" };
 
 export function AdminInventory() {
-  const { getStock, setStock, getPrice, getGreenPrice, getAllProducts, getAllGreenBeans, removeProduct, removeGreenBean, addGreenBean } = useAdmin();
+  const { getStock, setStock, getPrice, getGreenPrice, getAllProducts, getAllGreenBeans, removeProduct, removeGreenBean, addGreenBean, realProductsLoading: loading, realProductsError: loadError, refetchRealProducts } = useAdmin();
   const { addToast } = useToast();
   const [editingStock, setEditingStock] = useState(null);
   const [stockDraft, setStockDraft] = useState("");
@@ -965,11 +985,24 @@ export function AdminInventory() {
   const [greenFormError, setGreenFormError] = useState("");
 
   const startStockEdit = (id, current) => { setEditingStock(id); setStockDraft(String(current)); };
-  const saveStock = (id) => {
+  const saveStock = async (id) => {
     const qty = parseInt(stockDraft, 10);
-    if (!isNaN(qty)) { setStock(id, qty); addToast("Stock updated live"); }
+    if (!isNaN(qty)) {
+      const result = await setStock(id, qty);
+      addToast(result.ok ? "Stock updated" : result.error);
+    }
     setEditingStock(null);
   };
+
+  if (loading) return <p className="hint">Loading inventory…</p>;
+  if (loadError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load inventory: {loadError}</p>
+        <button className="btn-outline" onClick={refetchRealProducts}>Try again</button>
+      </div>
+    );
+  }
 
   const allProducts = getAllProducts();
   const allGreenBeans = getAllGreenBeans();
@@ -1055,14 +1088,14 @@ export function AdminInventory() {
           const stock = getStock(p.id);
           return (
             <div key={p.id} className="admin-row">
-              <span>{p.name}{p.isCustom && <span className="role-badge" style={{ marginLeft: 6 }}>custom</span>}</span>
+              <span>{p.name}</span>
               <span>{p.country}</span>
               <span><StockCell id={p.id} unit=" bags" /></span>
               <span className="admin-inline-edit">
                 <span className={stock === 0 ? "inv-status out" : stock <= 8 ? "inv-status low" : "inv-status ok"}>
                   {stock === 0 ? "Sold out" : stock <= 8 ? "Low" : "In stock"}
                 </span>
-                <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${p.name}?`)) { removeProduct(p.id); addToast(`${p.name} discontinued`); } }}>Discontinue</button>
+                <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${p.name}?`)) { removeProduct(p.id).then((result) => addToast(result.ok ? `${p.name} discontinued` : result.error)); } }}>Discontinue</button>
               </span>
             </div>
           );

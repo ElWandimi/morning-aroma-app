@@ -8,7 +8,7 @@ import { useStructuredData } from "../hooks";
 export function ShopPage() {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getStock, getAllProducts } = useAdmin();
+  const { getPrice, getStock, getAllProducts, realProductsLoading } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const [filters, setFilters] = useState({ aroma: [], body: "", acidity: "", roast: "", moment: "", brew: "" });
@@ -106,7 +106,9 @@ export function ShopPage() {
 
         <div className="shop-results">
           <p className="results-count">{filtered.length} of {allProducts.length} varieties</p>
-          {filtered.length === 0 ? (
+          {realProductsLoading ? (
+            <p className="hint">Loading the catalog…</p>
+          ) : filtered.length === 0 ? (
             <div className="empty-state">
               <p>Nothing matches yet — try clearing a filter.</p>
               <button className="btn-outline small" onClick={clearAll}>Clear filters</button>
@@ -158,7 +160,7 @@ export function ShopPage() {
 export function ProductPage({ id }) {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getTier, getStock, getAllProducts, feedbackList } = useAdmin();
+  const { getPrice, getTier, getStock, getAllProducts, feedbackList, realProductsLoading } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const { addToast } = useToast();
@@ -166,6 +168,10 @@ export function ProductPage({ id }) {
   const [tab, setTab] = useState("profile");
   const allProducts = getAllProducts();
   const product = allProducts.find((p) => p.id === id);
+
+  if (realProductsLoading) {
+    return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  }
 
   if (!product) {
     return (

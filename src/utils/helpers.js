@@ -26,9 +26,19 @@ export function exportToCSV(filename, headers, rows) {
 // (which always exists, since the "add product" form restricts country to the existing origin
 // list) unless admin has uploaded a real photo for it (photoUrl, a data URL stored on the
 // product itself).
+// The original 9 products shipped with real, bundled photo files at /photos/products/<id>.png.
+// Any product beyond these (admin-added, before or after products became a real database table)
+// has no such bundled file, so needs the country-landscape fallback instead -- this used to be
+// tracked via an explicit isCustom flag on each product object, which no longer exists once every
+// product is a uniform row from the real backend. This fixed list is the actual, stable thing
+// that distinguishes them: which files really exist in this repo, not a flag on the data.
+const PRODUCTS_WITH_BUNDLED_PHOTOS = [
+  "geisha-panama", "laurina-brazil", "sl28-kenya", "pacamara-elsalvador", "bourbon-rwanda",
+  "typica-guatemala", "caturra-colombia", "catuai-honduras", "yirgacheffe-ethiopia",
+];
 export const getProductPhotoUrl = (p, countryPhotoMap) => {
   if (p.photoUrl) return p.photoUrl;
-  return p.isCustom ? countryPhotoMap[p.country] : `/photos/products/${p.id}.png`;
+  return PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id) ? `/photos/products/${p.id}.png` : countryPhotoMap[p.country];
 };
 
 // Reads an uploaded image file, downscales it on a canvas to a sensible max width (matching the

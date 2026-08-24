@@ -403,13 +403,25 @@ export function AdminDataProvider({ children }) {
     }
   };
 
-  const [priceOverrides, setPriceOverrides] = useState({});
-  const [tierOverrides, setTierOverrides] = useState({});
-  const [stockOverrides, setStockOverrides] = useState({});
-  const [customProducts, setCustomProducts] = useState([]);
-  const [removedProductIds, setRemovedProductIds] = useState([]);
-  const [productPhotoOverrides, setProductPhotoOverrides] = useState({});
+  // Real product catalog, fetched once on app load -- unlike realUsers/realOrders (admin-only,
+  // fetched conditionally), this is fetched unconditionally for every visitor, logged in or not,
+  // since the Shop page and product browsing are core public-facing functionality, not an admin
+  // concern. GET /products needs no auth at all.
+  const [realProducts, setRealProducts] = useState([]);
+  const [realProductsLoading, setRealProductsLoading] = useState(true);
+  const [realProductsError, setRealProductsError] = useState("");
+  const refetchRealProducts = () => {
+    setRealProductsLoading(true);
+    setRealProductsError("");
+    api.getProducts()
+      .then(({ products }) => setRealProducts(products))
+      .catch((e) => setRealProductsError(e.message))
+      .finally(() => setRealProductsLoading(false));
+  };
+  useEffect(() => { refetchRealProducts(); }, []);
+
   const [customGreenBeans, setCustomGreenBeans] = useState([]);
+  const [greenStockOverrides, setGreenStockOverrides] = useState({});
   const [removedGreenBeanIds, setRemovedGreenBeanIds] = useState([]);
   const [greenPriceOverrides, setGreenPriceOverrides] = useState({});
   const [greenOrders, setGreenOrders] = useState([]);
@@ -452,72 +464,102 @@ export function AdminDataProvider({ children }) {
   };
 
   const getPrice = (id) => {
-    if (priceOverrides[id] != null) return priceOverrides[id];
-    const p = PRODUCTS.find((p) => p.id === id) || customProducts.find((p) => p.id === id);
+    const p = realProducts.find((p) => p.id === id);
     return p ? p.priceCents : 0;
   };
-  const setPrice = (id, cents) => {
-    setPriceOverrides((prev) => ({ ...prev, [id]: cents }));
-    logAction("Price changed", `${id} → ${fmtPrice(cents)}`);
+  const setPrice = async (id, cents) => {
+    try {
+      await api.updateProduct(token, id, { priceCents: cents });
+      refetchRealProducts();
+      logAction("Price changed", `${id} → ${fmtPrice(cents)}`);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
   const getTier = (id) => {
-    if (tierOverrides[id]) return tierOverrides[id];
-    const p = PRODUCTS.find((p) => p.id === id) || customProducts.find((p) => p.id === id);
+    const p = realProducts.find((p) => p.id === id);
     return p ? p.tier : "everyday";
   };
-  const setTier = (id, tier) => {
-    setTierOverrides((prev) => ({ ...prev, [id]: tier }));
-    logAction("Tier changed", `${id} → ${tier}`);
+  const setTier = async (id, tier) => {
+    try {
+      await api.updateProduct(token, id, { tier });
+      refetchRealProducts();
+      logAction("Tier changed", `${id} → ${tier}`);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
+  // Handles both real retail products (from the API above) and green beans -- green beans are
+  // NOT part of this migration (a parallel wholesale system with its own overrides, out of scope
+  // -- see ROADMAP.md), so this has to genuinely dispatch between two different mechanisms based
+  // on which list an id actually belongs to, not assume every id is a real product now.
   const getStock = (id) => {
-    if (stockOverrides[id] != null) return stockOverrides[id];
-    const p = PRODUCTS.find((p) => p.id === id) || customProducts.find((p) => p.id === id);
+    const p = realProducts.find((p) => p.id === id);
     if (p) return p.stock;
+    if (greenStockOverrides[id] != null) return greenStockOverrides[id];
     const g = GREEN_BEANS.find((g) => g.id === id) || customGreenBeans.find((g) => g.id === id);
     return g ? g.stockKg : 0;
   };
-  const setStock = (id, qty) => {
-    setStockOverrides((prev) => ({ ...prev, [id]: Math.max(0, qty) }));
-    logAction("Stock updated", `${id} → ${Math.max(0, qty)} units`);
+  const setStock = async (id, qty) => {
+    const safeQty = Math.max(0, qty);
+    const isRealProduct = realProducts.some((p) => p.id === id);
+    if (!isRealProduct) {
+      // A green bean id -- still local-only, same as before this migration.
+      setGreenStockOverrides((prev) => ({ ...prev, [id]: safeQty }));
+      logAction("Stock updated", `${id} → ${safeQty} units`);
+      return { ok: true };
+    }
+    try {
+      await api.updateProduct(token, id, { stock: safeQty });
+      refetchRealProducts();
+      logAction("Stock updated", `${id} → ${safeQty} units`);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
-  // Live product catalog: the original static list minus anything discontinued, plus anything
-  // admin has added. Scoped deliberately -- this dynamic list drives Shop, the Product detail
-  // page, Cart, Wishlist, Checkout, and Admin, but curated/editorial placements (Home's featured
-  // tiers, Moments' and Brew Guides' matched-product suggestions, Growing Library, World Journey)
-  // intentionally keep showing the original 9 roasted + 9 green products -- exactly like a
-  // homepage "featured" section on a real store doesn't auto-update the instant a new SKU exists.
-  // Any product (whether one of the original 9 or a custom one) can have its photo replaced by
-  // admin -- merged in here so every consumer of getAllProducts() sees the override transparently
-  // through the same `photoUrl` field getProductPhotoUrl() already checks, no separate lookup needed.
-  const withPhotoOverride = (p) => (productPhotoOverrides[p.id] ? { ...p, photoUrl: productPhotoOverrides[p.id] } : p);
-  const getAllProducts = () => [
-    ...PRODUCTS.filter((p) => !removedProductIds.includes(p.id)).map(withPhotoOverride),
-    ...customProducts.map(withPhotoOverride),
-  ];
-  const setProductPhoto = (id, dataUrl) => {
-    setProductPhotoOverrides((prev) => ({ ...prev, [id]: dataUrl }));
-    logAction("Product photo updated", id);
-  };
-  const addProduct = (data) => {
-    const id = slugify(`${data.name}-${data.country}`);
-    if (PRODUCTS.some((p) => p.id === id) || customProducts.some((p) => p.id === id)) {
-      return { error: "A product with this name and country already exists." };
+  // Live product catalog -- now the real thing from the database, not the old static list plus
+  // client-side-only overrides. Curated/editorial placements (Home's featured tiers, Moments' and
+  // Brew Guides' matched-product suggestions, Growing Library, World Journey) deliberately keep
+  // reading the original static PRODUCTS import directly instead of this function, unchanged from
+  // before -- exactly like a homepage "featured" section on a real store doesn't auto-update the
+  // instant a catalog change happens elsewhere. That split was already true before this migration
+  // and stays true now.
+  const getAllProducts = () => realProducts;
+  const setProductPhoto = async (id, dataUrl) => {
+    try {
+      await api.updateProduct(token, id, { photoUrl: dataUrl });
+      refetchRealProducts();
+      logAction("Product photo updated", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
     }
-    const product = { ...data, id, isCustom: true };
-    setCustomProducts((prev) => [...prev, product]);
-    logAction("Product added", `${data.name} — ${data.country}`);
-    return { product };
   };
-  const removeProduct = (id) => {
-    if (customProducts.some((p) => p.id === id)) {
-      setCustomProducts((prev) => prev.filter((p) => p.id !== id));
-    } else {
-      setRemovedProductIds((prev) => [...prev, id]);
+  const addProduct = async (data) => {
+    try {
+      const { product } = await api.createProduct(token, data);
+      refetchRealProducts();
+      logAction("Product added", `${data.name} — ${data.country}`);
+      return { product };
+    } catch (e) {
+      return { error: e.message };
     }
-    logAction("Product discontinued", id);
+  };
+  const removeProduct = async (id) => {
+    try {
+      await api.deleteProduct(token, id);
+      refetchRealProducts();
+      logAction("Product discontinued", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
   const getAllGreenBeans = () => [...GREEN_BEANS.filter((g) => !removedGreenBeanIds.includes(g.id)), ...customGreenBeans];
@@ -636,16 +678,12 @@ export function AdminDataProvider({ children }) {
     logAction("Settings updated", Object.keys(patch).join(", "));
   };
 
-  // Client-side equivalent of a database backup, since there's no real database here to back up --
-  // this exports every piece of admin-managed state (the actual catalog changes, overrides, and
-  // business records that would be genuinely painful to lose, unlike a customer's cart/wishlist)
-  // as one JSON object. Named and structured explicitly rather than just `JSON.stringify`-ing raw
-  // internal state, so a restored file is readable and the shape is stable even if internal
-  // variable names change later.
+  // Client-side equivalent of a database backup, since there's no real database here to back up
+  // for what's STILL genuinely in-memory only -- retail products are real now (Postgres), same
+  // reasoning already applied when users and orders became real: a live database needs its own
+  // real backup strategy (Railway's own database backups), not an ad-hoc JSON download.
   const exportAdminData = () => ({
-    priceOverrides, tierOverrides, stockOverrides,
-    customProducts, removedProductIds, productPhotoOverrides,
-    customGreenBeans, removedGreenBeanIds, greenPriceOverrides, greenOrders,
+    customGreenBeans, removedGreenBeanIds, greenPriceOverrides, greenStockOverrides, greenOrders,
     auditLog, kenyaMessages, quotations, serviceInquiries, liveChats, feedbackList,
     momentOverrides, courseOverrides, countryHistoryOverrides, settings,
   });
@@ -654,15 +692,10 @@ export function AdminDataProvider({ children }) {
   // left as-is instead of the whole restore failing or wiping something the file didn't mention.
   const restoreAdminData = (data) => {
     if (!data || typeof data !== "object") return;
-    if (data.priceOverrides) setPriceOverrides(data.priceOverrides);
-    if (data.tierOverrides) setTierOverrides(data.tierOverrides);
-    if (data.stockOverrides) setStockOverrides(data.stockOverrides);
-    if (Array.isArray(data.customProducts)) setCustomProducts(data.customProducts);
-    if (Array.isArray(data.removedProductIds)) setRemovedProductIds(data.removedProductIds);
-    if (data.productPhotoOverrides) setProductPhotoOverrides(data.productPhotoOverrides);
     if (Array.isArray(data.customGreenBeans)) setCustomGreenBeans(data.customGreenBeans);
     if (Array.isArray(data.removedGreenBeanIds)) setRemovedGreenBeanIds(data.removedGreenBeanIds);
     if (data.greenPriceOverrides) setGreenPriceOverrides(data.greenPriceOverrides);
+    if (data.greenStockOverrides) setGreenStockOverrides(data.greenStockOverrides);
     if (Array.isArray(data.greenOrders)) setGreenOrders(data.greenOrders);
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
     if (Array.isArray(data.kenyaMessages)) setKenyaMessages(data.kenyaMessages);
@@ -686,6 +719,7 @@ export function AdminDataProvider({ children }) {
         realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus,
         getStock, setStock,
         getAllProducts, addProduct, removeProduct, setProductPhoto,
+        realProductsLoading, realProductsError, refetchRealProducts,
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,
         greenOrders, addGreenOrder, updateGreenOrderStatus,

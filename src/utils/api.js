@@ -60,4 +60,11 @@ export const api = {
     request(`/orders/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
   verifyPayment: (token, id, reference) =>
     request(`/orders/${id}/verify-payment`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reference }) }),
+  getProducts: () => request("/products"),
+  createProduct: (token, product) =>
+    request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),
+  updateProduct: (token, id, updates) =>
+    request(`/products/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
+  deleteProduct: (token, id) =>
+    request(`/products/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
 };

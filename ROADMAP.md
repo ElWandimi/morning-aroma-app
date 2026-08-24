@@ -161,16 +161,38 @@ Nothing else matters for going live until these are real, not simulated.
       `PATCH /products/:id` (admin, partial updates — just a price, just a photo), `DELETE
       /products/:id` (admin, soft-delete, matching the existing "discontinued item" behavior a
       real past order needs). 21 new backend tests, 121/121 passing.
-      **Frontend not wired yet, on purpose** — Admin Products/Inventory, Shop, Product pages, Cart,
-      Checkout, Search, and the Quiz all still read the old static data + client-only overrides.
-      This is a separate, substantial piece of work, same backend-first/frontend-second split as
-      orders and payments before it. Green coffee (wholesale) products are a parallel system, not
-      covered by this round — a candidate for its own future round if it hits the same problem.
-- [ ] **Order total price integrity** — `POST /orders` recomputes the total from submitted
-      per-item prices (blocking the obvious tamper of a mismatched total), but those per-item
-      prices still come from the client, not the now-real product catalog above, since checkout
-      hasn't been wired to `GET /products` yet either. Now genuinely unblocked by real data
-      existing — just needs the wiring.
+      **Frontend wired.** `AdminDataProvider`'s entire product system now calls the real API
+      instead of client-side-only overrides — `getPrice`/`getTier`/`getAllProducts` read the real
+      fetched catalog, `setPrice`/`setTier`/`setStock`/`setProductPhoto`/`addProduct`/
+      `removeProduct` are real, async API calls with proper loading/error handling in Admin
+      Products and Inventory. Fetched unconditionally on app load for every visitor (not gated
+      behind admin/staff role the way `realUsers`/`realOrders` are), since Shop and product
+      browsing are core public functionality, not an admin concern.
+      Found and fixed two real regressions while wiring this, before they shipped: (1)
+      `getStock`/`setStock` are shared between retail products and green beans (a separate,
+      still-fake wholesale system) — the first pass would have silently broken green bean stock
+      updates entirely by routing everything through the real products API; fixed by having
+      `setStock` correctly dispatch between the two based on which list an id actually belongs to,
+      and restoring a dedicated `greenStockOverrides` state that had been accidentally deleted
+      along with the retail-only overrides. (2) `getProductPhotoUrl`'s fallback logic depended on
+      an `isCustom` flag that no longer exists on real backend products — left as-is, any newly
+      admin-added product without an uploaded photo would have shown a broken image; fixed with an
+      explicit list of the 9 products that genuinely have bundled photo files.
+      Also found and fixed a real UX bug, not just cosmetic: `ProductPage` would briefly show a
+      false "We couldn't find that variety" message for a real, existing product during the
+      instant before the catalog finishes its first fetch — a customer visiting a direct product
+      link would see the page claim the product doesn't exist, then have it correct itself. Fixed
+      with an explicit loading state distinguishing "still loading" from "genuinely not found."
+      Settings > Backup fixed (would have crashed referencing the removed override state) and
+      extended to cover the restored green-stock state.
+      Green coffee (wholesale) products remain a parallel, untouched system — not covered by this
+      round, a candidate for its own future round if it hits the same underlying problem.
+- [ ] **Order total price integrity** — `POST /orders` still recomputes the total from
+      client-submitted per-item prices (blocking the obvious tamper of a mismatched total), but
+      doesn't yet independently verify those prices against the real catalog server-side. Now
+      genuinely unblocked by real product data existing — the remaining work is Checkout actually
+      fetching real, current prices at the moment of order creation, and/or the backend
+      cross-checking submitted prices against `GET /products` before accepting an order.
 - [x] **Real email delivery — provider decided and integrated: Resend.** Welcome emails and
       password reset emails both send for real once `RESEND_API_KEY` is set (see
       `server/.env.example`). Built with a graceful dev-mode fallback (logs instead of sending
@@ -222,6 +244,14 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Products frontend wiring complete — the bug that started this is actually fixed now.** Every
+  admin catalog edit (price, tier, stock, photo, add, discontinue) is a real, persisted API call.
+  Found and fixed two real regressions before they shipped: green bean stock updates would have
+  silently broken (routed through the retail-only API by mistake), and newly admin-added products
+  without a photo would have shown a broken image (a fallback that depended on a flag that no
+  longer exists on real products). Also found and fixed a real UX bug: a direct product link could
+  briefly show a false "not found" message before the catalog's first fetch completed. 121/121
+  backend tests still passing (this round was frontend-only), full production build confirmed.
 - **Real products backend built — found from a real bug report right after going live.** An admin
   price edit would show, then silently revert on refresh, because product/pricing data was never
   anything but client-side React memory. Real `products` table, seeded with the actual 9 original
