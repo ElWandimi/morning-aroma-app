@@ -37,6 +37,14 @@ Nothing else matters for going live until these are real, not simulated.
             `AuthProvider` now call the real API (`src/utils/api.js`); the login modal has a real
             Sign in / Create account toggle. **Requires `VITE_API_URL` set on the frontend's
             Railway service** — see deployment notes.
+      - [x] **Found via a real user report, fixed:** "Forgot password" was still entirely fake for
+            real accounts — it ran through the old local OTP system, never touching the real
+            `/auth/password-reset/*` endpoints that had existed since the very first backend
+            round. A real user who forgot their password had no actual way to recover their
+            account. Rewired to the real endpoints; honest interim UX since no email provider is
+            connected yet (the reset is genuinely real server-side, but the code must be relayed
+            manually for now). Also made "Continue with Google" unmistakably a preview — it
+            previously showed a picker of fake accounts styled exactly like a real Google login.
       - [ ] **New, split out as its own item (Tier 1.5 below):** admin user-management API. The
             Customers section's user list and role/permission management still operate on demo,
             in-memory-only data — a real registered customer will not show up there. OTP login,
@@ -167,6 +175,16 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Fixed a real, serious bug found via a user report: "Forgot password" was completely fake for
+  real accounts.** It ran through the old local OTP system entirely, never touching the real
+  backend endpoints built much earlier — meaning a real registered user who forgot their password
+  had genuinely no way to recover their account. Rewired to the real backend (request/confirm),
+  with an honest interim UX given no email provider is connected yet: the reset is real
+  server-side, but the code has to be relayed manually for now rather than emailed automatically.
+  Also made the still-fake "Continue with Google" preview unmistakable — it previously showed a
+  picker of fake accounts styled exactly like a real Google login, with zero indication anywhere
+  that it wasn't real. Both gaps were found by testing actual user reports rather than assuming
+  the earlier auth-wiring work was complete.
 - **Checkout wired to real Paystack.** The fake card-details form is gone, replaced with a real
   "Pay with Paystack" flow — creates the order once (reused across retries, so a cancelled popup
   doesn't leave behind duplicate unpaid orders), loads Paystack's script on demand only at the

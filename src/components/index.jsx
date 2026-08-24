@@ -3,6 +3,7 @@ import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlis
 import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, MOCK_GOOGLE_ACCOUNTS, TRANSLATE_LANGUAGES } from "../data";
 import { useClickOutside, useEscapeKey, useGeoLocale, useGoogleTranslate } from "../hooks";
 import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent } from "../utils/helpers";
+import { api } from "../utils/api";
 
 export function Steam({ className = "" }) {
   return (
@@ -89,7 +90,7 @@ function GoogleIcon() {
 }
 
 export function LoginModal({ open, onClose }) {
-  const { login, register, resetPassword, loginWithOtp, loginWithGoogle, error, setError, pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor } = useAuth();
+  const { login, register, loginWithOtp, loginWithGoogle, error, setError, pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -105,6 +106,8 @@ export function LoginModal({ open, onClose }) {
 
   // Forgot-password flow: null (not active) -> "verify" (enter the emailed code) -> "newpassword"
   const [resetStep, setResetStep] = useState(null);
+  const [resetToken, setResetToken] = useState("");
+  const [resetSubmitting, setResetSubmitting] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetError, setResetError] = useState("");
@@ -163,9 +166,6 @@ export function LoginModal({ open, onClose }) {
         onClose();
         resetOtp();
         setTwoFAStep(false);
-      } else if (resetStep === "verify") {
-        resetOtp();
-        setResetStep("newpassword");
       } else {
         loginWithOtp(email);
         onClose();
@@ -191,39 +191,51 @@ export function LoginModal({ open, onClose }) {
     setPassword("");
   };
 
-  const startResetFlow = () => {
+  const startResetFlow = async () => {
     if (!email) {
       setError("Enter your email above first, then click \"Forgot password?\"");
       return;
     }
     setError("");
-    setResetStep("verify");
+    setResetError("");
     setResetDone(false);
-    sendCode();
+    setResetStep(true);
+    // Always the same generic response whether or not the email has an account -- the backend
+    // itself never reveals which (see server/src/routes/auth.js) -- so there's nothing to branch
+    // on here regardless of outcome.
+    await api.requestPasswordReset(email).catch(() => {});
   };
   const cancelResetFlow = () => {
     setResetStep(null);
+    setResetToken("");
     setNewPassword("");
     setConfirmPassword("");
     setResetError("");
-    resetOtp();
   };
-  const submitNewPassword = (e) => {
+  const submitNewPassword = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      setResetError("Password must be at least 6 characters.");
+    if (newPassword.length < 8) {
+      setResetError("Password must be at least 8 characters.");
       return;
     }
     if (newPassword !== confirmPassword) {
       setResetError("Passwords don't match.");
       return;
     }
-    resetPassword(email, newPassword);
     setResetError("");
-    setResetDone(true);
-    setPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    setResetSubmitting(true);
+    try {
+      await api.confirmPasswordReset(resetToken.trim(), newPassword);
+      setResetDone(true);
+      setPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setResetToken("");
+    } catch (err) {
+      setResetError(err.message);
+    } finally {
+      setResetSubmitting(false);
+    }
   };
 
   return (
@@ -238,45 +250,27 @@ export function LoginModal({ open, onClose }) {
         {resetStep ? (
           <>
             <p className="eyebrow">reset your password</p>
-            <h3 className="modal-title">{resetStep === "verify" ? "Verify it's you" : "Choose a new password"}</h3>
-            {resetStep === "verify" ? (
-              <>
-                <p className="hint" style={{ marginTop: 0 }}>We've sent a code to <strong>{email}</strong> to confirm it's really you before resetting anything.</p>
-                {otpSent && (
-                  <>
-                    <p className="hint otp-demo-code">
-                      Prototype only — no real email is sent. Your code is <strong>{genCode || "expired"}</strong>, valid for {secondsLeft}s.
-                    </p>
-                    <label htmlFor="reset-code">6-digit code</label>
-                    <input
-                      id="reset-code"
-                      value={enteredCode}
-                      onChange={(e) => setEnteredCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="000000"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                    />
-                    {otpError && <p className="form-error">{otpError}</p>}
-                    <button className="btn-primary full" onClick={verifyCode} disabled={enteredCode.length !== 6}>Verify code</button>
-                    <button className="link-btn" style={{ marginTop: 10 }} onClick={sendCode}>Resend code</button>
-                  </>
-                )}
-              </>
-            ) : resetDone ? (
+            <h3 className="modal-title">Enter your reset code</h3>
+            {resetDone ? (
               <>
                 <p className="form-success">Your password has been reset. Sign in with your new password below.</p>
                 <button className="btn-primary full" onClick={cancelResetFlow}>Back to sign in</button>
               </>
             ) : (
-              <form onSubmit={submitNewPassword}>
-                <label htmlFor="reset-new-password">New password</label>
-                <input id="reset-new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={128} required />
-                <label htmlFor="reset-confirm-password">Confirm new password</label>
-                <input id="reset-confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" maxLength={128} required />
-                {resetError && <p className="form-error">{resetError}</p>}
-                <button className="btn-primary full" type="submit">Set new password</button>
-              </form>
+              <>
+                <p className="hint" style={{ marginTop: 0 }}>We've started a real password reset for <strong>{email}</strong>, if that email has an account.</p>
+                <p className="form-error">Automatic email delivery isn't connected yet, so nothing will arrive on its own — contact us directly and we'll send you the reset code another way for now.</p>
+                <form onSubmit={submitNewPassword}>
+                  <label htmlFor="reset-token">Reset code</label>
+                  <input id="reset-token" value={resetToken} onChange={(e) => setResetToken(e.target.value)} autoComplete="off" maxLength={128} required />
+                  <label htmlFor="reset-new-password">New password</label>
+                  <input id="reset-new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" minLength={8} maxLength={128} required />
+                  <label htmlFor="reset-confirm-password">Confirm new password</label>
+                  <input id="reset-confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" maxLength={128} required />
+                  {resetError && <p className="form-error">{resetError}</p>}
+                  <button className="btn-primary full" type="submit" disabled={resetSubmitting}>{resetSubmitting ? "Setting password…" : "Set new password"}</button>
+                </form>
+              </>
             )}
             <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelResetFlow}>← Back to sign in</button>
           </>
@@ -313,6 +307,7 @@ export function LoginModal({ open, onClose }) {
           <>
             <p className="eyebrow">choose an account</p>
             <h3 className="modal-title">Continue with Google</h3>
+            <p className="form-error" style={{ marginTop: -4 }}>Preview only — these aren't real Google accounts, and picking one doesn't create a real saved account on Morning Aroma.</p>
             <div className="google-account-list">
               {MOCK_GOOGLE_ACCOUNTS.map((a) => (
                 <button
@@ -465,8 +460,9 @@ export function LoginModal({ open, onClose }) {
             <div className="divider"><span>or</span></div>
             <button className="btn-google full" onClick={() => setGooglePicker(true)}>
               <GoogleIcon />
-              Continue with Google
+              Continue with Google (preview)
             </button>
+            <p className="hint" style={{ marginTop: 8 }}>Preview mode — doesn't create a real saved account. Use "Email &amp; password" above for a real one.</p>
           </>
         )}
         </div>

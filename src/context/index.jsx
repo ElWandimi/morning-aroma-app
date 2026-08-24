@@ -94,15 +94,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Still demo/local-only -- OTP-based passwordless login needs real email delivery to send the
-  // code, which isn't connected yet (see ROADMAP.md Tier 2). Kept working as before so that path
-  // isn't broken, but it does NOT create a real, persisted account the way register()/login() now do.
-  const resetPassword = (email, newPassword) => {
-    const clean = email.trim().toLowerCase();
-    findOrCreateUser(clean);
-    setPasswords((prev) => ({ ...prev, [clean]: newPassword }));
-  };
-
   const completeTwoFactor = () => {
     if (!pendingTwoFactorUser) return;
     setUser(pendingTwoFactorUser);
@@ -122,7 +113,8 @@ export function AuthProvider({ children }) {
     setUser((prev) => (prev && prev.email === email ? { ...prev, notificationsEnabled: enabled } : prev));
   };
 
-  // Still demo/local-only, same reason as resetPassword above.
+  // Still demo/local-only -- needs real email delivery to send the code, which isn't connected
+  // yet (see ROADMAP.md Tier 2).
   const loginWithOtp = (email) => {
     const acct = findOrCreateUser(email);
     setUser(acct);
@@ -167,7 +159,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthCtx.Provider
       value={{
-        user, token, users, login, register, resetPassword, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
+        user, token, users, login, register, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
         pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor, setTwoFactorEnabled, setNotificationsEnabled,
         exportUsers, restoreUsers, sessionLoading,
       }}
