@@ -51,18 +51,32 @@ router.post("/", requireAuth, async (req, res) => {
   if (validationError) return res.status(400).json({ error: validationError });
 
   const { items, shippingName, shippingAddress, shippingCity } = req.body;
-  // KNOWN LIMITATION (see server/README.md and ROADMAP.md): recomputes the total from the
-  // submitted per-item prices rather than trusting a submitted grand total directly, which
-  // blocks the most obvious form of tampering (mismatched items/total) -- but the per-item
-  // prices themselves still come from the client, not a real product catalog in this database,
-  // because products/pricing haven't been migrated to Postgres yet. Real price integrity needs
-  // that migration; this is real order *persistence*, not yet a fully trustworthy checkout.
-  const totalCents = items.reduce((sum, item) => sum + item.unitPriceCents * item.qty, 0);
+
+  // Real price integrity: looks up each item's CURRENT, real price from the products table and
+  // uses that for the actual total -- never trusts the client-submitted unitPriceCents for
+  // pricing (still validated for shape in validateOrderInput, for backward compatibility with the
+  // existing frontend contract and so a malformed value still gets a clear 400, but the value
+  // itself is now genuinely ignored). Standard IN (...) with individually numbered placeholders
+  // rather than Postgres's ANY($1) array syntax -- keeps this portable across both the real
+  // Postgres backend and the SQLite test harness without needing new adapter-specific translation
+  // for array parameters, the same reasoning already applied to other queries in this codebase.
+  const ids = [...new Set(items.map((i) => i.id))];
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(", ");
+  const productsResult = await query(`SELECT id, price_cents FROM products WHERE id IN (${placeholders}) AND removed = false`, ids);
+  const priceById = new Map(productsResult.rows.map((p) => [p.id, p.price_cents]));
+
+  const unavailable = ids.filter((id) => !priceById.has(id));
+  if (unavailable.length > 0) {
+    return res.status(400).json({ error: `Some items are no longer available: ${unavailable.join(", ")}` });
+  }
+
+  const realItems = items.map((i) => ({ id: i.id, qty: i.qty, unitPriceCents: priceById.get(i.id) }));
+  const totalCents = realItems.reduce((sum, item) => sum + item.unitPriceCents * item.qty, 0);
 
   const result = await query(
     `INSERT INTO orders (user_id, items, total_cents, shipping_name, shipping_address, shipping_city)
      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [req.user.sub, JSON.stringify(items), totalCents, shippingName.trim(), shippingAddress.trim(), shippingCity.trim()]
+    [req.user.sub, JSON.stringify(realItems), totalCents, shippingName.trim(), shippingAddress.trim(), shippingCity.trim()]
   );
   res.status(201).json({ order: publicOrder(result.rows[0]) });
 });

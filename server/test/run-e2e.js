@@ -57,6 +57,17 @@ async function main() {
   check("welcome email addresses the user by their actual registered name", regLog.includes("Hi Test User,"));
   const token = reg.body.token;
 
+  console.log("\nSeed test products (real order tests below need real products to check prices against):");
+  // Using the real POST /products endpoint, not a direct DB insert -- the same slugify(name-
+  // country) logic that generates these ids is exactly what production uses, so this also
+  // incidentally re-confirms that logic produces the ids the rest of this suite already expects.
+  const seedSl28 = await post("/products", { name: "SL28", country: "Kenya", tier: "premium", priceCents: 1500, stock: 100 }, token);
+  check("seed product created", seedSl28.status === 201);
+  check("id matches what the rest of this suite expects", seedSl28.body.product && seedSl28.body.product.id === "sl28-kenya");
+  const seedGeisha = await post("/products", { name: "Geisha", country: "Panama", tier: "premium", priceCents: 3200, stock: 100 }, token);
+  check("second seed product created", seedGeisha.status === 201);
+  check("id matches what the rest of this suite expects", seedGeisha.body.product && seedGeisha.body.product.id === "geisha-panama");
+
   console.log("\nSecond registration (bootstrap should not apply again):");
   const reg2 = await post("/auth/register", { email: "second@morningaroma.local", password: "correcthorsebattery", name: "Second User" });
   check("returns 201", reg2.status === 201);
@@ -125,6 +136,16 @@ async function main() {
   console.log("\nPOST /orders missing shipping city:");
   const orderNoCity = await post("/orders", { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "" }, customerToken);
   check("returns 400", orderNoCity.status === 400);
+
+  console.log("\nPOST /orders referencing a product that doesn't exist:");
+  const orderFakeProduct = await post("/orders", { items: [{ id: "this-product-does-not-exist", qty: 1, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  check("returns 400, not a 500 or a silently-accepted order for a nonexistent product", orderFakeProduct.status === 400);
+
+  console.log("\nPOST /orders referencing a real but discontinued product:");
+  const discontinuedProduct = await post("/products", { name: "Discontinued Bean", country: "Nowhereland", tier: "everyday", priceCents: 1000, stock: 5 }, token);
+  await fetch(base + `/products/${discontinuedProduct.body.product.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  const orderDiscontinued = await post("/orders", { items: [{ id: discontinuedProduct.body.product.id, qty: 1, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  check("a real product that's been discontinued since can no longer be ordered", orderDiscontinued.status === 400);
 
   console.log("\nPOST /orders — a real, valid order:");
   const order = await post(
@@ -272,10 +293,14 @@ async function main() {
     { items: [{ id: "sl28-kenya", qty: 3, unitPriceCents: 1000 }], shippingName: "Second User", shippingAddress: "123 Coffee St", shippingCity: "Nairobi" },
     customerToken
   );
-  // webhookOrder totals 3000 cents ($30.00); at the mock's fixed 130 KES/USD rate, expected = 30 * 130 * 100 = 390000 KES cents.
+  // The submitted unitPriceCents (1000) is deliberately wrong here, to also confirm the server
+  // genuinely ignores it -- real price integrity means the actual total uses sl28-kenya's real
+  // seeded price (1500), not whatever the client sent: 3 * 1500 = 4500 cents ($45.00). At the
+  // mock's fixed 130 KES/USD rate, expected = 45 * 130 * 100 = 585000 KES cents.
+  check("order total genuinely computed from the real catalog price, not the deliberately-wrong submitted one", webhookOrder.body.order && webhookOrder.body.order.totalCents === 4500);
   const webhookOrderNumber = webhookOrder.body.order.orderNumber.replace("MA-", "");
   const webhookReference = `MA-${webhookOrderNumber}-${Date.now()}`;
-  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 390000 });
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 585000 });
   const webhookPayload = JSON.stringify({ event: "charge.success", data: { reference: webhookReference, status: "success" } });
   const webhookSuccess = await postWebhook(webhookPayload, signBody(webhookPayload));
   check("returns 200", webhookSuccess.status === 200);
@@ -293,10 +318,11 @@ async function main() {
     { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 500 }], shippingName: "Second User", shippingAddress: "123 Coffee St", shippingCity: "Nairobi" },
     customerToken
   );
-  // 500 cents ($5.00) at the mock's 130 rate = 65000 KES cents.
+  // Same deliberately-wrong submitted price as above -- real total is sl28-kenya's real seeded
+  // price (1500 cents, $15.00). At the mock's 130 rate = 15 * 130 * 100 = 195000 KES cents.
   const liveModeOrderNumber = liveModeOrder.body.order.orderNumber.replace("MA-", "");
   const liveModeReference = `MA-${liveModeOrderNumber}-${Date.now()}`;
-  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 65000 });
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000 });
   const previousKey = process.env.PAYSTACK_SECRET_KEY;
   process.env.PAYSTACK_SECRET_KEY = "sk_live_fake_key_simulating_a_real_live_key_for_this_one_check";
   const liveModeVerify = await post(`/orders/${liveModeOrder.body.order.id}/verify-payment`, { reference: liveModeReference }, customerToken);

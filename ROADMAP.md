@@ -187,12 +187,21 @@ Nothing else matters for going live until these are real, not simulated.
       extended to cover the restored green-stock state.
       Green coffee (wholesale) products remain a parallel, untouched system — not covered by this
       round, a candidate for its own future round if it hits the same underlying problem.
-- [ ] **Order total price integrity** — `POST /orders` still recomputes the total from
-      client-submitted per-item prices (blocking the obvious tamper of a mismatched total), but
-      doesn't yet independently verify those prices against the real catalog server-side. Now
-      genuinely unblocked by real product data existing — the remaining work is Checkout actually
-      fetching real, current prices at the moment of order creation, and/or the backend
-      cross-checking submitted prices against `GET /products` before accepting an order.
+- [x] **Order total price integrity.** `POST /orders` now looks up each item's real, current
+      price from the `products` table and uses that for the actual total — the client-submitted
+      `unitPriceCents` is still validated for shape (backward-compatible with the existing
+      frontend contract) but is genuinely ignored for pricing. An order referencing a product that
+      doesn't exist, or one discontinued since, is rejected outright (400) rather than silently
+      accepted. Standard `IN (...)` with individually numbered placeholders rather than Postgres's
+      `ANY($1)` array syntax, keeping this portable across the real backend and the SQLite test
+      harness without new adapter-specific translation.
+      7 new/updated tests, including deliberately submitting a wrong client-side price and
+      confirming the real total is used anyway, not the submitted one — and correctly recalculated
+      three existing downstream tests (webhook confirmation, live-vs-test payment mode detection)
+      whose Paystack mock amounts depended on the old, no-longer-trusted client prices. Seeded via
+      the real `POST /products` endpoint rather than a parallel test-only mechanism, which also
+      incidentally re-confirms the id-generation logic (`slugify(name-country)`) produces exactly
+      the ids the rest of the suite already expected. 128/128 backend tests passing.
 - [x] **Real email delivery — provider decided and integrated: Resend.** Welcome emails and
       password reset emails both send for real once `RESEND_API_KEY` is set (see
       `server/.env.example`). Built with a graceful dev-mode fallback (logs instead of sending
@@ -244,6 +253,13 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Order total price integrity closed.** `POST /orders` now uses each item's real, current
+  catalog price server-side, ignoring whatever the client submits — the last real gap in the
+  payment chain now that real product data exists to check against. Rejects orders for products
+  that don't exist or have been discontinued. 7 new/updated backend tests, including deliberately
+  submitting a wrong price and confirming the server uses the real one instead, plus correctly
+  recalculating three downstream payment tests whose expected amounts depended on the old,
+  no-longer-trusted client prices. 128/128 backend tests passing.
 - **Products frontend wiring complete — the bug that started this is actually fixed now.** Every
   admin catalog edit (price, tier, stock, photo, add, discontinue) is a real, persisted API call.
   Found and fixed two real regressions before they shipped: green bean stock updates would have

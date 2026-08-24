@@ -63,16 +63,15 @@ anywhere. Wiring every one of those consumers to the real API is a separate, sub
 work — tracked in `ROADMAP.md`, not done in this same round on purpose (same backend-first,
 frontend-second split as orders and payments before it).
 
-## Known limitation: order totals aren't fully price-verified yet
+## Order price integrity
 
-`POST /orders` recomputes the total from the submitted per-item prices rather than trusting a
-submitted grand total directly, which blocks the most obvious form of tampering (mismatched
-items/total). But the per-item prices themselves still come from the client, not a real product
-catalog — products and pricing haven't been migrated to this database yet (they're still frontend
-static data, per ROADMAP.md). This is real order *persistence* (orders survive a refresh, admin
-can see them, a customer's order history is genuinely theirs) — not yet a fully trustworthy
-checkout from a pricing-integrity standpoint. Real price verification needs the product catalog
-to exist here too, which is its own, larger piece of work.
+`POST /orders` looks up each item's real, current price from the `products` table and uses that
+for the actual total — the client-submitted `unitPriceCents` is validated for shape (still
+required, still must be a non-negative integer, for backward compatibility with the existing
+frontend contract) but is genuinely ignored for pricing. A submitted price that doesn't match
+reality can't produce a wrong order total; it just gets silently overridden with the real one. An
+item referencing a product that doesn't exist, or one that's been discontinued since, is rejected
+outright (400) rather than silently accepted.
 
 ## What's *not* here yet
 
