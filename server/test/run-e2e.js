@@ -235,6 +235,63 @@ async function main() {
   const verifyReusedRef = await post(`/orders/${thirdOrder.body.order.id}/verify-payment`, { reference: "ref_real_payment" }, customerToken);
   check("returns 400 -- this reference already settled a different order", verifyReusedRef.status === 400);
 
+  console.log("\nWebhooks — real HMAC signature verification:");
+  const crypto = require("crypto");
+  const signBody = (bodyString) => crypto.createHmac("sha512", process.env.PAYSTACK_SECRET_KEY).update(bodyString).digest("hex");
+  const postWebhook = (bodyString, signature) =>
+    fetch(base + "/webhooks/paystack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(signature !== undefined ? { "x-paystack-signature": signature } : {}) },
+      body: bodyString,
+    }).then(async (r) => ({ status: r.status, body: await r.json() }));
+
+  const fakePayload = JSON.stringify({ event: "charge.success", data: { reference: "MA-9999-123", status: "success" } });
+
+  const webhookNoSig = await postWebhook(fakePayload, undefined);
+  check("missing signature header is rejected", webhookNoSig.status === 401);
+
+  const webhookBadSig = await postWebhook(fakePayload, "not-a-real-signature-at-all-000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+  check("wrong signature is rejected -- this is the core defense against a forged 'payment succeeded' event", webhookBadSig.status === 401);
+
+  const webhookRightSigWrongBody = await postWebhook(fakePayload + " ", signBody(fakePayload));
+  check("signature computed over a different body than what's actually sent is rejected -- confirms this checks the real bytes, not just 'a signature was present'", webhookRightSigWrongBody.status === 401);
+
+  const webhookIgnoredEvent = await postWebhook(
+    JSON.stringify({ event: "transfer.success", data: { reference: "MA-9999-123" } }),
+    signBody(JSON.stringify({ event: "transfer.success", data: { reference: "MA-9999-123" } }))
+  );
+  check("a genuinely signed event of a type this app doesn't act on is still acknowledged with 200 -- Paystack retries anything else, forever, for no benefit", webhookIgnoredEvent.status === 200);
+
+  const webhookUnknownRef = JSON.stringify({ event: "charge.success", data: { reference: "MA-99999999-000", status: "success", currency: "KES", amount: 1 } });
+  const webhookNoMatchingOrder = await postWebhook(webhookUnknownRef, signBody(webhookUnknownRef));
+  check("a well-formed reference for an order that doesn't exist is still acknowledged with 200, not an error", webhookNoMatchingOrder.status === 200);
+
+  console.log("\nWebhook as the ONLY confirmation path (simulating a customer closing the tab right after paying):");
+  const webhookOrder = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 3, unitPriceCents: 1000 }], shippingName: "Second User", shippingAddress: "123 Coffee St", shippingCity: "Nairobi" },
+    customerToken
+  );
+  // webhookOrder totals 3000 cents ($30.00); at the mock's fixed 130 KES/USD rate, expected = 30 * 130 * 100 = 390000 KES cents.
+  const webhookOrderNumber = webhookOrder.body.order.orderNumber.replace("MA-", "");
+  const webhookReference = `MA-${webhookOrderNumber}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 390000 });
+  const webhookPayload = JSON.stringify({ event: "charge.success", data: { reference: webhookReference, status: "success" } });
+  const webhookSuccess = await postWebhook(webhookPayload, signBody(webhookPayload));
+  check("returns 200", webhookSuccess.status === 200);
+  check("webhook body confirms it genuinely verified and marked the order paid", webhookSuccess.body.verified === true);
+
+  const orderAfterWebhook = await get(`/orders/mine`, customerToken);
+  const foundAfterWebhook = orderAfterWebhook.body.orders.find((o) => o.id === webhookOrder.body.order.id);
+  check("the order is genuinely marked paid in the database -- not just a 200 response, an actual state change with no frontend verify-payment call ever involved", foundAfterWebhook && foundAfterWebhook.paymentStatus === "paid");
+  check("the real paystack reference from the webhook payload was stored", foundAfterWebhook && foundAfterWebhook.paystackReference === webhookReference);
+
+  console.log("\nWebhook idempotency -- Paystack redelivering the same already-processed event:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 390000 });
+  const webhookRedelivered = await postWebhook(webhookPayload, signBody(webhookPayload));
+  check("a redelivered webhook for an already-paid order still returns 200 (Paystack shouldn't keep retrying)", webhookRedelivered.status === 200);
+  check("but correctly reports it did NOT re-verify/re-process -- the order was already paid, not paid twice", webhookRedelivered.body.verified === false);
+
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });
   check("returns 409", dup.status === 409);

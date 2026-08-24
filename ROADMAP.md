@@ -81,13 +81,31 @@ Nothing else matters for going live until these are real, not simulated.
             Paystack popup doesn't leave behind duplicate unpaid orders for the same cart. Amount
             charged is computed from the same live USD→KES rate `CurrencyProvider` already uses
             for display, so what Paystack actually charges matches what the customer saw on
-            screen. **Not deployed yet** — needs `VITE_PAYSTACK_PUBLIC_KEY` set on the frontend's
-            Railway service and `PAYSTACK_SECRET_KEY` set on the backend's, plus migration
-            `003_paystack.sql` run against the live database, none of which have happened yet.
-      - [ ] Webhook handling for payment confirmation (a second, more reliable confirmation path
-            alongside the frontend-triggered verify call — Paystack recommends webhooks as the
-            primary source of truth, since they fire even if the customer closes the tab right
-            after paying).
+            screen. **Deployed and confirmed working end to end** — `VITE_PAYSTACK_PUBLIC_KEY` set
+            on the frontend, `PAYSTACK_SECRET_KEY` on the backend, migration `003_paystack.sql`
+            run against the live database, and a real test-mode payment completed and verified
+            against both the live Paystack dashboard and Admin Orders' payment status column.
+      - [x] **Webhook handling for payment confirmation.** A second, more reliable confirmation
+            path alongside the frontend-triggered verify call — fires from Paystack's own servers
+            regardless of whether the customer's browser is even still open, unlike the frontend
+            call which depends on the JS actually running after the popup closes. Researched
+            Paystack's real webhook docs directly before building (a critical, easy-to-miss detail
+            confirmed there: the signature is HMAC-SHA512 over the *raw* request body — if
+            Express's JSON middleware parses it first, re-serializing for the signature check
+            won't byte-for-byte match what Paystack actually signed, silently breaking
+            verification for every genuine webhook). Refactored the existing verify-payment
+            endpoint's logic into a shared function (`server/src/utils/paymentVerification.js`) so
+            the frontend-triggered path and the webhook can never quietly drift apart on what
+            counts as genuinely paid. 11 new tests covering signature verification (missing,
+            wrong, and — the case that actually proves the check is real — a valid signature
+            computed over a *different* body than what's sent), event-type filtering, and the key
+            scenario this feature exists for: an order marked paid through the webhook alone, with
+            no frontend verify-payment call involved at all, simulating a customer closing the tab
+            right after paying. 97/97 backend tests passing.
+            **Requires a manual dashboard step, not an environment variable:** the webhook URL
+            (`<backend-url>/webhooks/paystack`) needs to be registered in Paystack's dashboard
+            (Settings → API Keys & Webhooks) before Paystack will ever actually call it — not done
+            yet as of this writing.
 
 ## Tier 1.5 — Admin user management (found while wiring the frontend, not originally listed)
 
@@ -187,6 +205,17 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Paystack webhook built — real payment confirmation no longer depends on the customer's browser
+  staying open.** Researched the real webhook docs directly before building; found and correctly
+  handled the single detail most implementations get wrong (signature verification needs the raw,
+  unparsed request body — Express's normal JSON middleware would silently break it). Refactored
+  the existing verify-payment logic into one shared function so the frontend-triggered path and
+  the webhook can never drift apart on what "genuinely paid" means. 11 new tests, including
+  proving the signature check is real (not just "a header was present") and the actual scenario
+  this exists for: an order marked paid through the webhook alone, no frontend call involved.
+  97/97 backend tests passing. Still needs the webhook URL registered in Paystack's dashboard — a
+  manual step, not done yet. Also corrected two stale "not deployed yet" notes in the roadmap for
+  Paystack itself, which has in fact been live and confirmed working for a few rounds now.
 - **Real email delivery: Resend integrated.** Welcome and password-reset emails genuinely send
   once configured — researched Resend's current API and domain-verification requirements
   directly before building (confirmed a real, important constraint: arbitrary customer delivery

@@ -3,8 +3,19 @@ const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
 const ordersRoutes = require("./routes/orders");
+const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
+
+app.get("/health", (req, res) => res.json({ ok: true }));
+
+// Mounted with express.raw(), and BEFORE the global express.json() below -- Paystack's webhook
+// signature is an HMAC over the exact raw request body. If express.json() ran first, it would
+// consume and parse that body before this route ever saw the original bytes, making a correct
+// signature comparison impossible (see routes/webhooks.js for the full explanation). Doesn't need
+// CORS either, unlike everything below it -- Paystack calls this server-to-server, not from a
+// browser, so CORS (a browser-enforced mechanism) simply doesn't apply here.
+app.use("/webhooks", express.raw({ type: "application/json" }), webhooksRoutes);
 
 app.use(express.json());
 
@@ -14,8 +25,6 @@ app.use(express.json());
 // open-by-default.
 const allowedOrigins = [process.env.FRONTEND_URL, "http://localhost:5173"].filter(Boolean);
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-
-app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);

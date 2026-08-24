@@ -30,6 +30,15 @@ launch (payments is the other).
   the currency is KES, and the amount is within 5% of what's owed (exchange rates drift between
   order and payment, so this can't require an exact match). Requires `PAYSTACK_SECRET_KEY` set —
   see `.env.example`.
+- `POST /webhooks/paystack` — a second, more reliable payment confirmation path alongside the
+  frontend-triggered one above. The frontend endpoint only fires if the customer's browser is
+  still open and the JS actually runs after Paystack's popup closes; this fires from Paystack's
+  own servers regardless, so a payment still gets confirmed even if someone closes the tab the
+  instant they finish paying. Shares the exact same verification rules as the endpoint above
+  (`src/utils/paymentVerification.js`) — the two can't quietly drift apart on what counts as
+  genuinely paid. Requires the webhook URL to actually be registered with Paystack (Settings →
+  API Keys & Webhooks → your deployed backend URL + `/webhooks/paystack`) before Paystack will
+  ever call it — this is a manual dashboard step, not something set via an environment variable.
 
 ## Known limitation: order totals aren't fully price-verified yet
 
