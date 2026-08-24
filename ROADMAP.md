@@ -106,6 +106,18 @@ Nothing else matters for going live until these are real, not simulated.
             (`<backend-url>/webhooks/paystack`) needs to be registered in Paystack's dashboard
             (Settings → API Keys & Webhooks) before Paystack will ever actually call it — not done
             yet as of this writing.
+      - [x] **Real stock decrement, a real cancellation window, and a real refund workflow.**
+            Found from a direct user report right after live payments started working: stock
+            never actually decremented on a real sale. Stock now decrements on genuine payment
+            confirmation (not order creation), clamped at zero. A paid order can only be
+            self-cancelled within 10 minutes of payment (an explicit design decision, not
+            assumed); cancelling one restores stock, marks the order `refund_pending`, and emails
+            every `super_admin`. A new admin-only endpoint (`POST /orders/:id/refund`) then calls
+            Paystack's real Refund API — a deliberate, admin-triggered action per a direct
+            decision against full automation, not a background process. Found and fixed a real
+            bug in the SQLite test adapter itself while building this (silently misaligned
+            parameters when a query legitimately reused the same one twice). 17 new tests,
+            145/145 backend tests passing.
 
 ## Tier 1.5 — Admin user management (found while wiring the frontend, not originally listed)
 
@@ -253,6 +265,29 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Stock decrement, a real cancellation window, and a real refund workflow — three real gaps
+  found from direct user reports, all closed together given how tightly they interact.**
+  - **Stock now genuinely decrements** on real payment confirmation (not order creation, so an
+    abandoned checkout never reduces real availability), clamped at zero.
+  - **Cancellation window**: a paid order can only be self-cancelled within 10 minutes of payment
+    (unpaid orders — no real money involved yet — can still be cancelled anytime). The frontend
+    now hides the Cancel button once the window has passed, rather than letting a customer click
+    something destined to fail.
+  - **Real refund workflow**: cancelling a paid order restores stock, marks the order
+    `refund_pending`, and emails every `super_admin` — refunds are a deliberate admin action, not
+    automatic, per a direct decision on this. A new admin-only endpoint calls Paystack's real
+    Refund API; Admin Orders' existing "Refund" button (which explicitly warned "no real payment
+    is processed") now calls this for real instead.
+  - Found and fixed a genuine bug in the test infrastructure itself while building this: the
+    SQLite test adapter's `$N` → `?` translation didn't handle a query reusing the same parameter
+    twice (`stock - $1 < 0 THEN 0 ELSE stock - $1`) — Postgres parameters are references and can
+    repeat; SQLite's `?` placeholders are strictly positional. The query ran without error but
+    silently misaligned values. Fixed the adapter itself, not just this one query, since any
+    future query could hit the same issue.
+  - 17 new backend tests covering all three features together (stock decrement, clamping at zero,
+    the window both within and past its boundary, stock restoration, the admin notification email
+    actually sending, the real refund endpoint succeeding, and — importantly — correctly *not*
+    marking an order refunded when Paystack's own API fails). 145/145 backend tests passing.
 - **Order total price integrity closed.** `POST /orders` now uses each item's real, current
   catalog price server-side, ignoring whatever the client submits — the last real gap in the
   payment chain now that real product data exists to check against. Rejects orders for products

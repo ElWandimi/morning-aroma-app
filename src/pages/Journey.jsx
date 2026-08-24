@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 import { LoginModal, RadarChart } from "../components";
 import { useAdmin, useAuth, useCart, useJournal, useOrders, useRoute, useToast } from "../context";
 
+// Must match CANCELLATION_WINDOW_MINUTES in server/src/routes/orders.js exactly -- this only
+// controls whether the Cancel button is shown at all (a UX nicety, avoiding a guaranteed-to-fail
+// click once the window has passed); the real enforcement is server-side regardless of what this
+// value is set to here.
+const CANCELLATION_WINDOW_MS = 10 * 60 * 1000;
+
 export function JourneyPage() {
   const { user, setTwoFactorEnabled, setNotificationsEnabled } = useAuth();
   const { go } = useRoute();
@@ -218,7 +224,7 @@ export function JourneyPage() {
               >
                 Reorder
               </button>
-              {o.status === "Processing" && (
+              {o.status === "Processing" && (o.paymentStatus === "unpaid" || (o.paymentStatus === "paid" && Date.now() - new Date(o.paidAt).getTime() <= CANCELLATION_WINDOW_MS)) && (
                 <button
                   className="link-btn"
                   style={{ marginLeft: 10 }}

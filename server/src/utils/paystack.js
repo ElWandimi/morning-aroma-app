@@ -43,4 +43,21 @@ async function getUsdToKesRate() {
   return rate;
 }
 
-module.exports = { verifyTransaction, getUsdToKesRate };
+// Real refund via Paystack's own Refunds API -- initiates a full refund of the original
+// transaction amount. Paystack itself then handles the actual movement of money back to the
+// customer's original payment method, which can take up to 10 business days to actually land --
+// this call only confirms Paystack has ACCEPTED the refund request, not that funds have arrived.
+async function initiateRefund(reference) {
+  const res = await fetch(`${PAYSTACK_API}/refund`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ transaction: reference }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.status) {
+    throw new Error(body.message || "Could not initiate this refund with Paystack.");
+  }
+  return body.data; // { status, amount, currency, transaction_reference, ... } -- see Paystack's Create Refund docs
+}
+
+module.exports = { verifyTransaction, getUsdToKesRate, initiateRefund };

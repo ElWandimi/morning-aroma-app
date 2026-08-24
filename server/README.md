@@ -23,7 +23,17 @@ launch (payments is the other).
   → Delivered (or Cancelled/Refunded)
 - `POST /orders/:id/cancel` — a customer cancelling their own order, only while it's still
   Processing (matches the existing frontend's restriction: once fulfillment has started, only
-  admin can change status further)
+  admin can change status further). For a **paid** order, also only within a 10-minute window of
+  payment (`CANCELLATION_WINDOW_MINUTES` in `routes/orders.js`) — an unpaid order (an abandoned
+  checkout) can still be cancelled anytime, since no real money is involved yet. Cancelling a paid
+  order restores stock for every item, marks `payment_status` as `refund_pending` (a real refund
+  is now owed), and emails every `super_admin` a notification — refunds are a deliberate,
+  admin-triggered action, not automatic.
+- `POST /orders/:id/refund` (admin-only) — the real refund action referenced above. Only succeeds
+  for an order genuinely in `refund_pending`, enforced server-side. Calls Paystack's real Refund
+  API using the order's stored `paystack_reference`; Paystack itself can then take up to 10
+  business days to actually deliver funds back to the customer — this endpoint only confirms
+  Paystack accepted the request, and updates `payment_status` to `refunded` once it has.
 - `POST /orders/:id/verify-payment` — confirms a Paystack payment for the caller's own order.
   Requires `{ reference }`. Never trusts the frontend's report of success — always re-verifies
   with Paystack's real API using `PAYSTACK_SECRET_KEY`, checks the transaction actually succeeded,
@@ -72,6 +82,13 @@ frontend contract) but is genuinely ignored for pricing. A submitted price that 
 reality can't produce a wrong order total; it just gets silently overridden with the real one. An
 item referencing a product that doesn't exist, or one that's been discontinued since, is rejected
 outright (400) rather than silently accepted.
+
+Real stock is also decremented for every item, but only at the moment a payment is genuinely
+confirmed (`paymentVerification.js`'s shared `verifyAndMarkOrderPaid`) — not at order creation.
+An order that's merely created but never paid (an abandoned checkout) never reduces what's
+actually available. Clamped at zero rather than allowed to go negative; this app doesn't reserve
+stock at order-creation time, so two near-simultaneous payments for the last unit can still both
+succeed — a known, accepted tradeoff at this project's scale, not a full reservation system.
 
 ## What's *not* here yet
 

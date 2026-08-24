@@ -71,6 +71,20 @@ async function verifyAndMarkOrderPaid(order, reference) {
       [transaction.reference, transaction.amount, transaction.currency, paymentMode, order.id]
     );
     if (!result.rows[0]) return { ok: false, error: "This order has already been paid." };
+
+    // Decrement real stock now, not at order creation -- an order that's merely created but never
+    // paid (an abandoned checkout) must never reduce what's actually available. CASE WHEN rather
+    // than Postgres's GREATEST(), which SQLite doesn't support the same way (its MAX() is an
+    // aggregate function by default, not the scalar clamp GREATEST() is) -- CASE WHEN is standard
+    // SQL, portable across both without new adapter-specific translation. Clamped at zero rather
+    // than allowed to go negative -- this app doesn't reserve stock at order-creation time, so two
+    // near-simultaneous payments for the last unit can still both succeed; letting stock go
+    // negative would be a confusing number to show in Admin for a problem this doesn't attempt to
+    // fully prevent anyway.
+    for (const item of result.rows[0].items) {
+      await query("UPDATE products SET stock = CASE WHEN stock - $1 < 0 THEN 0 ELSE stock - $1 END WHERE id = $2", [item.qty, item.id]);
+    }
+
     return { ok: true, order: result.rows[0] };
   } catch (e) {
     // Postgres unique_violation -- this specific reference has already settled a different order.

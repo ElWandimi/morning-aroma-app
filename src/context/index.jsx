@@ -403,6 +403,20 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real refund via Paystack's own API, called only when an admin deliberately clicks it in Admin
+  // Orders -- never automatic. Only succeeds for an order genuinely awaiting one
+  // (payment_status = 'refund_pending', set when a customer cancels a paid order within the
+  // cancellation window), enforced server-side, not just by hiding the button.
+  const refundOrder = async (orderId) => {
+    try {
+      await api.refundOrder(token, orderId);
+      refetchRealOrders();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   // Real product catalog, fetched once on app load -- unlike realUsers/realOrders (admin-only,
   // fetched conditionally), this is fetched unconditionally for every visitor, logged in or not,
   // since the Shop page and product browsing are core public-facing functionality, not an admin
@@ -716,7 +730,7 @@ export function AdminDataProvider({ children }) {
         getPrice, setPrice,
         getTier, setTier,
         realUsers, realUsersLoading, realUsersError, refetchRealUsers,
-        realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus,
+        realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus, refundOrder,
         getStock, setStock,
         getAllProducts, addProduct, removeProduct, setProductPhoto,
         realProductsLoading, realProductsError, refetchRealProducts,

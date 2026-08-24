@@ -56,6 +56,20 @@ async function query(text, params = []) {
       );
     values = [id, orderNumber, values[0], values[1], values[2], values[3], values[4], values[5], createdAt];
   } else {
+    // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
+    // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are
+    // strictly positional, each one consuming the next value in the bound array in sequence. A
+    // naive $N -> ? replacement silently misaligns every value the moment any query reuses the
+    // same parameter more than once -- found this the hard way when a stock-decrement query using
+    // $1 twice appeared to run successfully (no error, a real row affected) but silently updated
+    // the wrong thing, since SQLite happily bound whatever positional value happened to be at
+    // that slot. Expands the values array to match each actual placeholder occurrence, in order,
+    // before doing the replacement -- rather than assuming every earlier query in this file
+    // happened to only need each $N once, which was true by chance, not by design.
+    const paramMatches = [...sql.matchAll(/\$(\d+)/g)];
+    if (paramMatches.length > 0) {
+      values = paramMatches.map((m) => values[parseInt(m[1], 10) - 1]);
+    }
     sql = sql.replace(/\$(\d+)/g, "?").replace(/\bnow\(\)/gi, "datetime('now')");
   }
 

@@ -305,10 +305,11 @@ export function AdminAnalytics() {
 }
 
 export function AdminOrders() {
-  const { realOrders: allOrdersSorted, realOrdersLoading: loading, realOrdersError: loadError, refetchRealOrders, updateOrderStatus } = useAdmin();
+  const { realOrders: allOrdersSorted, realOrdersLoading: loading, realOrdersError: loadError, refetchRealOrders, updateOrderStatus, refundOrder } = useAdmin();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
+  const [refunding, setRefunding] = useState(null);
   const filtered = allOrdersSorted.filter((o) => {
     const q = query.toLowerCase();
     return !q || o.orderNumber.toLowerCase().includes(q) || o.customerEmail.toLowerCase().includes(q) || o.status.toLowerCase().includes(q);
@@ -336,6 +337,14 @@ export function AdminOrders() {
   const changeStatus = async (o, status) => {
     const result = await updateOrderStatus(o.id, status);
     if (!result.ok) window.alert(result.error); // a plain alert, not a toast -- this component has no useToast() wired in, and adding one just for this single error path isn't worth it given how rare a failure here should be
+  };
+
+  const handleRefund = async (o) => {
+    if (!window.confirm(`Process a real refund for ${o.orderNumber} via Paystack? This calls Paystack's real refund API -- it can take up to 10 business days for the customer to actually receive the funds.`)) return;
+    setRefunding(o.id);
+    const result = await refundOrder(o.id);
+    setRefunding(null);
+    if (!result.ok) window.alert(result.error);
   };
 
   if (loading) return <p className="hint">Loading orders…</p>;
@@ -374,15 +383,17 @@ export function AdminOrders() {
               <span>{o.items.reduce((s, it) => s + it.qty, 0)} items</span>
               <span>{fmtPrice(o.totalCents)}</span>
               <span className={`payment-badge ${o.paymentStatus}`}>
-                {o.paymentStatus}
+                {o.paymentStatus === "refund_pending" ? "refund pending" : o.paymentStatus}
                 {o.paymentMode === "test" && <span className="payment-mode-badge" title="Paid with a Paystack test key — not real money">TEST</span>}
               </span>
               <span className="admin-inline-edit">
                 <select value={o.status} onChange={(e) => changeStatus(o, e.target.value)}>
                   {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
                 </select>
-                {o.status !== "Cancelled" && o.status !== "Refunded" && (
-                  <button className="link-btn" onClick={() => { if (window.confirm(`Mark ${o.orderNumber} as refunded? This is a record only — no real payment is processed.`)) { changeStatus(o, "Refunded"); } }}>Refund</button>
+                {o.paymentStatus === "refund_pending" && (
+                  <button className="link-btn" onClick={() => handleRefund(o)} disabled={refunding === o.id}>
+                    {refunding === o.id ? "Processing…" : "Process refund"}
+                  </button>
                 )}
               </span>
             </div>

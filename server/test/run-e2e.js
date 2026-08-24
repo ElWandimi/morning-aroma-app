@@ -17,6 +17,7 @@ const resendMock = require("./resend.mock.js");
 require.cache[resendPath] = { id: resendPath, filename: resendPath, loaded: true, exports: resendMock };
 
 const app = require("../src/app");
+const { query } = require("./db.sqlite.js"); // direct DB access for test setup unreachable via the API (e.g. backdating a timestamp)
 
 let pass = 0, fail = 0;
 function check(label, condition) {
@@ -197,12 +198,79 @@ async function main() {
     token // placed by the admin account, not the customer
   );
   const cancelWrongOwner = await post(`/orders/${secondOrder.body.order.id}/cancel`, {}, customerToken);
-  check("returns 400 -- can't cancel an order that isn't yours", cancelWrongOwner.status === 400);
+  check("returns 404 -- same as verify-payment, not leaking that the order exists but belongs to someone else", cancelWrongOwner.status === 404);
 
   console.log("\nPOST /orders/:id/cancel on your own order while still Processing:");
   const cancelOk = await post(`/orders/${secondOrder.body.order.id}/cancel`, {}, token);
   check("returns 200", cancelOk.status === 200);
   check("status is now Cancelled", cancelOk.body.order && cancelOk.body.order.status === "Cancelled");
+
+  console.log("\nCancelling a PAID order within the window -- the real new behavior:");
+  const cancelProduct = await post("/products", { name: "Cancel Test Bean", country: "Testlandia", tier: "everyday", priceCents: 1000, stock: 20 }, token);
+  const cancelProductId = cancelProduct.body.product.id;
+  const cancelPaidOrder = await post("/orders", { items: [{ id: cancelProductId, qty: 4, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  const cancelPaidReference = `MA-${cancelPaidOrder.body.order.orderNumber.replace("MA-", "")}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 4 * 1000 / 100 * 130 * 100 });
+  await post(`/orders/${cancelPaidOrder.body.order.id}/verify-payment`, { reference: cancelPaidReference }, customerToken);
+  resendMock.resetSentEmails();
+  process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
+
+  const stockBeforeCancel = (await get("/products")).body.products.find((p) => p.id === cancelProductId).stock;
+  const cancelPaidResult = await post(`/orders/${cancelPaidOrder.body.order.id}/cancel`, {}, customerToken);
+  check("returns 200 -- still within the 10-minute window, just paid moments ago", cancelPaidResult.status === 200);
+  check("payment status becomes refund_pending, not just Cancelled -- a real refund is now owed", cancelPaidResult.body.order && cancelPaidResult.body.order.paymentStatus === "refund_pending");
+  check("fulfillment status is Cancelled", cancelPaidResult.body.order && cancelPaidResult.body.order.status === "Cancelled");
+
+  const stockAfterCancel = (await get("/products")).body.products.find((p) => p.id === cancelProductId).stock;
+  check("stock was genuinely restored -- these items are no longer being fulfilled", stockAfterCancel === stockBeforeCancel + 4);
+
+  const refundEmails = resendMock.getSentEmails();
+  check("the super_admin was actually emailed about the refund needed, not just a silent status change", refundEmails.length >= 1 && refundEmails.some((e) => e.subject.includes("Refund needed")));
+  delete process.env.RESEND_API_KEY;
+
+  console.log("\nCancelling a PAID order OUTSIDE the window is rejected:");
+  const expiredProduct = await post("/products", { name: "Expired Window Bean", country: "Testlandia", tier: "everyday", priceCents: 1000, stock: 10 }, token);
+  const expiredOrder = await post("/orders", { items: [{ id: expiredProduct.body.product.id, qty: 1, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  const expiredReference = `MA-${expiredOrder.body.order.orderNumber.replace("MA-", "")}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 1000 / 100 * 130 * 100 });
+  await post(`/orders/${expiredOrder.body.order.id}/verify-payment`, { reference: expiredReference }, customerToken);
+  // Backdating paid_at directly -- there's no real way to wait 11 real minutes in a test, and no
+  // reason production code should expose a way to fake the clock just to make this testable.
+  const elevenMinutesAgo = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+  await query("UPDATE orders SET paid_at = $1 WHERE id = $2", [elevenMinutesAgo, expiredOrder.body.order.id]);
+  const expiredCancelResult = await post(`/orders/${expiredOrder.body.order.id}/cancel`, {}, customerToken);
+  check("returns 400 -- the window has genuinely passed", expiredCancelResult.status === 400);
+  const stillPaid = await get("/orders/mine", customerToken);
+  const stillPaidOrder = stillPaid.body.orders.find((o) => o.id === expiredOrder.body.order.id);
+  check("order genuinely wasn't touched -- still paid and Processing, not left in a half-cancelled state", stillPaidOrder && stillPaidOrder.status === "Processing" && stillPaidOrder.paymentStatus === "paid");
+
+  console.log("\nPOST /orders/:id/refund as a non-admin:");
+  const refundAsCustomer = await post(`/orders/${cancelPaidOrder.body.order.id}/refund`, {}, customerToken);
+  check("returns 403", refundAsCustomer.status === 403);
+
+  console.log("\nPOST /orders/:id/refund for an order that isn't awaiting one:");
+  const refundNotPending = await post(`/orders/${expiredOrder.body.order.id}/refund`, {}, token);
+  check("returns 400 -- this order's payment_status is 'paid', not 'refund_pending'", refundNotPending.status === 400);
+
+  console.log("\nPOST /orders/:id/refund — the real, successful case:");
+  paystackMock.setNextRefundResponse({ status: "pending", amount: 4 * 1000, currency: "KES" });
+  const refundOk = await post(`/orders/${cancelPaidOrder.body.order.id}/refund`, {}, token);
+  check("returns 200", refundOk.status === 200);
+  check("payment status is now genuinely refunded", refundOk.body.order && refundOk.body.order.paymentStatus === "refunded");
+
+  console.log("\nPOST /orders/:id/refund when Paystack itself rejects the refund:");
+  const secondCancelProduct = await post("/products", { name: "Second Cancel Bean", country: "Testlandia", tier: "everyday", priceCents: 1000, stock: 10 }, token);
+  const secondCancelOrder = await post("/orders", { items: [{ id: secondCancelProduct.body.product.id, qty: 1, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  const secondCancelReference = `MA-${secondCancelOrder.body.order.orderNumber.replace("MA-", "")}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 1000 / 100 * 130 * 100 });
+  await post(`/orders/${secondCancelOrder.body.order.id}/verify-payment`, { reference: secondCancelReference }, customerToken);
+  await post(`/orders/${secondCancelOrder.body.order.id}/cancel`, {}, customerToken);
+  paystackMock.setNextRefundError("Simulated Paystack outage");
+  const refundFails = await post(`/orders/${secondCancelOrder.body.order.id}/refund`, {}, token);
+  check("returns 502, a real upstream failure -- not silently marked refunded anyway", refundFails.status === 502);
+  const stillPendingAfterFailure = await get("/orders/mine", customerToken);
+  const stillPendingOrder = stillPendingAfterFailure.body.orders.find((o) => o.id === secondCancelOrder.body.order.id);
+  check("order genuinely stays refund_pending -- a failed Paystack call must never be silently treated as success", stillPendingOrder && stillPendingOrder.paymentStatus === "refund_pending");
 
   // orderId's order totals 6200 cents ($62.00). At the mock's fixed rate (130 KES/USD), the
   // expected charge is 62 * 130 * 100 = 806000 KES cents.
@@ -403,6 +471,37 @@ async function main() {
   check("returns 200", deleteOk.status === 200);
   const productsAfterDelete = await get("/products");
   check("the discontinued product no longer appears in the public list", !productsAfterDelete.body.products.some((p) => p.id === testProductId));
+
+  console.log("\nStock decrements on real payment, not on order creation:");
+  const stockTestProduct = await post("/products", { name: "Stock Test Bean", country: "Testlandia", tier: "everyday", priceCents: 1000, stock: 10 }, token);
+  const stockProductId = stockTestProduct.body.product.id;
+  const stockOrder = await post("/orders", { items: [{ id: stockProductId, qty: 3, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  const stockAfterCreate = await get("/products");
+  const foundAfterCreate = stockAfterCreate.body.products.find((p) => p.id === stockProductId);
+  check("stock is NOT touched just by creating an order -- only a genuine payment should reduce it", foundAfterCreate && foundAfterCreate.stock === 10);
+
+  const stockReference = `MA-${stockOrder.body.order.orderNumber.replace("MA-", "")}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 3 * 1000 / 100 * 130 * 100 });
+  const stockVerify = await post(`/orders/${stockOrder.body.order.id}/verify-payment`, { reference: stockReference }, customerToken);
+  check("payment verifies successfully", stockVerify.status === 200);
+  const stockAfterPay = await get("/products");
+  const foundAfterPay = stockAfterPay.body.products.find((p) => p.id === stockProductId);
+  check("stock genuinely decremented by the real quantity ordered once payment is confirmed", foundAfterPay && foundAfterPay.stock === 7);
+
+  console.log("\nStock never goes negative, even if more is ordered and paid than remains:");
+  const overorderProduct = await post("/products", { name: "Nearly Sold Out Bean", country: "Testlandia", tier: "everyday", priceCents: 1000, stock: 2 }, token);
+  const overorderId = overorderProduct.body.product.id;
+  const overorder = await post("/orders", { items: [{ id: overorderId, qty: 2, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  const overorderReference = `MA-${overorder.body.order.orderNumber.replace("MA-", "")}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 2 * 1000 / 100 * 130 * 100 });
+  await post(`/orders/${overorder.body.order.id}/verify-payment`, { reference: overorderReference }, customerToken);
+  const secondOverorder = await post("/orders", { items: [{ id: overorderId, qty: 5, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
+  const secondOverorderReference = `MA-${secondOverorder.body.order.orderNumber.replace("MA-", "")}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 5 * 1000 / 100 * 130 * 100 });
+  await post(`/orders/${secondOverorder.body.order.id}/verify-payment`, { reference: secondOverorderReference }, customerToken);
+  const stockAfterOverorder = await get("/products");
+  const foundAfterOverorder = stockAfterOverorder.body.products.find((p) => p.id === overorderId);
+  check("stock is clamped at zero, never negative, even when paid orders exceed what was available", foundAfterOverorder && foundAfterOverorder.stock === 0);
 
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });

@@ -3,10 +3,17 @@ const { query } = require("../db");
 const { requireAuth } = require("../middleware/requireAuth");
 const { requireAdmin } = require("../middleware/requireAdmin");
 const { verifyAndMarkOrderPaid } = require("../utils/paymentVerification");
+const { initiateRefund } = require("../utils/paystack");
+const { sendRefundNeededEmail } = require("../utils/email");
 
 const router = express.Router();
 
 const VALID_STATUSES = ["Processing", "Roasting", "Shipped", "Delivered", "Cancelled", "Refunded"];
+// How long after payment a customer can still self-cancel. Chosen as the upper end of a
+// reasonable range (5-10 minutes) -- generous enough for a genuine "wrong item, changed my mind"
+// moment right after checkout, without staying open so long that fulfillment could reasonably
+// have already started.
+const CANCELLATION_WINDOW_MINUTES = 10;
 
 function publicOrder(row) {
   return {
@@ -112,13 +119,97 @@ router.patch("/:id/status", requireAuth, requireAdmin, async (req, res) => {
 // only works from Processing, the one stage before roasting begins -- once fulfillment has
 // actually started, only admin can change status further, including to Cancelled/Refunded.
 router.post("/:id/cancel", requireAuth, async (req, res) => {
+  const orderResult = await query("SELECT * FROM orders WHERE id = $1 AND user_id = $2", [req.params.id, req.user.sub]);
+  const order = orderResult.rows[0];
+  if (!order) {
+    return res.status(404).json({ error: "No order found with that ID." });
+  }
+  if (order.status !== "Processing") {
+    return res.status(400).json({ error: "This order can't be cancelled — it's already moved past Processing." });
+  }
+  // Unpaid orders (an abandoned checkout that never completed payment) can still be cancelled
+  // anytime -- there's no real money involved yet, so no window restriction makes sense. A paid
+  // order is different: self-cancellation is only available for a limited window after payment,
+  // not indefinitely while Processing, since a real refund becomes owed and fulfillment may
+  // already be underway past a certain point.
+  if (order.payment_status === "paid") {
+    const paidAtMs = new Date(order.paid_at).getTime();
+    const windowMs = CANCELLATION_WINDOW_MINUTES * 60 * 1000;
+    if (Date.now() - paidAtMs > windowMs) {
+      return res.status(400).json({
+        error: `The ${CANCELLATION_WINDOW_MINUTES}-minute cancellation window for paid orders has passed. Please contact us directly if you still need to cancel this order.`,
+      });
+    }
+  }
+
   const result = await query(
-    "UPDATE orders SET status = 'Cancelled' WHERE id = $1 AND user_id = $2 AND status = 'Processing' RETURNING *",
-    [req.params.id, req.user.sub]
+    "UPDATE orders SET status = 'Cancelled' WHERE id = $1 AND status = 'Processing' RETURNING *",
+    [req.params.id]
   );
   if (!result.rows[0]) {
-    return res.status(400).json({ error: "This order can't be cancelled — it may not exist, belong to you, or has already moved past Processing." });
+    // Lost a race with something else changing this order's status between the SELECT above and
+    // this UPDATE -- rare, but a real possibility, and worth its own honest message rather than
+    // silently succeeding on a cancellation that didn't actually happen.
+    return res.status(400).json({ error: "This order can't be cancelled — it may have just moved past Processing." });
   }
+  const cancelled = result.rows[0];
+
+  if (order.payment_status === "paid") {
+    // Restore stock -- these items are no longer being fulfilled. Same portable CASE WHEN
+    // pattern as the decrement in paymentVerification.js, though restoring can't itself push
+    // stock negative the way decrementing could, so the clamp here is more a consistency
+    // convention than a real necessity.
+    for (const item of cancelled.items) {
+      await query("UPDATE products SET stock = stock + $1 WHERE id = $2", [item.qty, item.id]);
+    }
+
+    // A real refund is now owed -- mark it distinctly from "paid" so it's visibly trackable in
+    // Admin Orders, and notify every super_admin so someone actually acts on it. Refunds are
+    // deliberately a manual, admin-triggered action (POST /:id/refund below), not automatic --
+    // notifying is the only mechanism connecting a cancellation to that action actually happening.
+    const refundPendingResult = await query(
+      "UPDATE orders SET payment_status = 'refund_pending' WHERE id = $1 RETURNING *",
+      [cancelled.id]
+    );
+    const finalOrder = refundPendingResult.rows[0];
+
+    const admins = await query("SELECT email FROM users WHERE role = 'super_admin'", []);
+    for (const admin of admins.rows) {
+      sendRefundNeededEmail(admin.email, finalOrder).catch((err) => console.error("Failed to send refund-needed notification:", err));
+    }
+
+    return res.json({ order: publicOrder(finalOrder) });
+  }
+
+  res.json({ order: publicOrder(cancelled) });
+});
+
+// Real refund via Paystack's own API, triggered only by a deliberate admin action -- never
+// automatic. Requires the order to genuinely be in refund_pending (set by a customer cancellation
+// above), not just any paid order, so this can't be used to refund an order that's still being
+// legitimately fulfilled.
+router.post("/:id/refund", requireAuth, requireAdmin, async (req, res) => {
+  const orderResult = await query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+  const order = orderResult.rows[0];
+  if (!order) return res.status(404).json({ error: "No order found with that ID." });
+  if (order.payment_status !== "refund_pending") {
+    return res.status(400).json({ error: "This order isn't awaiting a refund." });
+  }
+  if (!order.paystack_reference) {
+    return res.status(400).json({ error: "This order has no payment reference to refund against." });
+  }
+
+  try {
+    await initiateRefund(order.paystack_reference);
+  } catch (e) {
+    return res.status(502).json({ error: e.message });
+  }
+
+  const result = await query(
+    "UPDATE orders SET payment_status = 'refunded' WHERE id = $1 AND payment_status = 'refund_pending' RETURNING *",
+    [req.params.id]
+  );
+  if (!result.rows[0]) return res.status(400).json({ error: "This order isn't awaiting a refund." });
   res.json({ order: publicOrder(result.rows[0]) });
 });
 

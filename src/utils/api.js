@@ -60,6 +60,8 @@ export const api = {
     request(`/orders/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
   verifyPayment: (token, id, reference) =>
     request(`/orders/${id}/verify-payment`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reference }) }),
+  refundOrder: (token, id) =>
+    request(`/orders/${id}/refund`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
   getProducts: () => request("/products"),
   createProduct: (token, product) =>
     request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),

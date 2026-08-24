@@ -74,4 +74,27 @@ your password hasn't been changed.`;
   await sendEmail("Password reset email", email, subject, body);
 }
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail };
+// Sent to every super_admin the moment a customer cancels a paid order (see
+// routes/orders.js's POST /:id/cancel) -- a real refund is now owed, and this is the only signal
+// an admin gets that one is needed, since refunds are deliberately a manual, admin-triggered
+// action (POST /:id/refund) rather than fully automatic. Fire-and-forget from the caller's
+// perspective, same as every other email in this file -- a notification failing to send must
+// never block the cancellation itself from succeeding.
+async function sendRefundNeededEmail(adminEmail, order) {
+  const subject = `Refund needed — ${order.order_number ? `MA-${order.order_number}` : "an order"} (${(order.total_cents / 100).toFixed(2)} USD)`;
+  const body = `A customer has cancelled a paid order within the cancellation window and is owed a refund.
+
+Order: MA-${order.order_number}
+Amount paid: ${order.paid_currency || "KES"} ${order.paid_amount_cents ? (order.paid_amount_cents / 100).toFixed(2) : "—"}
+Paystack reference: ${order.paystack_reference || "—"}
+
+Please process this refund soon — aim for within 2 hours of cancellation, since the customer is
+waiting on their money back. You can trigger it directly from Admin > Orders (which calls
+Paystack's real refund API on your behalf), or process it manually from your Paystack dashboard.
+
+Note Paystack itself can take up to 10 business days to actually deliver funds back to the
+customer once a refund is initiated -- initiating it promptly is what's in your control.`;
+  await sendEmail("Refund needed notification", adminEmail, subject, body);
+}
+
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendRefundNeededEmail };
