@@ -16,7 +16,12 @@ const DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeO0eNwUeIB0ByLA4x/LurpKMoY2rrRj5G
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  // A real limit of 20 protects against brute-forcing login/register in production. Test mode
+  // needs it raised, not disabled -- a thorough test suite legitimately makes far more requests
+  // to these routes in a single short run than any real user session would, and the limiter
+  // being active at all (just with more headroom) still catches a genuine regression where some
+  // code path starts looping or retrying unexpectedly.
+  max: process.env.NODE_ENV === "test" ? 1000 : 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many attempts. Try again in a few minutes." },

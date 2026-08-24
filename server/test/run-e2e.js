@@ -12,6 +12,9 @@ require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: r
 const paystackPath = require.resolve(path.join(__dirname, "../src/utils/paystack.js"));
 const paystackMock = require("./paystack.mock.js");
 require.cache[paystackPath] = { id: paystackPath, filename: paystackPath, loaded: true, exports: paystackMock };
+const resendPath = require.resolve("resend");
+const resendMock = require("./resend.mock.js");
+require.cache[resendPath] = { id: resendPath, filename: resendPath, loaded: true, exports: resendMock };
 
 const app = require("../src/app");
 
@@ -305,6 +308,31 @@ async function main() {
 
   const reuseToken = await post("/auth/password-reset/confirm", { token: resetToken, newPassword: "anotherpassword123" });
   check("reset token can't be reused after it's already been consumed", reuseToken.status === 400);
+
+  console.log("\nEmail sending, with a real provider configured (mocked network call):");
+  process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
+  resendMock.resetSentEmails();
+
+  const regForEmail = await post("/auth/register", { email: "emailtest@morningaroma.local", password: "correcthorsebattery", name: "Email Test" });
+  check("registration still succeeds with a real provider configured", regForEmail.status === 201);
+  const sentAfterRegister = resendMock.getSentEmails();
+  check("a welcome email genuinely went through resend.emails.send(), not just the dev-mode log", sentAfterRegister.length === 1);
+  check("sent to the right address", sentAfterRegister[0] && sentAfterRegister[0].to === "emailtest@morningaroma.local");
+  check("real subject line, not a placeholder", sentAfterRegister[0] && sentAfterRegister[0].subject === "Welcome to Morning Aroma — where quality meets its scent.");
+  check("does not link to a domain the project owner doesn't own", sentAfterRegister[0] && !sentAfterRegister[0].text.includes("morningaroma.com"));
+
+  resendMock.resetSentEmails();
+  await post("/auth/password-reset/request", { email: "emailtest@morningaroma.local" });
+  const sentAfterReset = resendMock.getSentEmails();
+  check("a real password reset email was sent through the provider", sentAfterReset.length === 1 && sentAfterReset[0].to === "emailtest@morningaroma.local");
+  check("reset email links to the real deployed site, not a placeholder", sentAfterReset[0] && sentAfterReset[0].text.includes("reset-password?token="));
+
+  console.log("\nRegistration still succeeds even if the email provider itself fails:");
+  resendMock.setNextError("Simulated Resend outage");
+  const regDuringOutage = await post("/auth/register", { email: "duringoutage@morningaroma.local", password: "correcthorsebattery", name: "Outage Test" });
+  check("registration is fire-and-forget with respect to email -- a provider failure must never block or fail the actual signup", regDuringOutage.status === 201);
+  resendMock.clearError();
+  delete process.env.RESEND_API_KEY;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();

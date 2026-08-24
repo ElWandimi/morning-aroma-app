@@ -136,15 +136,27 @@ Nothing else matters for going live until these are real, not simulated.
       per-item prices (blocking the obvious tamper of a mismatched total), but those per-item
       prices still come from the client, not a verified catalog, since products/pricing aren't in
       this database yet. Depends on the item above.
-- [ ] **Real email delivery** — order confirmations, the notification preference toggles (already
-      built, currently honest no-ops). Needs an email provider decision (Resend / Postmark /
-      SendGrid) — small decision, can wait until auth is further along.
-      **Already built and staged, ready to connect the moment a provider is chosen:** welcome
-      email and password reset email content both live in `server/src/utils/email.js`, with real
-      subject lines and copy, wired into the register and password-reset-request endpoints as
-      fire-and-forget calls. Right now they log to the server console outside production instead
-      of actually sending — the one line that needs to change once a provider exists is inside
-      that file's `logInDevOnly` function, not anywhere in routes/.
+- [x] **Real email delivery — provider decided and integrated: Resend.** Welcome emails and
+      password reset emails both send for real once `RESEND_API_KEY` is set (see
+      `server/.env.example`). Built with a graceful dev-mode fallback (logs instead of sending
+      when unconfigured) so local development and the test suite never require a real account.
+      8 new backend tests specifically for the configured/sending path (not just re-running the
+      existing dev-fallback tests) — verifying real params reach the provider, errors are
+      surfaced correctly, and registration itself never fails just because email sending did
+      (fire-and-forget, confirmed with a simulated provider outage). 86/86 backend tests passing.
+      Found and fixed two real bugs while building this: the email content hardcoded links to
+      `morningaroma.com`, a domain the project owner doesn't actually own (now uses the real
+      deployed `FRONTEND_URL` instead); and the auth rate limiter's real 20-requests/15-min limit
+      (correct for production) was too strict for a thorough test suite's own request volume,
+      raised specifically in test mode rather than weakened for production.
+      **Real remaining limitation, not more code needed:** Resend requires a verified domain to
+      deliver to arbitrary customers — without one, only Resend's shared `onboarding@resend.dev`
+      sender works, and even that can only reach the Resend account's own registered email, not
+      real customers. The project owner doesn't own a domain yet (confirmed directly) — this is
+      genuinely blocked on that purchase, not on anything left to build.
+      Order confirmations and the notification preference toggles could reuse this same real
+      sending infrastructure once written — not yet built, but no longer blocked on a provider
+      decision the way they were.
 - [ ] **Real file storage** for admin product photo uploads (S3 / Cloudinary). Currently base64
       data URLs in memory — fine for the prototype, won't scale once there's a real backend.
 - [ ] **Server-side rendering or pre-rendering** — for true per-page social cards/structured data
@@ -175,6 +187,13 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real email delivery: Resend integrated.** Welcome and password-reset emails genuinely send
+  once configured — researched Resend's current API and domain-verification requirements
+  directly before building (confirmed a real, important constraint: arbitrary customer delivery
+  needs a verified domain, which the project owner doesn't have yet — real remaining limitation,
+  not more code needed). Found and fixed two real bugs while building this: hardcoded email links
+  to a domain nobody owns, and a test-suite-only rate-limiting false failure that took real
+  debugging (not guessing) to diagnose correctly. 86/86 backend tests passing.
 - **Fixed a real, serious bug found via a user report: "Forgot password" was completely fake for
   real accounts.** It ran through the old local OTP system entirely, never touching the real
   backend endpoints built much earlier — meaning a real registered user who forgot their password

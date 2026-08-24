@@ -44,10 +44,13 @@ to exist here too, which is its own, larger piece of work.
 
 ## What's *not* here yet
 
-- **Real email delivery.** Password reset tokens are logged to the server console in development
-  (`NODE_ENV !== "production"`) instead of emailed — there's no email provider wired up yet (see
-  ROADMAP.md Tier 2). The token logic itself is fully built and tested; only the "send an email"
-  step is missing.
+- **Real email delivery to arbitrary customers.** Real Resend integration is built and tested
+  (`server/src/utils/email.js`) — welcome emails and password reset emails genuinely send once
+  `RESEND_API_KEY` is set (see `.env.example`). The real limitation: Resend requires a verified
+  domain to deliver to arbitrary recipients; without one, the only working sender is Resend's own
+  `onboarding@resend.dev`, which can only reach the Resend account's own registered email, not
+  real customers. The project owner doesn't own a domain yet — this is genuinely blocked on that,
+  not on more code.
 - **2FA and Google OAuth.** The frontend has UI for both already; this backend doesn't implement
   either side yet.
 
