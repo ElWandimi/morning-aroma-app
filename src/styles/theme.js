@@ -634,6 +634,7 @@ a { color: inherit; text-decoration: none; }
 .payment-badge.unpaid { background: #fdecea; color: #b3261e; }
 .payment-badge.paid { background: #e6f4ea; color: #1e7e34; }
 .payment-badge.refunded { background: var(--steam); color: var(--chestnut); }
+.payment-mode-badge { display: inline-block; margin-left: 5px; padding: 1px 6px; border-radius: 10px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.03em; background: #fff3cd; color: #7a5c00; }
 
 .admin-card-list { display: flex; flex-direction: column; gap: 12px; }
 .admin-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-left: 3px solid var(--terracotta-btn); border-radius: 12px; padding: 16px; box-shadow: 0 6px 16px rgba(62,44,35,0.07); transition: box-shadow .15s ease; }

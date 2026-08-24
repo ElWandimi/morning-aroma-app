@@ -30,5 +30,6 @@ CREATE TABLE orders (
   paid_amount_cents   INTEGER,
   paid_currency       TEXT,
   paid_at             TEXT,
+  payment_mode        TEXT,
   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );

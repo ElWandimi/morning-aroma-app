@@ -205,6 +205,14 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Payment mode tracking added, ahead of switching to live Paystack keys.** Without this, a real
+  transaction and a test one would look identical in the orders table once both key types had
+  ever been used — both just "paid," KES amount, no way to tell them apart. Every payment now
+  records whether it went through a test or live key at the moment of verification, surfaced as a
+  small badge in Admin Orders and included in the CSV export, since once real money is actually
+  involved this distinction matters for real bookkeeping. 3 new tests, including confirming the
+  detection genuinely distinguishes live from test rather than just defaulting to one value.
+  100/100 backend tests passing.
 - **Paystack webhook built — real payment confirmation no longer depends on the customer's browser
   staying open.** Researched the real webhook docs directly before building; found and correctly
   handled the single detail most implementations get wrong (signature verification needs the raw,

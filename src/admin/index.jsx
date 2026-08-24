@@ -327,9 +327,9 @@ export function AdminOrders() {
   });
   const { page, setPage, pageItems, totalPages } = usePagination(orders, 10);
   const STATUSES = ["Processing", "Roasting", "Shipped", "Delivered", "Cancelled", "Refunded"];
-  const exportOrders = () => exportToCSV("orders", ["Order", "Customer", "Date", "Items", "Total (USD)", "Payment", "Status"], orders.map((o) => [
+  const exportOrders = () => exportToCSV("orders", ["Order", "Customer", "Date", "Items", "Total (USD)", "Payment", "Mode", "Status"], orders.map((o) => [
     o.orderNumber, o.customerEmail, o.createdAt.slice(0, 10), o.items.reduce((s, it) => s + it.qty, 0),
-    (o.totalCents / 100).toFixed(2), o.paymentStatus, o.status,
+    (o.totalCents / 100).toFixed(2), o.paymentStatus, o.paymentMode || "", o.status,
   ]));
   const sortArrow = (field) => (sortBy === field ? (sortDir === "asc" ? " ↑" : " ↓") : "");
 
@@ -373,7 +373,10 @@ export function AdminOrders() {
               <span>{o.createdAt.slice(0, 10)}</span>
               <span>{o.items.reduce((s, it) => s + it.qty, 0)} items</span>
               <span>{fmtPrice(o.totalCents)}</span>
-              <span className={`payment-badge ${o.paymentStatus}`}>{o.paymentStatus}</span>
+              <span className={`payment-badge ${o.paymentStatus}`}>
+                {o.paymentStatus}
+                {o.paymentMode === "test" && <span className="payment-mode-badge" title="Paid with a Paystack test key — not real money">TEST</span>}
+              </span>
               <span className="admin-inline-edit">
                 <select value={o.status} onChange={(e) => changeStatus(o, e.target.value)}>
                   {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}

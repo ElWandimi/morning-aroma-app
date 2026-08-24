@@ -285,6 +285,24 @@ async function main() {
   const foundAfterWebhook = orderAfterWebhook.body.orders.find((o) => o.id === webhookOrder.body.order.id);
   check("the order is genuinely marked paid in the database -- not just a 200 response, an actual state change with no frontend verify-payment call ever involved", foundAfterWebhook && foundAfterWebhook.paymentStatus === "paid");
   check("the real paystack reference from the webhook payload was stored", foundAfterWebhook && foundAfterWebhook.paystackReference === webhookReference);
+  check("correctly recorded as a test-mode payment, since this whole suite runs under a sk_test_ key", foundAfterWebhook && foundAfterWebhook.paymentMode === "test");
+
+  console.log("\nPayment mode detection actually distinguishes live from test, not just defaulting to one value:");
+  const liveModeOrder = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 500 }], shippingName: "Second User", shippingAddress: "123 Coffee St", shippingCity: "Nairobi" },
+    customerToken
+  );
+  // 500 cents ($5.00) at the mock's 130 rate = 65000 KES cents.
+  const liveModeOrderNumber = liveModeOrder.body.order.orderNumber.replace("MA-", "");
+  const liveModeReference = `MA-${liveModeOrderNumber}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 65000 });
+  const previousKey = process.env.PAYSTACK_SECRET_KEY;
+  process.env.PAYSTACK_SECRET_KEY = "sk_live_fake_key_simulating_a_real_live_key_for_this_one_check";
+  const liveModeVerify = await post(`/orders/${liveModeOrder.body.order.id}/verify-payment`, { reference: liveModeReference }, customerToken);
+  process.env.PAYSTACK_SECRET_KEY = previousKey; // restored immediately, so no other test in this suite is affected
+  check("payment still verifies correctly under a live-shaped key", liveModeVerify.status === 200);
+  check("correctly recorded as live, not defaulted to test", liveModeVerify.body.order && liveModeVerify.body.order.paymentMode === "live");
 
   console.log("\nWebhook idempotency -- Paystack redelivering the same already-processed event:");
   paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 390000 });

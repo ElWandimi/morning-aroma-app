@@ -57,11 +57,18 @@ async function verifyAndMarkOrderPaid(order, reference) {
   // stops matching the instant the first one's UPDATE commits. The unique index on
   // paystack_reference (see migrations/003_paystack.sql) is the second, database-level layer of
   // the same guarantee: even a reference reused across two different orders can't both succeed.
+  //
+  // paymentMode: Paystack's test and live keys are entirely separate credentials (sk_test_... vs
+  // sk_live_...) -- whichever one is currently configured is the one that actually processed this
+  // transaction, so its prefix is a reliable way to record which mode a payment happened in. Once
+  // real money is involved, this is the only thing that distinguishes genuine revenue from test
+  // transactions sitting in the same table (see migrations/004_payment_mode.sql).
+  const paymentMode = (process.env.PAYSTACK_SECRET_KEY || "").startsWith("sk_live_") ? "live" : "test";
   try {
     const result = await query(
-      `UPDATE orders SET payment_status = 'paid', paystack_reference = $1, paid_amount_cents = $2, paid_currency = $3, paid_at = now()
-       WHERE id = $4 AND payment_status = 'unpaid' RETURNING *`,
-      [transaction.reference, transaction.amount, transaction.currency, order.id]
+      `UPDATE orders SET payment_status = 'paid', paystack_reference = $1, paid_amount_cents = $2, paid_currency = $3, paid_at = now(), payment_mode = $4
+       WHERE id = $5 AND payment_status = 'unpaid' RETURNING *`,
+      [transaction.reference, transaction.amount, transaction.currency, paymentMode, order.id]
     );
     if (!result.rows[0]) return { ok: false, error: "This order has already been paid." };
     return { ok: true, order: result.rows[0] };

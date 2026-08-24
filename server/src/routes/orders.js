@@ -23,6 +23,7 @@ function publicOrder(row) {
     paidAmountCents: row.paid_amount_cents,
     paidCurrency: row.paid_currency,
     paidAt: row.paid_at,
+    paymentMode: row.payment_mode,
     createdAt: row.created_at,
     // Only present on the admin listing (joined in there) — a customer's own /orders/mine
     // response has no reason to include their own email back to them on every order.
