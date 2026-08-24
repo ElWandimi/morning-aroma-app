@@ -15,6 +15,26 @@ CREATE TABLE users (
   created_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE products (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  country             TEXT NOT NULL,
+  tier                TEXT NOT NULL,
+  price_cents         INTEGER NOT NULL,
+  stock               INTEGER NOT NULL DEFAULT 0,
+  note                TEXT,
+  tags                TEXT NOT NULL DEFAULT '{}',
+  profile             TEXT NOT NULL DEFAULT '{}',
+  growing             TEXT,
+  brew_guide          TEXT,
+  moment_match        TEXT,
+  course              TEXT,
+  photo_url           TEXT,
+  removed             INTEGER NOT NULL DEFAULT 0,
+  created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE orders (
   id                  TEXT PRIMARY KEY,
   order_number        INTEGER NOT NULL UNIQUE,

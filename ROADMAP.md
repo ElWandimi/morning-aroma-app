@@ -147,13 +147,30 @@ Nothing else matters for going live until these are real, not simulated.
       `realUsers`) rather than each section risking a different view of the same data.
       21 backend tests from building the API, 66/66 passing overall — no new backend tests needed
       for the frontend wiring itself, since the endpoints were already covered.
-- [ ] **Real database, products/pricing** — still frontend static data, not in Postgres. This is
-      what blocks real price integrity on orders (see the limitation noted below) and would also
-      need to happen before Products/Inventory admin edits could persist for real.
+- [x] **Real database, products — backend done, frontend not wired yet.** Found via a real user
+      report after going live with real payments: an admin price edit would show immediately, then
+      silently revert on refresh, because `AdminDataProvider`'s price/tier/stock/photo overrides
+      were always just `useState({})` — plain React memory, never persisted anywhere. Real fix,
+      not a patch: `server/migrations/005_products.sql` (real `products` table), seeded with the 9
+      original products generated *programmatically* from the actual frontend source
+      (`server/scripts/generate-product-seed.mjs`) rather than hand-retyped — directly tested the
+      SQL-escaping logic on a deliberate apostrophe case, not just trusted it worked because the
+      current data happened not to need it. `GET /products` (public — customers browse without
+      signing in), `POST /products` (admin, generates the id as a slug matching the frontend's own
+      `slugify` exactly, since real orders/cart/wishlist already reference products by this id),
+      `PATCH /products/:id` (admin, partial updates — just a price, just a photo), `DELETE
+      /products/:id` (admin, soft-delete, matching the existing "discontinued item" behavior a
+      real past order needs). 21 new backend tests, 121/121 passing.
+      **Frontend not wired yet, on purpose** — Admin Products/Inventory, Shop, Product pages, Cart,
+      Checkout, Search, and the Quiz all still read the old static data + client-only overrides.
+      This is a separate, substantial piece of work, same backend-first/frontend-second split as
+      orders and payments before it. Green coffee (wholesale) products are a parallel system, not
+      covered by this round — a candidate for its own future round if it hits the same problem.
 - [ ] **Order total price integrity** — `POST /orders` recomputes the total from submitted
       per-item prices (blocking the obvious tamper of a mismatched total), but those per-item
-      prices still come from the client, not a verified catalog, since products/pricing aren't in
-      this database yet. Depends on the item above.
+      prices still come from the client, not the now-real product catalog above, since checkout
+      hasn't been wired to `GET /products` yet either. Now genuinely unblocked by real data
+      existing — just needs the wiring.
 - [x] **Real email delivery — provider decided and integrated: Resend.** Welcome emails and
       password reset emails both send for real once `RESEND_API_KEY` is set (see
       `server/.env.example`). Built with a graceful dev-mode fallback (logs instead of sending
@@ -205,6 +222,12 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real products backend built — found from a real bug report right after going live.** An admin
+  price edit would show, then silently revert on refresh, because product/pricing data was never
+  anything but client-side React memory. Real `products` table, seeded with the actual 9 original
+  products generated programmatically from the frontend source (not hand-retyped — a real risk for
+  9 complex nested records), full admin CRUD with public read access. 21 new tests, 121/121
+  passing. Frontend not wired yet, on purpose — same backend-first split as orders and payments.
 - **Payment mode tracking added, ahead of switching to live Paystack keys.** Without this, a real
   transaction and a test one would look identical in the orders table once both key types had
   ever been used — both just "paid," KES amount, no way to tell them apart. Every payment now

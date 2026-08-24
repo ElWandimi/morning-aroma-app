@@ -310,6 +310,74 @@ async function main() {
   check("a redelivered webhook for an already-paid order still returns 200 (Paystack shouldn't keep retrying)", webhookRedelivered.status === 200);
   check("but correctly reports it did NOT re-verify/re-process -- the order was already paid, not paid twice", webhookRedelivered.body.verified === false);
 
+  console.log("\nGET /products — public, no auth needed:");
+  const productsNoAuth = await get("/products");
+  check("returns 200 without any token", productsNoAuth.status === 200);
+  check("returns an array", Array.isArray(productsNoAuth.body.products));
+
+  console.log("\nPOST /products without a token:");
+  const createNoAuth = await post("/products", { name: "Test Bean", country: "Testland", tier: "everyday", priceCents: 1000, stock: 10 });
+  check("returns 401", createNoAuth.status === 401);
+
+  console.log("\nPOST /products as a non-admin:");
+  const createAsCustomer = await post("/products", { name: "Test Bean", country: "Testland", tier: "everyday", priceCents: 1000, stock: 10 }, customerToken);
+  check("returns 403", createAsCustomer.status === 403);
+
+  console.log("\nPOST /products with an invalid tier:");
+  const createBadTier = await post("/products", { name: "Test Bean", country: "Testland", tier: "luxury", priceCents: 1000, stock: 10 }, token);
+  check("returns 400", createBadTier.status === 400);
+
+  console.log("\nPOST /products with a negative price:");
+  const createBadPrice = await post("/products", { name: "Test Bean", country: "Testland", tier: "everyday", priceCents: -500, stock: 10 }, token);
+  check("returns 400", createBadPrice.status === 400);
+
+  console.log("\nPOST /products — a real, valid product:");
+  const createOk = await post("/products", {
+    name: "Test Bean", country: "Testland", tier: "everyday", priceCents: 1500, stock: 25,
+    note: "A test coffee", tags: { aroma: ["nutty"], body: "medium" }, profile: { aroma: 5, body: 5 },
+  }, token);
+  check("returns 201", createOk.status === 201);
+  check("id is generated as a slug from name + country, matching the frontend's own slugify exactly", createOk.body.product && createOk.body.product.id === "test-bean-testland");
+  check("nested tags object round-trips correctly, not flattened or lost", createOk.body.product && createOk.body.product.tags && createOk.body.product.tags.aroma && createOk.body.product.tags.aroma[0] === "nutty");
+  const testProductId = createOk.body.product.id;
+
+  console.log("\nPOST /products with the same name + country again:");
+  const createDup = await post("/products", { name: "Test Bean", country: "Testland", tier: "everyday", priceCents: 1500, stock: 25 }, token);
+  check("returns 409", createDup.status === 409);
+
+  console.log("\nGET /products now includes the new product:");
+  const productsAfterCreate = await get("/products");
+  check("the new product appears in the public list", productsAfterCreate.body.products.some((p) => p.id === testProductId));
+
+  console.log("\nPATCH /products/:id without a token:");
+  const productPatchNoAuth = await patch(`/products/${testProductId}`, { priceCents: 2000 });
+  check("returns 401", productPatchNoAuth.status === 401);
+
+  console.log("\nPATCH /products/:id as a non-admin:");
+  const productPatchAsCustomer = await patch(`/products/${testProductId}`, { priceCents: 2000 }, customerToken);
+  check("returns 403", productPatchAsCustomer.status === 403);
+
+  console.log("\nPATCH /products/:id — a real, partial price-only update:");
+  const patchPriceOnly = await patch(`/products/${testProductId}`, { priceCents: 2000 }, token);
+  check("returns 200", patchPriceOnly.status === 200);
+  check("price actually changed", patchPriceOnly.body.product && patchPriceOnly.body.product.priceCents === 2000);
+  check("fields NOT included in the request are left untouched -- name wasn't sent, but is still there", patchPriceOnly.body.product && patchPriceOnly.body.product.name === "Test Bean");
+  check("stock wasn't sent either, and is also still correct", patchPriceOnly.body.product && patchPriceOnly.body.product.stock === 25);
+
+  console.log("\nPATCH /products/:id for a nonexistent product:");
+  const patchMissing404 = await patch("/products/this-id-does-not-exist", { priceCents: 100 }, token);
+  check("returns 404", patchMissing404.status === 404);
+
+  console.log("\nDELETE /products/:id as a non-admin:");
+  const deleteAsCustomer = await fetch(base + `/products/${testProductId}`, { method: "DELETE", headers: { Authorization: `Bearer ${customerToken}` } });
+  check("returns 403", deleteAsCustomer.status === 403);
+
+  console.log("\nDELETE /products/:id — real soft-delete:");
+  const deleteOk = await fetch(base + `/products/${testProductId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  check("returns 200", deleteOk.status === 200);
+  const productsAfterDelete = await get("/products");
+  check("the discontinued product no longer appears in the public list", !productsAfterDelete.body.products.some((p) => p.id === testProductId));
+
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });
   check("returns 409", dup.status === 409);

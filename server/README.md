@@ -39,6 +39,29 @@ launch (payments is the other).
   genuinely paid. Requires the webhook URL to actually be registered with Paystack (Settings →
   API Keys & Webhooks → your deployed backend URL + `/webhooks/paystack`) before Paystack will
   ever call it — this is a manual dashboard step, not something set via an environment variable.
+- `GET /products` — public, no auth required (customers need to browse without signing in).
+  Excludes soft-deleted (discontinued) products.
+- `POST /products` (admin-only) — creates a product. Generates the id as a slug from name +
+  country (`slugify(name-country)`), matching the frontend's own `slugify` exactly, since real
+  orders, cart, and wishlist all reference products by this id.
+- `PATCH /products/:id` (admin-only) — updates any subset of fields (just a price, just a photo,
+  a full edit). Fields not included in the request keep their current value.
+- `DELETE /products/:id` (admin-only) — soft-delete, not a real row deletion. Matches the existing
+  "discontinued item" behavior the frontend already has (Journey.jsx shows a fallback for order
+  history referencing a removed product) — a real past order that referenced this product by id
+  needs the id to keep existing.
+
+## Known limitation: frontend not wired to real products yet
+
+The backend above is real, tested, and ready — but Admin Products/Inventory, the Shop page,
+Product detail pages, Cart, Checkout, Search, and the Quiz all still read from the old frontend
+static data + client-side-only overrides (`src/data/index.js`'s `PRODUCTS` array plus
+`AdminDataProvider`'s `priceOverrides`/`tierOverrides`/etc., none of which persist past a page
+refresh). This is exactly the bug that prompted this backend work in the first place: an admin
+price edit shows immediately, then reverts on refresh, because it was never actually saved
+anywhere. Wiring every one of those consumers to the real API is a separate, substantial piece of
+work — tracked in `ROADMAP.md`, not done in this same round on purpose (same backend-first,
+frontend-second split as orders and payments before it).
 
 ## Known limitation: order totals aren't fully price-verified yet
 
