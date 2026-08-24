@@ -159,7 +159,7 @@ Nothing else matters for going live until these are real, not simulated.
       `realUsers`) rather than each section risking a different view of the same data.
       21 backend tests from building the API, 66/66 passing overall — no new backend tests needed
       for the frontend wiring itself, since the endpoints were already covered.
-- [x] **Real database, products — backend done, frontend not wired yet.** Found via a real user
+- [x] **Real database, products — backend and frontend both done.** Found via a real user
       report after going live with real payments: an admin price edit would show immediately, then
       silently revert on refresh, because `AdminDataProvider`'s price/tier/stock/photo overrides
       were always just `useState({})` — plain React memory, never persisted anywhere. Real fix,
@@ -197,8 +197,29 @@ Nothing else matters for going live until these are real, not simulated.
       with an explicit loading state distinguishing "still loading" from "genuinely not found."
       Settings > Backup fixed (would have crashed referencing the removed override state) and
       extended to cover the restored green-stock state.
-      Green coffee (wholesale) products remain a parallel, untouched system — not covered by this
-      round, a candidate for its own future round if it hits the same underlying problem.
+      Green coffee (wholesale) products were deliberately out of scope for this round — see the
+      dedicated item below, which closes that same gap.
+- [x] **Real database, green coffee (wholesale) — the same migration applied to the parallel
+      system deliberately left untouched above.** Not yet reported as a bug, but a known instance
+      of the exact same problem: `customGreenBeans`, `greenPriceOverrides`, `greenStockOverrides`,
+      `removedGreenBeanIds` were all client-side-only state, same as retail products before their
+      fix. `server/migrations/006_green_beans.sql` — real `green_beans` table, seeded with the 9
+      original lots generated programmatically (`server/scripts/generate-green-bean-seed.mjs`),
+      same discipline as products. `roastedId` links a lot to its corresponding retail roast as a
+      real, enforced foreign key into `products`. Full CRUD, same shape as `/products`
+      (`GET` public, `POST`/`PATCH`/`DELETE` admin-only), with cross-field validation (minimum
+      order can't exceed stock) checked against real current state on a partial update, not just
+      the fields in that specific request. 17 new backend tests, 163/163 passing.
+      **Frontend wired**, `getStock`/`setStock` simplified to dispatch between two fully real APIs
+      now that neither needs a client-side fallback. Found and fixed a genuinely more severe bug
+      than anything in the products round: the Green Coffee page's initial state assumed a
+      selected lot always exists (`useState(selected.minOrderKg)`) — during the brief window
+      before the real catalog's first fetch completed, this would throw an actual runtime
+      exception, not just show a stale value, crashing the whole page rather than degrading
+      gracefully. Also depended on the old static import's first id for its initial selection,
+      with no real guarantee that id still existed in the actual fetched data. Both fixed with
+      safe defaults and an explicit loading/error/empty guard, checked directly against the real
+      component rather than assumed safe by analogy to the products fix.
 - [x] **Order total price integrity.** `POST /orders` now looks up each item's real, current
       price from the `products` table and uses that for the actual total — the client-submitted
       `unitPriceCents` is still validated for shape (backward-compatible with the existing
@@ -265,6 +286,16 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Green coffee (wholesale) migrated to a real database — the same fix retail products got,
+  applied proactively before it was ever reported as a bug.** Real `green_beans` table, seeded
+  programmatically (same discipline as products), full CRUD, real foreign key linking a lot to its
+  retail roast. 17 new backend tests, 163/163 passing. Found a genuinely more severe bug while
+  wiring the frontend than anything in the products round: the Green Coffee page would throw an
+  actual runtime exception (not just show a stale value) during the instant before its first real
+  fetch completed, since its initial state assumed a selected lot always exists. Fixed with safe
+  defaults and an explicit loading/empty guard. Also fixed a stale documentation section found
+  while writing this up: `server/README.md` still described products as "not wired to frontend
+  yet" despite that being done for several rounds.
 - **Stock decrement, a real cancellation window, and a real refund workflow — three real gaps
   found from direct user reports, all closed together given how tightly they interact.**
   - **Stock now genuinely decrements** on real payment confirmation (not order creation, so an

@@ -503,6 +503,65 @@ async function main() {
   const foundAfterOverorder = stockAfterOverorder.body.products.find((p) => p.id === overorderId);
   check("stock is clamped at zero, never negative, even when paid orders exceed what was available", foundAfterOverorder && foundAfterOverorder.stock === 0);
 
+  console.log("\nGET /green-beans — public, no auth needed:");
+  const greenNoAuth = await get("/green-beans");
+  check("returns 200 without any token", greenNoAuth.status === 200);
+  check("returns an array", Array.isArray(greenNoAuth.body.greenBeans));
+
+  console.log("\nPOST /green-beans without a token:");
+  const greenCreateNoAuth = await post("/green-beans", { name: "Test Lot", country: "Testland", pricePerKgCents: 1000, stockKg: 50, minOrderKg: 5 });
+  check("returns 401", greenCreateNoAuth.status === 401);
+
+  console.log("\nPOST /green-beans as a non-admin:");
+  const greenCreateAsCustomer = await post("/green-beans", { name: "Test Lot", country: "Testland", pricePerKgCents: 1000, stockKg: 50, minOrderKg: 5 }, customerToken);
+  check("returns 403", greenCreateAsCustomer.status === 403);
+
+  console.log("\nPOST /green-beans with a non-positive price:");
+  const greenCreateBadPrice = await post("/green-beans", { name: "Test Lot", country: "Testland", pricePerKgCents: 0, stockKg: 50, minOrderKg: 5 }, token);
+  check("returns 400", greenCreateBadPrice.status === 400);
+
+  console.log("\nPOST /green-beans where minimum order exceeds stock:");
+  const greenCreateBadMinOrder = await post("/green-beans", { name: "Test Lot", country: "Testland", pricePerKgCents: 1000, stockKg: 10, minOrderKg: 50 }, token);
+  check("returns 400 -- can't require a bigger minimum order than what's in stock", greenCreateBadMinOrder.status === 400);
+
+  console.log("\nPOST /green-beans — a real, valid lot:");
+  const greenCreateOk = await post("/green-beans", {
+    name: "Test Lot", country: "Testland", pricePerKgCents: 1000, stockKg: 50, minOrderKg: 5,
+    cuppingScore: 85, moisture: "11.0%", grade: "AA", process: "Washed", notes: "A test lot",
+  }, token);
+  check("returns 201", greenCreateOk.status === 201);
+  check("id is generated as green-<slug>, matching the frontend's own id format exactly", greenCreateOk.body.greenBean && greenCreateOk.body.greenBean.id === "green-test-lot-testland");
+  check("no roastedId by default -- a new admin-added lot has no retail counterpart", greenCreateOk.body.greenBean && greenCreateOk.body.greenBean.roastedId == null);
+  const testGreenBeanId = greenCreateOk.body.greenBean.id;
+
+  console.log("\nPOST /green-beans with the same name + country again:");
+  const greenCreateDup = await post("/green-beans", { name: "Test Lot", country: "Testland", pricePerKgCents: 1000, stockKg: 50, minOrderKg: 5 }, token);
+  check("returns 409", greenCreateDup.status === 409);
+
+  console.log("\nGET /green-beans now includes the new lot:");
+  const greenAfterCreate = await get("/green-beans");
+  check("the new lot appears in the public list", greenAfterCreate.body.greenBeans.some((g) => g.id === testGreenBeanId));
+
+  console.log("\nPATCH /green-beans/:id — a real, partial price-only update:");
+  const greenPatchPrice = await patch(`/green-beans/${testGreenBeanId}`, { pricePerKgCents: 1200 }, token);
+  check("returns 200", greenPatchPrice.status === 200);
+  check("price actually changed", greenPatchPrice.body.greenBean && greenPatchPrice.body.greenBean.pricePerKgCents === 1200);
+  check("stock wasn't sent, and is still correct", greenPatchPrice.body.greenBean && greenPatchPrice.body.greenBean.stockKg === 50);
+
+  console.log("\nPATCH /green-beans/:id -- stock-only update still checked against the real, current minOrderKg:");
+  const greenPatchTooLowStock = await patch(`/green-beans/${testGreenBeanId}`, { stockKg: 2 }, token);
+  check("returns 400 -- this lot's real minOrderKg (5) would now exceed the new stock (2), checked against current state not just the request body", greenPatchTooLowStock.status === 400);
+
+  console.log("\nDELETE /green-beans/:id as a non-admin:");
+  const greenDeleteAsCustomer = await fetch(base + `/green-beans/${testGreenBeanId}`, { method: "DELETE", headers: { Authorization: `Bearer ${customerToken}` } });
+  check("returns 403", greenDeleteAsCustomer.status === 403);
+
+  console.log("\nDELETE /green-beans/:id — real soft-delete:");
+  const greenDeleteOk = await fetch(base + `/green-beans/${testGreenBeanId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  check("returns 200", greenDeleteOk.status === 200);
+  const greenAfterDelete = await get("/green-beans");
+  check("the discontinued lot no longer appears in the public list", !greenAfterDelete.body.greenBeans.some((g) => g.id === testGreenBeanId));
+
   console.log("\nDuplicate registration:");
   const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });
   check("returns 409", dup.status === 409);

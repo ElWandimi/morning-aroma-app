@@ -60,18 +60,26 @@ launch (payments is the other).
   "discontinued item" behavior the frontend already has (Journey.jsx shows a fallback for order
   history referencing a removed product) — a real past order that referenced this product by id
   needs the id to keep existing.
+- `GET /green-beans`, `POST /green-beans`, `PATCH /green-beans/:id`, `DELETE /green-beans/:id` —
+  the same real catalog treatment as `/products` above, applied to the parallel wholesale (green,
+  unroasted) coffee system. Generates ids as `green-<slug>`, matching the frontend's existing
+  format. `roastedId` optionally links a lot to its corresponding retail roast in `products`,
+  enforced as a real foreign key. Cross-field validation (minimum order can't exceed stock) is
+  checked against the real, current state on a partial update, not just the fields in that
+  specific request — a stock-only edit that would leave an existing minimum order too high is
+  correctly rejected.
 
-## Known limitation: frontend not wired to real products yet
+## Both real catalogs are fully wired, frontend included
 
-The backend above is real, tested, and ready — but Admin Products/Inventory, the Shop page,
-Product detail pages, Cart, Checkout, Search, and the Quiz all still read from the old frontend
-static data + client-side-only overrides (`src/data/index.js`'s `PRODUCTS` array plus
-`AdminDataProvider`'s `priceOverrides`/`tierOverrides`/etc., none of which persist past a page
-refresh). This is exactly the bug that prompted this backend work in the first place: an admin
-price edit shows immediately, then reverts on refresh, because it was never actually saved
-anywhere. Wiring every one of those consumers to the real API is a separate, substantial piece of
-work — tracked in `ROADMAP.md`, not done in this same round on purpose (same backend-first,
-frontend-second split as orders and payments before it).
+Admin Products/Inventory, Shop, Product detail pages, Cart, Checkout, Search, the Quiz, and the
+Green Coffee page all read from the real APIs above — nothing left reading stale static data or
+client-side-only overrides for either catalog. Found and fixed two real bugs while wiring the
+green coffee frontend specifically, more severe than anything found wiring products: the page
+would throw an actual runtime exception (not just show a stale value) during the instant before
+the real catalog's first fetch completed, since its initial state assumed a selected lot always
+exists; and its initial "which lot is selected" state depended on the old static import's first
+id, which had no real guarantee of matching anything in the actual fetched data. Both fixed with
+safe defaults and an explicit loading/empty state, checked directly rather than assumed safe.
 
 ## Order price integrity
 

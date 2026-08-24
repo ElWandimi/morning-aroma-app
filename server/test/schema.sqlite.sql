@@ -35,6 +35,24 @@ CREATE TABLE products (
   updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE green_beans (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  country             TEXT NOT NULL,
+  roasted_id          TEXT,
+  price_per_kg_cents  INTEGER NOT NULL,
+  stock_kg            INTEGER NOT NULL DEFAULT 0,
+  min_order_kg        INTEGER NOT NULL DEFAULT 1,
+  cupping_score       INTEGER,
+  moisture            TEXT,
+  grade               TEXT,
+  process             TEXT,
+  notes               TEXT,
+  removed             INTEGER NOT NULL DEFAULT 0,
+  created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE orders (
   id                  TEXT PRIMARY KEY,
   order_number        INTEGER NOT NULL UNIQUE,

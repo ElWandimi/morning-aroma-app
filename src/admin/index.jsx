@@ -986,7 +986,11 @@ export function AdminProducts() {
 const emptyGreenForm = { name: "", country: COUNTRIES[0].name, price: "", stock: "", minOrder: "5", cuppingScore: "84", process: "Washed", notes: "" };
 
 export function AdminInventory() {
-  const { getStock, setStock, getPrice, getGreenPrice, getAllProducts, getAllGreenBeans, removeProduct, removeGreenBean, addGreenBean, realProductsLoading: loading, realProductsError: loadError, refetchRealProducts } = useAdmin();
+  const {
+    getStock, setStock, getPrice, getGreenPrice, getAllProducts, getAllGreenBeans, removeProduct, removeGreenBean, addGreenBean,
+    realProductsLoading, realProductsError, refetchRealProducts,
+    realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans,
+  } = useAdmin();
   const { addToast } = useToast();
   const [editingStock, setEditingStock] = useState(null);
   const [stockDraft, setStockDraft] = useState("");
@@ -1005,12 +1009,15 @@ export function AdminInventory() {
     setEditingStock(null);
   };
 
-  if (loading) return <p className="hint">Loading inventory…</p>;
-  if (loadError) {
+  // This component shows both retail products and green beans together, so it genuinely depends
+  // on both real data sources being ready -- guarding on only one would let it render with the
+  // other still loading (an incomplete list) or having failed (a masked error).
+  if (realProductsLoading || realGreenBeansLoading) return <p className="hint">Loading inventory…</p>;
+  if (realProductsError || realGreenBeansError) {
     return (
       <div>
-        <p className="form-error">Couldn't load inventory: {loadError}</p>
-        <button className="btn-outline" onClick={refetchRealProducts}>Try again</button>
+        <p className="form-error">Couldn't load inventory: {realProductsError || realGreenBeansError}</p>
+        <button className="btn-outline" onClick={() => { refetchRealProducts(); refetchRealGreenBeans(); }}>Try again</button>
       </div>
     );
   }
@@ -1031,7 +1038,7 @@ export function AdminInventory() {
     ...greenBeans.map((g) => ["Green", g.name, g.country, getStock(g.id), "kg"]),
   ]);
 
-  const submitGreenLot = (e) => {
+  const submitGreenLot = async (e) => {
     e.preventDefault();
     setGreenFormError("");
     const pricePerKgCents = Math.round(parseFloat(greenForm.price) * 100);
@@ -1044,7 +1051,7 @@ export function AdminInventory() {
     if (isNaN(minOrderKg) || minOrderKg <= 0) { setGreenFormError("Enter a valid minimum order quantity."); return; }
     if (minOrderKg > stockKg) { setGreenFormError("Minimum order can't exceed available stock."); return; }
 
-    const result = addGreenBean({
+    const result = await addGreenBean({
       name: greenForm.name.trim(), country: greenForm.country,
       pricePerKgCents, stockKg, minOrderKg,
       cuppingScore: isNaN(cuppingScore) ? 82 : cuppingScore,
@@ -1170,14 +1177,14 @@ export function AdminInventory() {
           const stock = getStock(g.id);
           return (
             <div key={g.id} className="admin-row">
-              <span>{g.name}{g.isCustom && <span className="role-badge" style={{ marginLeft: 6 }}>custom</span>}</span>
+              <span>{g.name}</span>
               <span>{g.country}</span>
               <span><StockCell id={g.id} unit="kg" /></span>
               <span className="admin-inline-edit">
                 <span className={stock === 0 ? "inv-status out" : stock < 100 ? "inv-status low" : "inv-status ok"}>
                   {stock === 0 ? "Sold out" : stock < 100 ? "Low" : "In stock"}
                 </span>
-                <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${g.name}?`)) { removeGreenBean(g.id); addToast(`${g.name} discontinued`); } }}>Discontinue</button>
+                <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${g.name}?`)) { removeGreenBean(g.id).then((result) => addToast(result.ok ? `${g.name} discontinued` : result.error)); } }}>Discontinue</button>
               </span>
             </div>
           );

@@ -434,10 +434,21 @@ export function AdminDataProvider({ children }) {
   };
   useEffect(() => { refetchRealProducts(); }, []);
 
-  const [customGreenBeans, setCustomGreenBeans] = useState([]);
-  const [greenStockOverrides, setGreenStockOverrides] = useState({});
-  const [removedGreenBeanIds, setRemovedGreenBeanIds] = useState([]);
-  const [greenPriceOverrides, setGreenPriceOverrides] = useState({});
+  // Real green coffee (wholesale) catalog, fetched the same way as realProducts above --
+  // unconditionally on app load, since the Green Coffee page is public-facing too, not admin-only.
+  const [realGreenBeans, setRealGreenBeans] = useState([]);
+  const [realGreenBeansLoading, setRealGreenBeansLoading] = useState(true);
+  const [realGreenBeansError, setRealGreenBeansError] = useState("");
+  const refetchRealGreenBeans = () => {
+    setRealGreenBeansLoading(true);
+    setRealGreenBeansError("");
+    api.getGreenBeans()
+      .then(({ greenBeans }) => setRealGreenBeans(greenBeans))
+      .catch((e) => setRealGreenBeansError(e.message))
+      .finally(() => setRealGreenBeansLoading(false));
+  };
+  useEffect(() => { refetchRealGreenBeans(); }, []);
+
   const [greenOrders, setGreenOrders] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [kenyaMessages, setKenyaMessages] = useState(KENYA_LIVE_MESSAGES_SEED);
@@ -507,29 +518,26 @@ export function AdminDataProvider({ children }) {
     }
   };
 
-  // Handles both real retail products (from the API above) and green beans -- green beans are
-  // NOT part of this migration (a parallel wholesale system with its own overrides, out of scope
-  // -- see ROADMAP.md), so this has to genuinely dispatch between two different mechanisms based
-  // on which list an id actually belongs to, not assume every id is a real product now.
+  // Handles both real retail products and real green beans (as of this round, both are genuinely
+  // backed by the database) -- still has to dispatch based on which list an id belongs to, since
+  // they're two separate tables with two separate update endpoints, not one shared mechanism.
   const getStock = (id) => {
     const p = realProducts.find((p) => p.id === id);
     if (p) return p.stock;
-    if (greenStockOverrides[id] != null) return greenStockOverrides[id];
-    const g = GREEN_BEANS.find((g) => g.id === id) || customGreenBeans.find((g) => g.id === id);
+    const g = realGreenBeans.find((g) => g.id === id);
     return g ? g.stockKg : 0;
   };
   const setStock = async (id, qty) => {
     const safeQty = Math.max(0, qty);
     const isRealProduct = realProducts.some((p) => p.id === id);
-    if (!isRealProduct) {
-      // A green bean id -- still local-only, same as before this migration.
-      setGreenStockOverrides((prev) => ({ ...prev, [id]: safeQty }));
-      logAction("Stock updated", `${id} → ${safeQty} units`);
-      return { ok: true };
-    }
     try {
-      await api.updateProduct(token, id, { stock: safeQty });
-      refetchRealProducts();
+      if (isRealProduct) {
+        await api.updateProduct(token, id, { stock: safeQty });
+        refetchRealProducts();
+      } else {
+        await api.updateGreenBean(token, id, { stockKg: safeQty });
+        refetchRealGreenBeans();
+      }
       logAction("Stock updated", `${id} → ${safeQty} units`);
       return { ok: true };
     } catch (e) {
@@ -576,37 +584,44 @@ export function AdminDataProvider({ children }) {
     }
   };
 
-  const getAllGreenBeans = () => [...GREEN_BEANS.filter((g) => !removedGreenBeanIds.includes(g.id)), ...customGreenBeans];
-  const addGreenBean = (data) => {
-    const id = `green-${slugify(`${data.name}-${data.country}`)}`;
-    if (GREEN_BEANS.some((g) => g.id === id) || customGreenBeans.some((g) => g.id === id)) {
-      return { error: "A green coffee lot with this name and country already exists." };
+  const getAllGreenBeans = () => realGreenBeans;
+  const addGreenBean = async (data) => {
+    try {
+      const { greenBean } = await api.createGreenBean(token, data);
+      refetchRealGreenBeans();
+      logAction("Green bean lot added", `${data.name} — ${data.country}`);
+      return { bean: greenBean };
+    } catch (e) {
+      return { error: e.message };
     }
-    const bean = { ...data, id };
-    setCustomGreenBeans((prev) => [...prev, bean]);
-    logAction("Green bean lot added", `${data.name} — ${data.country}`);
-    return { bean };
   };
-  const removeGreenBean = (id) => {
-    if (customGreenBeans.some((g) => g.id === id)) {
-      setCustomGreenBeans((prev) => prev.filter((g) => g.id !== id));
-    } else {
-      setRemovedGreenBeanIds((prev) => [...prev, id]);
+  const removeGreenBean = async (id) => {
+    try {
+      await api.deleteGreenBean(token, id);
+      refetchRealGreenBeans();
+      logAction("Green bean lot discontinued", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
     }
-    logAction("Green bean lot discontinued", id);
   };
 
   // Green bean (wholesale) pricing — kept separate from getPrice/setPrice above since the units
   // are genuinely different (per-kg wholesale vs. per-bag retail), so mixing them into one
   // function would risk silently applying a retail price where a bulk price belongs.
   const getGreenPrice = (id) => {
-    if (greenPriceOverrides[id] != null) return greenPriceOverrides[id];
-    const g = GREEN_BEANS.find((g) => g.id === id) || customGreenBeans.find((g) => g.id === id);
+    const g = realGreenBeans.find((g) => g.id === id);
     return g ? g.pricePerKgCents : 0;
   };
-  const setGreenPrice = (id, cents) => {
-    setGreenPriceOverrides((prev) => ({ ...prev, [id]: cents }));
-    logAction("Green bean price changed", `${id} → ${fmtPrice(cents)}/kg`);
+  const setGreenPrice = async (id, cents) => {
+    try {
+      await api.updateGreenBean(token, id, { pricePerKgCents: cents });
+      refetchRealGreenBeans();
+      logAction("Green bean price changed", `${id} → ${fmtPrice(cents)}/kg`);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
   const addGreenOrder = (o) =>
@@ -697,7 +712,7 @@ export function AdminDataProvider({ children }) {
   // reasoning already applied when users and orders became real: a live database needs its own
   // real backup strategy (Railway's own database backups), not an ad-hoc JSON download.
   const exportAdminData = () => ({
-    customGreenBeans, removedGreenBeanIds, greenPriceOverrides, greenStockOverrides, greenOrders,
+    greenOrders,
     auditLog, kenyaMessages, quotations, serviceInquiries, liveChats, feedbackList,
     momentOverrides, courseOverrides, countryHistoryOverrides, settings,
   });
@@ -706,10 +721,6 @@ export function AdminDataProvider({ children }) {
   // left as-is instead of the whole restore failing or wiping something the file didn't mention.
   const restoreAdminData = (data) => {
     if (!data || typeof data !== "object") return;
-    if (Array.isArray(data.customGreenBeans)) setCustomGreenBeans(data.customGreenBeans);
-    if (Array.isArray(data.removedGreenBeanIds)) setRemovedGreenBeanIds(data.removedGreenBeanIds);
-    if (data.greenPriceOverrides) setGreenPriceOverrides(data.greenPriceOverrides);
-    if (data.greenStockOverrides) setGreenStockOverrides(data.greenStockOverrides);
     if (Array.isArray(data.greenOrders)) setGreenOrders(data.greenOrders);
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
     if (Array.isArray(data.kenyaMessages)) setKenyaMessages(data.kenyaMessages);
@@ -736,6 +747,7 @@ export function AdminDataProvider({ children }) {
         realProductsLoading, realProductsError, refetchRealProducts,
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,
+        realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans,
         greenOrders, addGreenOrder, updateGreenOrderStatus,
         auditLog,
         kenyaMessages, addKenyaMessage, updateKenyaMessage, removeKenyaMessage,

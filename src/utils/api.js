@@ -69,4 +69,11 @@ export const api = {
     request(`/products/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
   deleteProduct: (token, id) =>
     request(`/products/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  getGreenBeans: () => request("/green-beans"),
+  createGreenBean: (token, greenBean) =>
+    request("/green-beans", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(greenBean) }),
+  updateGreenBean: (token, id, updates) =>
+    request(`/green-beans/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
+  deleteGreenBean: (token, id) =>
+    request(`/green-beans/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
 };

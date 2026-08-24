@@ -4,6 +4,7 @@ const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
 const ordersRoutes = require("./routes/orders");
 const productsRoutes = require("./routes/products");
+const greenBeansRoutes = require("./routes/greenBeans");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -31,6 +32,7 @@ app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/orders", ordersRoutes);
 app.use("/products", productsRoutes);
+app.use("/green-beans", greenBeansRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

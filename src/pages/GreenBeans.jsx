@@ -1,18 +1,26 @@
 import React, { useState } from "react";
 import { ShareButtons } from "../components";
 import { useAdmin, useAuth, useCurrency, useToast } from "../context";
-import { COUNTRY_JOURNEY_PHOTO, GREEN_BEANS } from "../data";
+import { COUNTRY_JOURNEY_PHOTO } from "../data";
 
 export function GreenBeansPage() {
   const { user } = useAuth();
-  const { getGreenPrice, addGreenOrder, getAllGreenBeans } = useAdmin();
+  const { getGreenPrice, addGreenOrder, getAllGreenBeans, realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans } = useAdmin();
   const { format } = useCurrency();
   const { addToast } = useToast();
 
   const allGreenBeans = getAllGreenBeans();
-  const [selectedId, setSelectedId] = useState(GREEN_BEANS[0].id);
+  // No longer seeded from the static GREEN_BEANS import's first id -- that was a fragile
+  // assumption (relies on the real, fetched data happening to still contain that exact id, in
+  // whatever order). Starts unselected; the fallback below picks the first real bean once the
+  // real data has actually loaded, rather than guessing at an id that might not even exist.
+  const [selectedId, setSelectedId] = useState(null);
   const selected = allGreenBeans.find((g) => g.id === selectedId) || allGreenBeans[0];
-  const [quantityKg, setQuantityKg] = useState(selected.minOrderKg);
+  // Safe default rather than assuming `selected` exists -- during the brief window before the
+  // real catalog has loaded (or if it's ever genuinely empty), `selected` is undefined here, and
+  // reading .minOrderKg off it directly would throw a real runtime exception, not just show a
+  // stale or misleading value the way a missing product did on the retail Shop page.
+  const [quantityKg, setQuantityKg] = useState(selected?.minOrderKg ?? 1);
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [company, setCompany] = useState("");
@@ -20,11 +28,12 @@ export function GreenBeansPage() {
   const [sent, setSent] = useState(false);
   const [qtyError, setQtyError] = useState("");
 
-  const pricePerKg = getGreenPrice(selected.id);
+  const pricePerKg = selected ? getGreenPrice(selected.id) : 0;
   const subtotalCents = Math.round(pricePerKg * quantityKg);
 
   const selectBean = (id) => {
     const bean = allGreenBeans.find((g) => g.id === id);
+    if (!bean) return;
     setSelectedId(id);
     setQuantityKg(bean.minOrderKg);
     setQtyError("");
@@ -32,6 +41,7 @@ export function GreenBeansPage() {
 
   const submit = (e) => {
     e.preventDefault();
+    if (!selected) return;
     if (quantityKg < selected.minOrderKg) {
       setQtyError(`Minimum order for this lot is ${selected.minOrderKg}kg.`);
       return;
@@ -48,6 +58,23 @@ export function GreenBeansPage() {
     setSent(true);
     addToast("Wholesale order request sent");
   };
+
+  if (realGreenBeansLoading) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  if (realGreenBeansError) {
+    return (
+      <div className="empty-state" style={{ padding: 80 }}>
+        <p>Couldn't load the green coffee catalog: {realGreenBeansError}</p>
+        <button className="btn-outline small" onClick={refetchRealGreenBeans}>Try again</button>
+      </div>
+    );
+  }
+  if (!selected) {
+    return (
+      <div className="empty-state" style={{ padding: 80 }}>
+        <p>No green coffee lots are available right now — check back soon.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="services-page">
