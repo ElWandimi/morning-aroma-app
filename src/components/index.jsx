@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlist } from "../context";
+import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
 import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, MOCK_GOOGLE_ACCOUNTS, TRANSLATE_LANGUAGES } from "../data";
 import { useClickOutside, useEscapeKey, useGeoLocale, useGoogleTranslate } from "../hooks";
 import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent } from "../utils/helpers";
@@ -22,7 +22,7 @@ export function Steam({ className = "" }) {
 // works correctly regardless of what domain the site is actually deployed to, rather than a
 // hardcoded domain the way the static OG tags in index.html have to be.
 export function ShareButtons({ path, text, label = "Share" }) {
-  const url = `${window.location.origin}${window.location.pathname}${path || window.location.hash}`;
+  const url = `${window.location.origin}${path || window.location.pathname}`;
   const encodedUrl = encodeURIComponent(url);
   const encodedText = encodeURIComponent(text);
   const links = [
@@ -553,7 +553,7 @@ export function ConsentBanner() {
       <p>
         We use your browser's local storage to remember your cart and wishlist between visits —
         nothing is sent to us or any third party. No tracking cookies, no analytics.{" "}
-        <a href="#" onClick={(e) => { e.preventDefault(); go("privacy"); }}>Read more</a>
+        <a href={pathFor("privacy")} onClick={(e) => { e.preventDefault(); go("privacy"); }}>Read more</a>
       </p>
       <div className="consent-actions">
         <button className="btn-outline small" onClick={() => decide("declined")}>Decline</button>
@@ -685,7 +685,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
         </div>
         <nav className="nav-links">
           {links.map((l) => (
-            <a key={l.label} href="#" onClick={(e) => { e.preventDefault(); go(l.page); }}>{l.label}</a>
+            <a key={l.label} href={pathFor(l.page)} onClick={(e) => { e.preventDefault(); go(l.page); }}>{l.label}</a>
           ))}
         </nav>
         <div className="nav-actions">
@@ -713,7 +713,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
           )}
           {user ? (
             <div className="user-chip">
-              <span className="dot" /> <a href="#" onClick={(e) => { e.preventDefault(); go("journey"); }}>{user.name}</a> <span className="role">· {user.role.replace("_", " ")}</span>
+              <span className="dot" /> <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); }}>{user.name}</a> <span className="role">· {user.role.replace("_", " ")}</span>
               <button className="link-btn" onClick={logout}>Sign out</button>
             </div>
           ) : sessionLoading ? (
@@ -726,10 +726,10 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
       </div>
       {open && (
         <div className="nav-mobile">
-          {user && <a href="#" onClick={(e) => { e.preventDefault(); go("journey"); setOpen(false); }}>My Aroma Journey</a>}
-          {user?.role === "super_admin" && <a href="#" onClick={(e) => { e.preventDefault(); go("admin"); setOpen(false); }}>Admin Dashboard</a>}
+          {user && <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); setOpen(false); }}>My Aroma Journey</a>}
+          {user?.role === "super_admin" && <a href={pathFor("admin")} onClick={(e) => { e.preventDefault(); go("admin"); setOpen(false); }}>Admin Dashboard</a>}
           {links.map((l) => (
-            <a key={l.label} href="#" onClick={(e) => { e.preventDefault(); go(l.page); setOpen(false); }}>{l.label}</a>
+            <a key={l.label} href={pathFor(l.page)} onClick={(e) => { e.preventDefault(); go(l.page); setOpen(false); }}>{l.label}</a>
           ))}
         </div>
       )}
@@ -771,14 +771,14 @@ export function Footer() {
         </div>
         <div className="footer-links">
           <h5>Explore</h5>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("worldjourney"); }}>The World Journey</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("services"); }}>Our Services</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("greenbeans"); }}>Green Coffee</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("sourcelibrary"); }}>Source Library</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("rituals"); }}>Global Rituals</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("faq"); }}>FAQ</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("contact"); }}>Contact</a>
-          {user && <a href="#" onClick={(e) => { e.preventDefault(); go("journey"); }}>My Aroma Journey</a>}
+          <a href={pathFor("worldjourney")} onClick={(e) => { e.preventDefault(); go("worldjourney"); }}>The World Journey</a>
+          <a href={pathFor("services")} onClick={(e) => { e.preventDefault(); go("services"); }}>Our Services</a>
+          <a href={pathFor("greenbeans")} onClick={(e) => { e.preventDefault(); go("greenbeans"); }}>Green Coffee</a>
+          <a href={pathFor("sourcelibrary")} onClick={(e) => { e.preventDefault(); go("sourcelibrary"); }}>Source Library</a>
+          <a href={pathFor("rituals")} onClick={(e) => { e.preventDefault(); go("rituals"); }}>Global Rituals</a>
+          <a href={pathFor("faq")} onClick={(e) => { e.preventDefault(); go("faq"); }}>FAQ</a>
+          <a href={pathFor("contact")} onClick={(e) => { e.preventDefault(); go("contact"); }}>Contact</a>
+          {user && <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); }}>My Aroma Journey</a>}
           <a href={`mailto:${settings.contactEmail}`}>{settings.contactEmail}</a>
         </div>
         <div className="footer-form">
@@ -815,9 +815,9 @@ export function Footer() {
       <div className="footer-legal">
         <p className="copyright">© {new Date().getFullYear()} Morning Aroma. Roasted with care, everywhere.</p>
         <div className="footer-legal-links">
-          <a href="#" onClick={(e) => { e.preventDefault(); go("privacy"); }}>Privacy Policy</a>
+          <a href={pathFor("privacy")} onClick={(e) => { e.preventDefault(); go("privacy"); }}>Privacy Policy</a>
           <span aria-hidden="true">·</span>
-          <a href="#" onClick={(e) => { e.preventDefault(); go("terms"); }}>Terms of Service</a>
+          <a href={pathFor("terms")} onClick={(e) => { e.preventDefault(); go("terms"); }}>Terms of Service</a>
         </div>
       </div>
     </footer>

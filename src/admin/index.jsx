@@ -410,7 +410,7 @@ export function AdminInvoices() {
   const { addToast } = useToast();
   const [feeDrafts, setFeeDrafts] = useState({});
   const business = {
-    name: settings.businessName, address: settings.businessAddress,
+    name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
     taxId: settings.taxId, taxRatePercent: settings.taxRatePercent, invoiceNotes: settings.invoiceNotes,
   };
   // Shows a local typing draft if one exists, otherwise falls back to whatever fee was already
@@ -971,7 +971,7 @@ export function AdminProducts() {
             </div>
             {sharingFor === p.id && (
               <div className="admin-permissions-row">
-                <ShareButtons path={`#/product/${p.id}`} text={`${p.name} — ${p.country}. ${p.note} Morning Aroma:`} label="Announce this product:" />
+                <ShareButtons path={`/product/${p.id}`} text={`${p.name} — ${p.country}. ${p.note} Morning Aroma:`} label="Announce this product:" />
               </div>
             )}
             </React.Fragment>
@@ -1262,7 +1262,7 @@ export function AdminGreenOrders() {
   const [query, setQuery] = useState("");
   const STATUSES = ["New", "Quoted", "Invoiced", "Shipped", "Fulfilled"];
   const business = {
-    name: settings.businessName, address: settings.businessAddress,
+    name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
     taxId: settings.taxId, taxRatePercent: settings.taxRatePercent, invoiceNotes: settings.invoiceNotes,
   };
   const downloadInvoice = (o) => {

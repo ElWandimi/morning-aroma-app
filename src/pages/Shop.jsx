@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { BarRow, ImgWithSkeleton, ShareButtons } from "../components";
-import { useAdmin, useCart, useCurrency, useRoute, useToast, useWishlist } from "../context";
+import { useAdmin, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
 import { FILTER_DEFS, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { getProductPhotoUrl, slugify } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
@@ -196,7 +196,7 @@ export function ProductPage({ id }) {
     ? productPhotoUrl
     : productPhotoUrl.startsWith("data:")
       ? undefined // an admin-uploaded photo is a base64 data URL — not a real, fetchable URL search engines can use as an image reference, so omit rather than mangle it
-      : `https://www.morningaroma.com${productPhotoUrl}`;
+      : `${window.location.origin}${productPhotoUrl}`;
   useStructuredData({
     "@context": "https://schema.org",
     "@type": "Product",
@@ -209,7 +209,7 @@ export function ProductPage({ id }) {
       priceCurrency: "USD",
       price: (getPrice(product.id) / 100).toFixed(2),
       availability: soldOut ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
-      url: `https://www.morningaroma.com/#/product/${product.id}`,
+      url: `${window.location.origin}${pathFor("product", { id: product.id })}`,
     },
     ...(reviews.length > 0 ? {
       aggregateRating: { "@type": "AggregateRating", ratingValue: avgRating.toFixed(1), reviewCount: reviews.length, bestRating: 5, worstRating: 1 },
@@ -255,9 +255,9 @@ export function ProductPage({ id }) {
           </button>
           <div className="match-row">
             <span className="chip chip-active">{product.tags.moment}</span>
-            <a href="#" onClick={(e) => { e.preventDefault(); go("brewguide", { id: slugify(product.brewGuide) }); }}>Brew guide: {product.brewGuide} →</a>
+            <a href={pathFor("brewguide", { id: slugify(product.brewGuide) })} onClick={(e) => { e.preventDefault(); go("brewguide", { id: slugify(product.brewGuide) }); }}>Brew guide: {product.brewGuide} →</a>
           </div>
-          <ShareButtons path={`#/product/${product.id}`} text={`${product.name} — ${product.country}. ${product.note}. Morning Aroma:`} />
+          <ShareButtons path={`/product/${product.id}`} text={`${product.name} — ${product.country}. ${product.note}. Morning Aroma:`} />
         </div>
       </div>
 
@@ -283,7 +283,7 @@ export function ProductPage({ id }) {
             <p>{product.growing}</p>
             <div className="match-row">
               <button className="btn-outline small" onClick={() => go("growingprofile", { id: product.id })}>Full Growing Profile →</button>
-              <a className="soil-link" href="#" onClick={(e) => { e.preventDefault(); go("soilexplorer", { id: product.id }); }}>Taste the Soil →</a>
+              <a className="soil-link" href={pathFor("soilexplorer", { id: product.id })} onClick={(e) => { e.preventDefault(); go("soilexplorer", { id: product.id }); }}>Taste the Soil →</a>
             </div>
           </div>
         )}

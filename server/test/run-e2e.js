@@ -620,7 +620,7 @@ async function main() {
   console.log = (...args) => { capturedLog += args.join(" ") + "\n"; originalLog(...args); };
   await post("/auth/password-reset/request", { email: "test@morningaroma.local" });
   console.log = originalLog;
-  const match = capturedLog.match(/reset-password\?token=([a-f0-9]+)/);
+  const match = capturedLog.match(/\n([a-f0-9]{64})\n/);
   check("dev-mode log actually contains a real reset token", !!match);
   const resetToken = match ? match[1] : null;
 
@@ -652,7 +652,7 @@ async function main() {
   await post("/auth/password-reset/request", { email: "emailtest@morningaroma.local" });
   const sentAfterReset = resendMock.getSentEmails();
   check("a real password reset email was sent through the provider", sentAfterReset.length === 1 && sentAfterReset[0].to === "emailtest@morningaroma.local");
-  check("reset email links to the real deployed site, not a placeholder", sentAfterReset[0] && sentAfterReset[0].text.includes("reset-password?token="));
+  check("reset email points to a real site URL and includes a real 64-character hex token, not a placeholder", sentAfterReset[0] && /https?:\/\/\S+/.test(sentAfterReset[0].text) && /\n[a-f0-9]{64}\n/.test(sentAfterReset[0].text));
 
   console.log("\nRegistration still succeeds even if the email provider itself fails:");
   resendMock.setNextError("Simulated Resend outage");

@@ -55,6 +55,7 @@ export async function generateInvoicePDF({ invoiceNumber, date, billTo, lineItem
 
   const businessName = business.name || "MORNING AROMA";
   const businessAddress = business.address || "";
+  const businessEmail = business.email || "";
   const taxId = business.taxId || "";
   const taxRatePercent = business.taxRatePercent || 0;
   const taxCents = Math.round(totalCents * (taxRatePercent / 100));
@@ -186,7 +187,7 @@ export async function generateInvoicePDF({ invoiceNumber, date, billTo, lineItem
   const footerLines = [businessName];
   if (businessAddress) footerLines.push(businessAddress);
   if (taxId) footerLines.push(`Tax ID: ${taxId}`);
-  footerLines.push("hello@morningaroma.com");
+  if (businessEmail) footerLines.push(businessEmail);
   const footerTextX = drawHeaderLogo(doc, logoDataUrl, margin, H - margin - 12, 14) ? margin + 14 + 8 : margin;
   doc.text(footerLines.join("  ·  "), footerTextX, H - margin);
 

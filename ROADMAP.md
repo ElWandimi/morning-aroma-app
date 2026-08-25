@@ -258,9 +258,50 @@ Nothing else matters for going live until these are real, not simulated.
       decision the way they were.
 - [ ] **Real file storage** for admin product photo uploads (S3 / Cloudinary). Currently base64
       data URLs in memory — fine for the prototype, won't scale once there's a real backend.
-- [ ] **Server-side rendering or pre-rendering** — for true per-page social cards/structured data
-      reaching crawlers that don't execute JS. Lower priority than the above; current setup already
-      works for Google's crawler.
+- [x] **Real path-based routing + per-page meta tag injection for crawlers.** The project owner
+      confirmed switching from hash routing (`#/shop`) to real paths (`/shop`) — a real,
+      deliberate decision, not a default: a browser never sends the part of a URL after `#` in an
+      HTTP request at all, so no amount of server-side code could ever have made hash routing work
+      for crawlers, meaning this was genuinely blocked without it.
+      **Routing itself**: `parsePath`/`buildPath` (now exported as `pathFor`) replace the old
+      hash-based versions; `go()` uses `window.history.pushState` instead of setting
+      `location.hash`, and a `popstate` listener replaces the old `hashchange` one. Only three
+      places in the whole codebase touched `window.location.hash` directly, all found and fixed.
+      **A real production server was required, not optional**: confirmed directly (not assumed)
+      that Railway doesn't serve SPAs correctly without one — without an explicit fallback to
+      `index.html` for paths Vite didn't build a real file for, every direct link or page refresh
+      on any non-home route would 404, since hash routing never needed this (every request was
+      always just for `/`). `server.cjs` (a new file, `npm start` runs it) handles this, plus
+      real per-page meta tag injection for crawlers that don't execute JS — the actual point of
+      this whole change — by extracting the same `PAGE_META` table and per-product logic the
+      client already uses (via a build step, `scripts/generate-route-meta.mjs`) into a form the
+      server can read, so the two can't silently drift apart. Verified with real, live HTTP
+      requests against a running server (health check, home, a static page, a real dynamic
+      product page, the SPA fallback on multiple routes, an unknown path, a real static asset) —
+      not just read from the code.
+      Found and fixed two real bugs while building the server itself: `package.json`'s
+      `"type": "module"` broke `require()` in a plain `.js` file, fixed by naming it `.cjs`
+      explicitly; and Express 5 no longer accepts the bare `"*"` wildcard route syntax (a real
+      breaking change from Express 4) — fixed with a path-less `app.use()`, discovered by
+      actually running the server rather than trusting the code would work as written.
+      **Found and fixed while checking the rest of the codebase systematically, not assumed
+      unaffected**: ~18 internal navigation links used `href="#"` with a click handler — works
+      fine for users, but invisible to any crawler parsing raw HTML rather than executing JS,
+      undermining the actual point of this change. All fixed to carry a real `pathFor()` href.
+      Three hardcoded links to `www.morningaroma.com` — a domain the project owner doesn't own,
+      confirmed earlier this session — in Organization/Product structured data and transactional
+      emails; fixed to use the real, current origin instead. A genuinely broken PDF invoice
+      footer, unrelated to routing but found in the same pass: it hardcoded a non-functional
+      `hello@morningaroma.com` instead of using the business's real, already-configured contact
+      email, even though that setting already existed and was already threaded through everywhere
+      else in the same object. And a password reset email that referenced a `/reset-password`
+      page that was never real, even before this change — the actual reset flow is a manually-
+      entered code in a modal reached from the homepage, not a dedicated page; rewrote the email
+      to describe the real flow honestly instead of implying a broken magic link.
+      **Requires a real deployment change, not just code**: Railway needs to be told to run
+      `npm start` (which now runs `server.cjs`) instead of whatever default static-file serving
+      it's been doing — a manual step in Railway's settings, not something a patch alone can do.
+      163/163 backend tests passing (backend touched only for the email content fix above).
 
 ## Tier 3 — Real features, buildable without a backend (paused, not blocked)
 
@@ -286,6 +327,18 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Switched to real path-based routing, with real per-page meta tags for crawlers — a
+  deliberate, confirmed decision given the real trade-offs involved, not a default.** Required a
+  real production server (`server.cjs`, `npm start`), confirmed necessary by checking Railway's
+  actual SPA-serving behavior directly rather than assumed. Found and fixed two real server bugs
+  (a `"type": "module"` conflict, an Express 5 breaking change) by actually running the server
+  against live HTTP requests, not just reading the code. Also found and fixed, while checking the
+  rest of the codebase systematically: ~18 internal links that were invisible to crawlers despite
+  working fine for users, three hardcoded links to a domain the project owner doesn't own, a
+  genuinely broken PDF invoice email (unrelated to routing, found in the same pass), and a
+  password-reset email describing a page that was never actually real. Requires a manual Railway
+  deployment change (documented separately) — a patch alone can't do it. 163/163 backend tests
+  passing.
 - **Green coffee (wholesale) migrated to a real database — the same fix retail products got,
   applied proactively before it was ever reported as a bug.** Real `green_beans` table, seeded
   programmatically (same discipline as products), full CRUD, real foreign key linking a lot to its

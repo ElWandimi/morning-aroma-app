@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-data
 .DS_Store
 
 # Environment variables — never commit real secrets

@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/generate-route-meta.mjs",
+    "start": "node server.cjs",
     "preview": "vite preview",
     "test:e2e": "playwright test"
   },
@@ -19,6 +20,7 @@
     "not IE 11"
   ],
   "dependencies": {
+    "express": "^5.2.1",
     "jspdf": "^4.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { Glass, PhotoMarquee, Steam, WaveDivider } from "../components";
-import { useAdmin, useCart, useCurrency, useRoute } from "../context";
+import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
 import { EVERYDAY, MOMENTS, PREMIUM } from "../data";
 import { slugify } from "../utils/helpers";
 import { usePrefersReducedMotion } from "../hooks";
@@ -126,7 +126,7 @@ export function MomentsSnapshot() {
           <div key={m.id} className="moment-card" onClick={() => go("moment", { id: m.id })} style={{ cursor: "pointer" }}>
             <span className="moment-icon">{m.icon}</span>
             <h4>{m.name}</h4>
-            <a href="#" onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }}>Explore →</a>
+            <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }}>Explore →</a>
           </div>
         ))}
       </div>

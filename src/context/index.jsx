@@ -171,41 +171,51 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthCtx);
 
-function parseHash() {
-  const raw = window.location.hash.replace(/^#\/?/, "");
+function parsePath() {
+  const raw = window.location.pathname.replace(/^\/+/, "");
   if (!raw) return { page: "home" };
   const [slug, rawId] = raw.split("/");
   const page = SLUG_TO_PAGE[slug];
   if (!page || !KNOWN_ROUTES.has(page)) return { page: "home" };
   return rawId ? { page, id: decodeURIComponent(rawId) } : { page };
 }
-function buildHash(page, params) {
+// Exported (not just used internally by go() below) so any component can build a real href for
+// an internal link -- important now that paths are real: a crawler discovers internal links by
+// parsing raw href attributes in the HTML, not by executing JS and watching for click handlers,
+// so an href="#" placeholder (harmless for a real user, since the actual navigation happens via
+// onClick) would make every one of those links invisible to anything that doesn't run JS.
+export function pathFor(page, params = {}) {
   const slug = PAGE_TO_SLUG[page] ?? page;
   const path = params.id ? `${slug}/${encodeURIComponent(params.id)}` : slug;
-  return `#/${path}`;
+  return `/${path}`;
 }
 
 export const RouteCtx = createContext(null);
 
 export function RouteProvider({ children }) {
-  const [route, setRoute] = useState(() => parseHash());
+  const [route, setRoute] = useState(() => parsePath());
 
   useEffect(() => {
-    const onHashChange = () => setRoute(parseHash());
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    // popstate fires on browser back/forward, and on window.history.pushState/replaceState calls
+    // made elsewhere -- but NOT when this same code calls pushState itself (pushState never fires
+    // its own popstate, by design), which is why go() below updates state directly rather than
+    // relying on this listener to catch its own navigation.
+    const onPopState = () => setRoute(parsePath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   useEffect(() => { logPageView(route.page); }, [route.page, route.id]);
 
   const go = (page, params = {}) => {
-    const nextHash = buildHash(page, params);
-    if (window.location.hash === nextHash) {
-      // same destination (e.g. re-clicking a nav link) — hashchange won't fire, so update state directly
-      setRoute({ page, ...params });
-    } else {
-      window.location.hash = nextHash;
+    const nextPath = pathFor(page, params);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState(null, "", nextPath);
     }
+    // Always updates state directly (not just on a path change) -- re-clicking a nav link to the
+    // same destination should still work (e.g. re-triggering a fresh page-view log), and unlike
+    // the old hash-based version, pushState never fires an event this could otherwise rely on.
+    setRoute({ page, ...params });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 

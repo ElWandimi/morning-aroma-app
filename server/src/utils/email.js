@@ -48,10 +48,10 @@ async function sendWelcomeEmail(user) {
 Thank you for creating an account with Morning Aroma. We're genuinely glad you're here.
 
 A few things worth knowing:
-- Browse the full catalog by variety, origin, or how it fits your day: ${SITE_URL}/#/shop
+- Browse the full catalog by variety, origin, or how it fits your day: ${SITE_URL}/shop
 - Every bag we sell publishes exactly what we paid the farmer for it — see the Source Library if
   you're curious where your coffee's money actually goes.
-- Your Aroma Journey (${SITE_URL}/#/journey) keeps a running log of what you've tried
+- Your Aroma Journey (${SITE_URL}/journey) keeps a running log of what you've tried
   and liked, and gets sharper with each review you leave.
 
 If anything's ever wrong with an order, just reply to this email or reach us through the site's
@@ -64,12 +64,14 @@ The Morning Aroma team`;
 
 async function sendPasswordResetEmail(email, resetToken) {
   const subject = "Reset your Morning Aroma password";
-  const resetUrl = `${SITE_URL}/#/reset-password?token=${resetToken}`;
   const body = `We received a request to reset the password on your Morning Aroma account.
 
-Reset it here: ${resetUrl}
+To finish resetting it: go to ${SITE_URL}, click "Sign in," then "Forgot password?", and enter
+this code when asked for one:
 
-This link expires in 30 minutes. If you didn't request this, you can safely ignore this email —
+${resetToken}
+
+This code expires in 30 minutes. If you didn't request this, you can safely ignore this email —
 your password hasn't been changed.`;
   await sendEmail("Password reset email", email, subject, body);
 }

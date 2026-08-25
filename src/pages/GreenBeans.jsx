@@ -84,7 +84,7 @@ export function GreenBeansPage() {
         <p className="shop-sub" style={{ color: "var(--steam)" }}>
           The same nine traceable origins we roast ourselves, sold unroasted by the kilogram — so you can develop your own profile from our relationships and sourcing.
         </p>
-        <ShareButtons path="#/green-beans" text="Green coffee, sold direct from origin — for roasters and serious home-roasters. Morning Aroma:" label="Share with a roaster" />
+        <ShareButtons path="/green-beans" text="Green coffee, sold direct from origin — for roasters and serious home-roasters. Morning Aroma:" label="Share with a roaster" />
       </div>
 
       <div className="green-bean-grid">

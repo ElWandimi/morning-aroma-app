@@ -702,9 +702,12 @@ export const CHECKOUT_STEPS = ["Review", "Sign in", "Shipping", "Payment", "Done
 
 export const ADMIN_SECTIONS = ["Overview", "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content", "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Live Messages", "Audit Log", "Settings"];
 
-// Hash-based routing map (works identically via npm run dev, vite preview, and file:// —
-// unlike pathname-based history.pushState, which throws SecurityError under file://).
-// URL shape: #/<slug> or #/<slug>/<id> for the 8 pages that take one.
+// Real path-based routing map (e.g. /shop or /shop/geisha-panama) -- requires a real server for
+// every environment that serves this app (a real SPA-fallback server in production, and Vite's
+// own dev/preview servers locally), unlike the hash-based scheme this replaced, which worked
+// identically even opened directly via file:// with no server at all. That trade-off was made
+// deliberately: real paths are what let a server (and therefore search engines and social link
+// previews) see which page is actually being requested at all, which file:// compatibility can't.
 export const PAGE_TO_SLUG = {
   home: "", shop: "shop", product: "product", moments: "moments", moment: "moment",
   brewguides: "brew-guides", brewguide: "brew-guide", academy: "academy", course: "course",

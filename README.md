@@ -173,24 +173,39 @@ from before the split. Nothing about *what* the app does changed, only how the c
 
 ## Routing & SEO
 
-Every page has a real, bookmarkable URL — `#/shop`, `#/product/geisha-panama`, and so on — enabling
-deep-linking and a working browser back/forward button, neither of which existed before this was added.
+Every page has a real, bookmarkable URL — `/shop`, `/product/geisha-panama`, and so on — enabling
+deep-linking and a working browser back/forward button.
 
-**Why hash routing (`#/shop`) instead of path routing (`/shop`):** this project deliberately supports
-three ways to run it — `npm run dev`, `vite preview`, and opening `dist/index.html` directly via
-`file://`. True pathname-based routing (`history.pushState`) throws a `SecurityError` under `file://`,
-which would break that third option. Hash routing works identically across all three with zero server
-configuration required anywhere, at the (honest) cost of being somewhat less SEO-reliable than
-server-rendered paths. `public/sitemap.xml` is generated from the same routing data via
-`node scripts/generate-sitemap.mjs`, so it can't silently drift out of sync with the app's actual pages.
-If this ever runs behind a real backend that can serve `index.html` for any path, switching to path-based
-routing would be a meaningful SEO upgrade over the current setup.
+**Real path-based routing (`/shop`), not hash routing (`#/shop`) — a deliberate decision.**
+Earlier versions of this project used hash routing specifically so `dist/index.html` could be
+opened directly via `file://` with zero server configuration. That trade-off was consciously
+given up: hash fragments are never sent to a server in an HTTP request at all, meaning no
+server-side code could ever generate real per-page meta tags for social link previews or crawlers
+that don't execute JS under that scheme — a real, structural blocker, not a missing feature.
+**Every environment that serves this app now needs a real server** — `npm run dev` and
+`vite preview` still work locally (both are real dev servers), but opening `dist/index.html`
+directly via `file://` no longer works, and production requires the real server in `server.cjs`
+(run via `npm start`) rather than whatever static-file serving was happening before. See
+`ROADMAP.md`'s change log for the full detail on why, and what this required.
+`public/sitemap.xml` is still generated from the same routing data via
+`node scripts/generate-sitemap.mjs`, so it can't silently drift out of sync with the app's actual
+pages — only its own URL format needed to change to match.
 
 Per-page `<title>` and meta description are set dynamically on every route change (see
-`useDocumentMeta` in `src/hooks/index.js`) — including dynamic titles for product/moment/course/etc.
-pages, built from the actual item rather than a generic site-wide title repeated everywhere.
+`useDocumentMeta` in `src/hooks/index.js`) for the client, and independently by `server.cjs` for
+the initial HTML response any crawler actually sees — both read from the same `PAGE_META` table
+(`src/data/index.js`) via a build-time extraction step, so they can't silently drift apart.
 
 ## Known limitations (by design, not oversight)
+
+**This section is now significantly stale and needs a real rewrite** — found while updating the
+routing section above, not something this specific change caused. It still describes payment as
+"inert," admin auth as fake, and almost nothing as persisting past a refresh, none of which has
+been true for a long time now: real auth, real orders, real payments (including refunds and
+webhooks), real products and green coffee catalogs, real email, and real file storage are all
+live — see `ROADMAP.md`'s change log for the actual, current state. Left as its original text
+below rather than rewritten here, since accurately describing everything that's now real is a
+substantial task of its own, not something to fold into a routing change.
 
 - **Nothing persists except cart and wishlist**, and only if you accept the local-storage consent
   banner. Orders, journal entries, and admin edits reset on refresh — everything else is intentionally

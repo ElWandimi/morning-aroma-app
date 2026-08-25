@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { useAdmin, useCart, useCurrency, useRoute } from "../context";
+import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
 import { MOMENTS, PRODUCTS } from "../data";
 import { slugify } from "../utils/helpers";
 
@@ -83,7 +83,7 @@ export function MomentPage({ id }) {
         <div className="mini-brew">
           <div className="mini-brew-head">
             <h3>Mini brew guide — {moment.brewGuide}</h3>
-            <a href="#" onClick={(e) => { e.preventDefault(); go("brewguide", { id: slugify(moment.brewGuide) }); }}>Full guide →</a>
+            <a href={pathFor("brewguide", { id: slugify(moment.brewGuide) })} onClick={(e) => { e.preventDefault(); go("brewguide", { id: slugify(moment.brewGuide) }); }}>Full guide →</a>
           </div>
           <ol>
             {moment.brewSteps.map((s, i) => (
