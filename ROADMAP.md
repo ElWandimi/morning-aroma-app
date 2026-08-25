@@ -256,8 +256,22 @@ Nothing else matters for going live until these are real, not simulated.
       Order confirmations and the notification preference toggles could reuse this same real
       sending infrastructure once written — not yet built, but no longer blocked on a provider
       decision the way they were.
-- [ ] **Real file storage** for admin product photo uploads (S3 / Cloudinary). Currently base64
-      data URLs in memory — fine for the prototype, won't scale once there's a real backend.
+- [x] **Real file storage for admin product photo uploads — Cloudinary, real account.** Real
+      upload via `src/utils/cloudinary.js` on both product create and update, replacing base64
+      stored directly in the database. The existing client-side resize-then-base64-encode flow
+      needed no changes — only what the backend does with that string did. A `photoUrl` that's
+      already a real URL (unchanged from a previous save) passes through untouched, avoiding a
+      pointless re-upload every time an unrelated field gets edited.
+      Found and fixed two real, separate bugs while building this: (1) `POST /products` accepted
+      `photoUrl` in the request body but never actually included it in the `INSERT` — a photo
+      uploaded while creating a brand-new product was silently dropped every time, not merely
+      stored as base64 instead of a real URL. (2) Express's JSON body size limit was left at its
+      100kb default — a normally-sized resized product photo (client-side capped at 700px wide,
+      JPEG quality 0.85) can still realistically exceed that once base64-encoded, and would have
+      been silently rejected with a 413 before ever reaching a route handler, regardless of where
+      the URL ends up stored. Raised to 5mb. 13 new backend tests, including one specifically
+      using a ~150kb payload (comfortably past the old limit) to prove the size-limit fix actually
+      works, not just assumed from the code change. 176/176 backend tests passing.
 - [x] **Real path-based routing + per-page meta tag injection for crawlers.** The project owner
       confirmed switching from hash routing (`#/shop`) to real paths (`/shop`) — a real,
       deliberate decision, not a default: a browser never sends the part of a URL after `#` in an
@@ -327,6 +341,15 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real file storage: Cloudinary integrated for product photos.** Replaces base64-in-database
+  with real uploads, no frontend changes needed — the existing resize-then-base64 flow was already
+  the right shape, only what the backend does with it changed. Found and fixed two real,
+  independent bugs while building this, neither specific to Cloudinary itself: `photoUrl` was
+  silently dropped entirely on product creation (accepted in the request, never actually inserted
+  into the database), and Express's 100kb default JSON body limit could silently reject a normal
+  resized photo with a 413 before it ever reached a route handler. 13 new tests, including one
+  using a realistically-sized (~150kb) payload specifically to prove the size-limit fix works, not
+  just assumed. 176/176 backend tests passing.
 - **Switched to real path-based routing, with real per-page meta tags for crawlers — a
   deliberate, confirmed decision given the real trade-offs involved, not a default.** Required a
   real production server (`server.cjs`, `npm start`), confirmed necessary by checking Railway's

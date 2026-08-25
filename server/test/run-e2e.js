@@ -15,6 +15,9 @@ require.cache[paystackPath] = { id: paystackPath, filename: paystackPath, loaded
 const resendPath = require.resolve("resend");
 const resendMock = require("./resend.mock.js");
 require.cache[resendPath] = { id: resendPath, filename: resendPath, loaded: true, exports: resendMock };
+const cloudinaryPath = require.resolve("cloudinary");
+const cloudinaryMock = require("./cloudinary.mock.js");
+require.cache[cloudinaryPath] = { id: cloudinaryPath, filename: cloudinaryPath, loaded: true, exports: cloudinaryMock };
 
 const app = require("../src/app");
 const { query } = require("./db.sqlite.js"); // direct DB access for test setup unreachable via the API (e.g. backdating a timestamp)
@@ -471,6 +474,57 @@ async function main() {
   check("returns 200", deleteOk.status === 200);
   const productsAfterDelete = await get("/products");
   check("the discontinued product no longer appears in the public list", !productsAfterDelete.body.products.some((p) => p.id === testProductId));
+
+  console.log("\nReal Cloudinary upload on product creation -- also fixes a real pre-existing bug (photoUrl was silently dropped on create before this):");
+  process.env.CLOUDINARY_CLOUD_NAME = "mock-cloud";
+  process.env.CLOUDINARY_API_KEY = "mock-key";
+  process.env.CLOUDINARY_API_SECRET = "mock-secret";
+  cloudinaryMock.resetUploadedImages();
+  const fakeBase64Photo = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/fake-test-image-data";
+  const photoCreate = await post("/products", { name: "Photo Test Bean", country: "Testlandia", tier: "everyday", priceCents: 1000, stock: 10, photoUrl: fakeBase64Photo }, token);
+  check("returns 201", photoCreate.status === 201);
+  check("a real upload genuinely happened", cloudinaryMock.getUploadedImages().length === 1);
+  check("the stored photoUrl is the real Cloudinary URL, not the raw base64 data sent", photoCreate.body.product && photoCreate.body.product.photoUrl && photoCreate.body.product.photoUrl.startsWith("https://res.cloudinary.com/"));
+  check("the fix actually took -- photoUrl is genuinely persisted now, confirmed by re-fetching rather than trusting the create response alone", (await get("/products")).body.products.find((p) => p.id === photoCreate.body.product.id)?.photoUrl?.startsWith("https://res.cloudinary.com/"));
+  const photoTestProductId = photoCreate.body.product.id;
+
+  console.log("\nUpdating a price only, without touching photoUrl, doesn't trigger a re-upload:");
+  cloudinaryMock.resetUploadedImages();
+  await patch(`/products/${photoTestProductId}`, { priceCents: 1500 }, token);
+  check("no new upload happened for a field-unrelated edit", cloudinaryMock.getUploadedImages().length === 0);
+  const afterPriceOnlyEdit = (await get("/products")).body.products.find((p) => p.id === photoTestProductId);
+  check("the real photo url from before is still there, untouched", afterPriceOnlyEdit && afterPriceOnlyEdit.photoUrl && afterPriceOnlyEdit.photoUrl.startsWith("https://res.cloudinary.com/"));
+
+  console.log("\nSending an already-real URL as photoUrl doesn't trigger a re-upload:");
+  cloudinaryMock.resetUploadedImages();
+  const alreadyRealUrl = afterPriceOnlyEdit.photoUrl;
+  await patch(`/products/${photoTestProductId}`, { photoUrl: alreadyRealUrl }, token);
+  check("no re-upload for a URL that's already real, not base64", cloudinaryMock.getUploadedImages().length === 0);
+
+  console.log("\nSending a genuinely new base64 photo on update does trigger a real re-upload:");
+  cloudinaryMock.resetUploadedImages();
+  const secondFakePhoto = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAfake-second-test-image";
+  const photoUpdate = await patch(`/products/${photoTestProductId}`, { photoUrl: secondFakePhoto }, token);
+  check("returns 200", photoUpdate.status === 200);
+  check("a genuine new upload happened", cloudinaryMock.getUploadedImages().length === 1);
+  check("the new photo url is different from the first upload's", photoUpdate.body.product.photoUrl !== alreadyRealUrl);
+
+  console.log("\nCloudinary itself failing doesn't silently succeed with a broken photo:");
+  cloudinaryMock.setNextUploadError("Simulated Cloudinary outage");
+  const photoUploadFails = await patch(`/products/${photoTestProductId}`, { photoUrl: fakeBase64Photo }, token);
+  check("returns 502, a real upstream failure", photoUploadFails.status === 502);
+  cloudinaryMock.clearUploadError();
+  const afterFailedUpload = (await get("/products")).body.products.find((p) => p.id === photoTestProductId);
+  check("the product's photo genuinely wasn't changed by the failed attempt", afterFailedUpload && afterFailedUpload.photoUrl === photoUpdate.body.product.photoUrl);
+
+  console.log("\nA realistically-sized photo payload (bigger than Express's old 100kb default) is genuinely accepted, not silently 413'd:");
+  const largeFakePhoto = "data:image/jpeg;base64," + "A".repeat(150 * 1024);
+  const largePhotoUpdate = await patch(`/products/${photoTestProductId}`, { photoUrl: largeFakePhoto }, token);
+  check("returns 200, not a 413 -- the request body itself was accepted", largePhotoUpdate.status === 200);
+
+  delete process.env.CLOUDINARY_CLOUD_NAME;
+  delete process.env.CLOUDINARY_API_KEY;
+  delete process.env.CLOUDINARY_API_SECRET;
 
   console.log("\nStock decrements on real payment, not on order creation:");
   const stockTestProduct = await post("/products", { name: "Stock Test Bean", country: "Testlandia", tier: "everyday", priceCents: 1000, stock: 10 }, token);

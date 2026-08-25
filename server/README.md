@@ -60,6 +60,25 @@ launch (payments is the other).
   "discontinued item" behavior the frontend already has (Journey.jsx shows a fallback for order
   history referencing a removed product) — a real past order that referenced this product by id
   needs the id to keep existing.
+
+## Real photo storage
+
+Both `POST /products` and `PATCH /products/:id` genuinely upload a photo to Cloudinary
+(`src/utils/cloudinary.js`) rather than storing the raw base64 image directly in the database —
+requires `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (see
+`.env.example`). The admin upload forms already resize an image client-side and send it as a
+base64 data URL; nothing about that changed — only what the backend does with that string did.
+A `photoUrl` that's already a real URL (unchanged from a previous save) passes through untouched
+rather than triggering a pointless re-upload every time an unrelated field gets edited.
+
+Fixed a real, separate bug found while building this: `POST /products` accepted `photoUrl` in the
+request body but never actually included it in the `INSERT` — a photo uploaded while creating a
+brand-new product was silently dropped every single time, not just stored as base64 instead of a
+real URL. Also raised the global JSON body size limit from Express's 100kb default to 5mb — a
+real, pre-existing bug found in the same pass, unrelated to where the resulting URL is stored: a
+normally-sized resized product photo (client-side capped at 700px wide, JPEG quality 0.85) can
+still realistically exceed 100kb once base64-encoded, and would have been silently rejected with
+a 413 before ever reaching a route handler.
 - `GET /green-beans`, `POST /green-beans`, `PATCH /green-beans/:id`, `DELETE /green-beans/:id` —
   the same real catalog treatment as `/products` above, applied to the parallel wholesale (green,
   unroasted) coffee system. Generates ids as `green-<slug>`, matching the frontend's existing

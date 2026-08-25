@@ -2,6 +2,7 @@ const express = require("express");
 const { query } = require("../db");
 const { requireAuth } = require("../middleware/requireAuth");
 const { requireAdmin } = require("../middleware/requireAdmin");
+const { resolvePhotoUrl } = require("../utils/cloudinary");
 
 const router = express.Router();
 
@@ -64,16 +65,28 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
   const validationError = validateProductInput(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
 
-  const { name, country, tier, priceCents, stock, note, tags, profile, growing, brewGuide, momentMatch, course } = req.body;
+  const { name, country, tier, priceCents, stock, note, tags, profile, growing, brewGuide, momentMatch, course, photoUrl } = req.body;
   const id = slugify(`${name}-${country}`);
 
   const existing = await query("SELECT id FROM products WHERE id = $1", [id]);
   if (existing.rows.length > 0) return res.status(409).json({ error: "A product with this name and country already exists." });
 
+  // Real upload if this is a fresh base64 photo from the admin form; a no-op otherwise. Was
+  // previously a real, separate bug -- photoUrl was accepted in the request body here but never
+  // actually included in the INSERT below, so a photo uploaded while creating a brand-new product
+  // was silently dropped every time, not just unstored-as-Cloudinary; fixed both at once since
+  // both needed touching the same two lines.
+  let resolvedPhotoUrl;
+  try {
+    resolvedPhotoUrl = await resolvePhotoUrl(photoUrl, "morning-aroma/products");
+  } catch (e) {
+    return res.status(502).json({ error: e.message });
+  }
+
   const result = await query(
-    `INSERT INTO products (id, name, country, tier, price_cents, stock, note, tags, profile, growing, brew_guide, moment_match, course)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
-    [id, name.trim(), country.trim(), tier, priceCents, stock, note || null, JSON.stringify(tags || {}), JSON.stringify(profile || {}), growing || null, brewGuide || null, momentMatch || null, course || null]
+    `INSERT INTO products (id, name, country, tier, price_cents, stock, note, tags, profile, growing, brew_guide, moment_match, course, photo_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+    [id, name.trim(), country.trim(), tier, priceCents, stock, note || null, JSON.stringify(tags || {}), JSON.stringify(profile || {}), growing || null, brewGuide || null, momentMatch || null, course || null, resolvedPhotoUrl || null]
   );
   res.status(201).json({ product: publicProduct(result.rows[0]) });
 });
@@ -90,6 +103,20 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
   // its current value. Lets the same endpoint serve every admin edit (just a price, just a photo,
   // a full edit) without needing separate routes for each.
   const b = req.body;
+
+  // Real upload if this is a fresh base64 photo (a new upload from the admin form); a genuine
+  // no-op if photoUrl wasn't sent at all (some other field is being edited) or if it's already a
+  // real URL (unchanged from a previous save -- avoids re-uploading the same image every time an
+  // unrelated field like price gets edited).
+  let resolvedPhotoUrl = current.photo_url;
+  if (b.photoUrl !== undefined) {
+    try {
+      resolvedPhotoUrl = await resolvePhotoUrl(b.photoUrl, "morning-aroma/products");
+    } catch (e) {
+      return res.status(502).json({ error: e.message });
+    }
+  }
+
   const next = {
     name: b.name !== undefined ? b.name.trim() : current.name,
     country: b.country !== undefined ? b.country.trim() : current.country,
@@ -103,7 +130,7 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     brew_guide: b.brewGuide !== undefined ? b.brewGuide : current.brew_guide,
     moment_match: b.momentMatch !== undefined ? b.momentMatch : current.moment_match,
     course: b.course !== undefined ? b.course : current.course,
-    photo_url: b.photoUrl !== undefined ? b.photoUrl : current.photo_url,
+    photo_url: resolvedPhotoUrl,
   };
 
   const result = await query(
