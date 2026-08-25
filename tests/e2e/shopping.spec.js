@@ -32,7 +32,7 @@ test.describe("Cart and checkout", () => {
     await expect(page.getByText("Total")).toBeVisible();
   });
 
-  test("guest checkout is gated behind sign-in, then reaches confirmation", async ({ page }) => {
+  test("guest checkout is gated behind sign-in, reaches the real Paystack payment step", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("link", { name: "Shop" }).click();
     await page.getByRole("button", { name: "Add to cart" }).first().click();
@@ -55,20 +55,27 @@ test.describe("Cart and checkout", () => {
     await page.getByLabel("6-digit code").fill(code);
     await page.getByRole("button", { name: "Verify & sign in" }).click();
 
-    await page.getByRole("button", { name: "Continue to shipping" }).click();
+    await page.getByRole("button", { name: "Continue to shipping →" }).click();
     await page.getByLabel("Full name").fill("Test Customer");
     await page.getByLabel("Address").fill("123 Coffee Street");
     await page.getByLabel("City").fill("Nairobi");
     await page.getByLabel("Country").fill("Kenya");
     await page.getByRole("button", { name: "Continue to payment" }).click();
 
-    await page.getByLabel("Name on card").fill("Test Customer");
-    await page.getByLabel("Card number").fill("4242 4242 4242 4242");
-    await page.getByLabel("Expiry").fill("12/30");
-    await page.getByLabel("CVC").fill("123");
-    await page.getByRole("button", { name: "Place Order (demo)" }).click();
-
-    await expect(page.getByText("order confirmed")).toBeVisible();
-    await expect(page.getByText(/is roasting soon/)).toBeVisible();
+    // Real Paystack integration from here (see ROADMAP.md) -- the old fake card-entry form
+    // (Name on card / Card number / Expiry / CVC, "Place Order (demo)") no longer exists at all.
+    // Deliberately stops at confirming the real payment step is reached correctly with a working
+    // "Pay with Paystack" button, rather than attempting to click through Paystack's own external
+    // popup UI: that would need real network access to Paystack's script CDN (this test
+    // environment has no guarantee of that), real test-mode payment credentials, and would be
+    // testing Paystack's UI stability rather than this app's own code -- a third-party UI change
+    // having nothing to do with this app could break that test for reasons outside this app's
+    // control. This is the same reasoning already applied to why this test uses the OTP preview
+    // mode above rather than the real backend-connected sign-in path.
+    await expect(page.getByRole("heading", { name: "Payment" })).toBeVisible();
+    await expect(page.getByText("Pay securely with Paystack")).toBeVisible();
+    const payButton = page.getByRole("button", { name: "Pay with Paystack" });
+    await expect(payButton).toBeVisible();
+    await expect(payButton).toBeEnabled();
   });
 });

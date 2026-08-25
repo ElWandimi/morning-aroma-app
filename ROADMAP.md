@@ -347,8 +347,39 @@ Nothing else matters for going live until these are real, not simulated.
 These don't need the backend and could be picked up any time, but are intentionally paused while
 Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
-- [ ] Expand the Playwright test suite to cover everything built after the original two test files
-      (green coffee, admin CRUD, staff permissions, invoicing, notifications, backup/restore)
+- [ ] **Playwright test suite — real progress made, explicitly not "everything," tracked
+      honestly rather than implied done.**
+      Fixed a real, separate bug found while doing this: `shopping.spec.js`'s checkout test had
+      gone stale along with the app — it referenced the old fake card-entry form ("Name on card,"
+      "Place Order (demo)") that was fully replaced by real Paystack integration in an earlier
+      round; that test would have failed immediately if anyone had actually run it. Now correctly
+      stops at confirming the real "Pay with Paystack" step is reached, rather than attempting to
+      automate Paystack's own external popup UI (would need real network access this environment
+      can't guarantee, real test credentials, and would really be testing Paystack's own UI
+      stability, not this app's code).
+      New `admin.spec.js`: a self-contained test needing no special credentials (a freshly
+      registered account is never admin by default) confirming non-admin access is genuinely
+      blocked — checked directly against the real guard in `admin/index.jsx`, not assumed from
+      the nav link being hidden alone. Two more tests, gated behind real admin credentials
+      provided locally via `PLAYWRIGHT_ADMIN_EMAIL`/`PLAYWRIGHT_ADMIN_PASSWORD` (never hardcoded)
+      and skipped cleanly when unset: signing in reaches the dashboard, and — the single most
+      explicitly-flagged gap from this file's own previous version — adding a product and editing
+      its price via Admin genuinely reflects on the real, public Shop page. Found and fixed two
+      real ambiguity bugs while writing these: both the sign-in and create-account forms show
+      identical text on their mode-toggle button and their submit button simultaneously (e.g.
+      "Sign in" appears on both at once in sign-in mode), which would have caused a Playwright
+      strict-mode failure; fixed by targeting the submit button via `type="submit"` instead of by
+      its (ambiguous) visible text.
+      **Real, honest constraint, not a caveat to gloss over**: this sandbox can't download real
+      browser binaries (`cdn.playwright.dev` isn't on the allowed network list, confirmed
+      directly, not assumed) — the exact same restriction the original two test files' own
+      documentation already disclosed. Every test here was verified structurally valid via
+      `npx playwright test --list` (real test discovery, no browser needed) and every selector
+      checked directly against the actual current source, but nobody has watched these pass
+      against a real, running browser. **Still explicitly not covered**, tracked honestly rather
+      than implied done: green coffee admin CRUD, staff permission grants specifically,
+      invoicing, admin notifications, Settings backup/restore, the OTP flow's own behavior, mobile
+      viewport, visual regression, and the real Cloudinary upload flow.
 - [ ] Subscriptions / recurring orders (FAQ already says "coming soon")
 - [x] **Click-outside dismiss audit — real gaps found, not just confirmed already-correct.**
       `LoginModal`, `SearchModal`, and the feedback/review modal all had click-outside-to-close
@@ -388,6 +419,18 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Playwright test suite expanded, and a real stale-test bug fixed along the way.**
+  `shopping.spec.js`'s checkout test still referenced the old fake card-entry form fully replaced
+  by real Paystack integration rounds ago — would have failed immediately if run. Fixed to stop
+  at the real payment step rather than automating a third party's own popup UI. New
+  `admin.spec.js`: a credential-free test confirming non-admin access is genuinely blocked
+  (checked against the real guard in the source, not assumed), plus two admin-credential-gated
+  tests including the most explicitly-flagged prior gap — a product price edit genuinely
+  reflecting on the real Shop page. Found and fixed two real Playwright strict-mode ambiguity
+  bugs while writing these. Honest about a real constraint: this sandbox can't download Playwright's
+  browser binaries (confirmed directly), so every test here is structurally validated via
+  `--list` but not actually run against a browser — the same limitation the original two test
+  files already disclosed. Explicitly not everything from the original scope; tracked honestly.
 - **Accessibility: click-outside audit, focus trapping, ARIA live regions for toasts.** Found 4
   real click-outside gaps (`LoginModal`, `SearchModal`, the feedback modal, and
   `CustomerCareWidget` — the last one not even on the original list, found by checking
