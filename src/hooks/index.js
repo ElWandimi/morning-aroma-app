@@ -53,9 +53,64 @@ export function useClickOutside(ref, active, onClose) {
   }, [ref, active, onClose]);
 }
 
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Keeps Tab/Shift+Tab cycling within a modal or drawer's own focusable elements while it's open,
+// rather than letting focus escape to whatever's behind it -- a real, common accessibility gap for
+// anyone navigating by keyboard, not just screen reader users. Also moves focus onto the container
+// itself the moment it opens, so a keyboard user doesn't land back at the very top of the page
+// (wherever focus happened to be before) and have to tab all the way back down to reach a modal
+// that's now covering the screen. Restores focus to whatever triggered the modal once it closes,
+// so closing doesn't strand a keyboard user's position either.
+export function useFocusTrap(ref, active) {
+  const previouslyFocused = useRef(null);
+
+  useEffect(() => {
+    if (!active || !ref.current) return;
+    previouslyFocused.current = document.activeElement;
+
+    // Doesn't steal focus from a specific field a modal already wants focused on open (e.g.
+    // SearchModal's autoFocus input) -- only moves focus to the container itself if nothing
+    // inside it already has focus by the time this runs.
+    if (!ref.current.contains(document.activeElement)) {
+      ref.current.focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key !== "Tab" || !ref.current) return;
+      const focusable = Array.from(ref.current.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+        (el) => el.offsetParent !== null // visible only -- skips anything hidden by a conditional render inside the same modal
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      // Only restores focus to an element that's still actually in the document and focusable --
+      // the trigger could have been removed or disabled while the modal was open (e.g. an admin
+      // row that got deleted), and calling .focus() on a detached element is a silent no-op that
+      // would otherwise just leave focus wherever it happened to end up instead.
+      if (previouslyFocused.current && document.contains(previouslyFocused.current)) {
+        previouslyFocused.current.focus();
+      }
+    };
+  }, [ref, active]);
+}
+
 // Sets real document.title + <meta name="description"> + Open Graph tags per page — this only
-// does anything useful now that routing is hash-based (see context/index.jsx RouteProvider),
-// since before that every "page" was the same single document with nothing to distinguish it.
+// does anything useful now that routing is real (see context/index.jsx RouteProvider), since
+// before that every "page" was the same single document with nothing to distinguish it.
 function upsertMeta(selector, attr, attrValue, content) {
   let tag = document.querySelector(selector);
   if (!tag) {

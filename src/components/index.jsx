@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
 import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, MOCK_GOOGLE_ACCOUNTS, TRANSLATE_LANGUAGES } from "../data";
-import { useClickOutside, useEscapeKey, useGeoLocale, useGoogleTranslate } from "../hooks";
+import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTranslate } from "../hooks";
 import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent } from "../utils/helpers";
 import { api } from "../utils/api";
 
@@ -104,7 +104,7 @@ export function LoginModal({ open, onClose }) {
   const [googlePicker, setGooglePicker] = useState(false);
   const [googleCustomEmail, setGoogleCustomEmail] = useState("");
 
-  // Forgot-password flow: null (not active) -> "verify" (enter the emailed code) -> "newpassword"
+  // Forgot-password flow: null (not active) -> true (real request sent, entering the code)
   const [resetStep, setResetStep] = useState(null);
   const [resetToken, setResetToken] = useState("");
   const [resetSubmitting, setResetSubmitting] = useState(false);
@@ -128,7 +128,9 @@ export function LoginModal({ open, onClose }) {
     return () => clearInterval(t);
   }, [otpSent, secondsLeft]);
 
+  const modalRef = useRef(null);
   useEscapeKey(open, onClose);
+  useFocusTrap(modalRef, open);
 
   if (!open) return null;
 
@@ -239,8 +241,8 @@ export function LoginModal({ open, onClose }) {
   };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Sign in to Morning Aroma">
-      <div className="login-card">
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Sign in to Morning Aroma" onClick={twoFAStep ? cancelTwoFAStep : resetStep ? cancelResetFlow : onClose}>
+      <div className="login-card" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="login-photo-panel">
           <p className="handwritten login-quote">"Every cup begins as a story —"</p>
         </div>
@@ -475,7 +477,9 @@ export function SearchModal({ open, onClose }) {
   const { go } = useRoute();
   const { getAllProducts } = useAdmin();
   const [query, setQuery] = useState("");
+  const modalRef = useRef(null);
   useEscapeKey(open, onClose);
+  useFocusTrap(modalRef, open);
   useEffect(() => {
     if (!open) setQuery("");
   }, [open]);
@@ -488,8 +492,8 @@ export function SearchModal({ open, onClose }) {
   const viewAllResults = () => { go("searchresults", { id: q }); onClose(); };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Search Morning Aroma">
-      <div className="modal-card search-modal-card">
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Search Morning Aroma" onClick={onClose}>
+      <div className="modal-card search-modal-card" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         <p className="eyebrow">find it fast</p>
         <h3 className="modal-title">Search</h3>
@@ -850,7 +854,9 @@ export function FeedbackBean() {
 
   const roastColor = rating === 0 ? "var(--gold)" : lerpColor("E8D5B5", "3E2C23", rating / 5);
 
+  const feedbackModalRef = useRef(null);
   useEscapeKey(open, resetAndClose);
+  useFocusTrap(feedbackModalRef, open);
 
   return (
     <>
@@ -859,8 +865,8 @@ export function FeedbackBean() {
         <Steam className="bean-steam" />
       </button>
       {open && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Leave your aroma">
-          <div className="modal-card feedback-card">
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Leave your aroma" onClick={resetAndClose}>
+          <div className="modal-card feedback-card" ref={feedbackModalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={resetAndClose}>×</button>
 
             {step === "form" ? (
@@ -1065,7 +1071,9 @@ export function CustomerCareWidget() {
   const { settings } = useAdmin();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("options"); // "options" | "chat"
+  const widgetRef = useRef(null);
   useEscapeKey(open, () => setOpen(false));
+  useClickOutside(widgetRef, open, () => setOpen(false));
 
   const digitsOnly = (s) => (s || "").replace(/[^\d]/g, "");
   const waHref = `https://wa.me/${digitsOnly(settings.whatsappNumber)}?text=${encodeURIComponent("Hi Morning Aroma, I have a question about ")}`;
@@ -1082,7 +1090,7 @@ export function CustomerCareWidget() {
   const closeAll = () => { setOpen(false); setView("options"); };
 
   return (
-    <>
+    <div ref={widgetRef}>
       <button className="care-bubble" onClick={() => setOpen((o) => !o)} aria-label="Contact customer care" aria-expanded={open}>
         <span aria-hidden="true">💬</span>
       </button>
@@ -1127,7 +1135,7 @@ export function CustomerCareWidget() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1146,11 +1154,13 @@ export function CartDrawer() {
   const { go } = useRoute();
   const { getPrice, getStock, getAllProducts } = useAdmin();
   const { format } = useCurrency();
+  const cartDrawerRef = useRef(null);
   useEscapeKey(open, () => setOpen(false));
+  useFocusTrap(cartDrawerRef, open);
   if (!open) return null;
   return (
     <div className="drawer-overlay" onClick={() => setOpen(false)}>
-      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+      <div className="drawer" ref={cartDrawerRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
           <h3>Your bag</h3>
           <button className="modal-close" onClick={() => setOpen(false)}>×</button>
@@ -1201,11 +1211,13 @@ export function WishlistDrawer() {
   const { format } = useCurrency();
   const { go } = useRoute();
   const { addToast } = useToast();
+  const wishlistDrawerRef = useRef(null);
   useEscapeKey(open, () => setOpen(false));
+  useFocusTrap(wishlistDrawerRef, open);
   if (!open) return null;
   return (
     <div className="drawer-overlay" onClick={() => setOpen(false)}>
-      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+      <div className="drawer" ref={wishlistDrawerRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
           <h3>Your wishlist</h3>
           <button className="modal-close" onClick={() => setOpen(false)}>×</button>

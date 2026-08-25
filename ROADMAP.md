@@ -350,10 +350,32 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 - [ ] Expand the Playwright test suite to cover everything built after the original two test files
       (green coffee, admin CRUD, staff permissions, invoicing, notifications, backup/restore)
 - [ ] Subscriptions / recurring orders (FAQ already says "coming soon")
-- [ ] Click-outside dismiss audit across every overlay (search modal, cart/wishlist drawers, login
-      modal) — currency/language dropdowns already have this done properly; confirm the rest match
-- [ ] Focus trapping inside modals (Tab shouldn't escape to the page behind them)
-- [ ] ARIA live regions for toast notifications, so screen readers announce them
+- [x] **Click-outside dismiss audit — real gaps found, not just confirmed already-correct.**
+      `LoginModal`, `SearchModal`, and the feedback/review modal all had click-outside-to-close
+      completely missing (clicking the darkened backdrop did nothing). `CustomerCareWidget` — not
+      even on this list originally — was found missing it too during the systematic check, and
+      needed its outer JSX fragment converted to a real `<div>` first, since a fragment can't hold
+      the `ref` `useClickOutside` needs. Confirmed the drawers (`CartDrawer`, `WishlistDrawer`)
+      already had it correctly, via each drawer's own overlay `onClick` + inner `stopPropagation`
+      — a different but equally valid pattern from the currency/language dropdowns' shared
+      `useClickOutside` hook, left as-is rather than needlessly unified.
+- [x] **Focus trapping inside modals.** New `useFocusTrap` hook (`src/hooks/index.js`) — keeps
+      Tab/Shift+Tab cycling within a modal's own focusable elements while open, moves focus onto
+      the container on open (without stealing it from a field that already has `autoFocus`, e.g.
+      `SearchModal`'s input), and restores focus to whatever triggered the modal once it closes.
+      Applied to every true modal and drawer (`LoginModal`, `SearchModal`, the feedback modal,
+      `CartDrawer`, `WishlistDrawer`) — deliberately not `CustomerCareWidget`, which is
+      `aria-modal="false"` on purpose (a non-blocking popover, not a true modal dialog).
+      Found and fixed a real bug in the hook itself before it shipped: `ref.current.focus()`
+      silently does nothing on a plain `<div>` without an explicit `tabIndex` — every container
+      needed `tabIndex={-1}` added alongside the `ref` for this to actually work, not just look
+      like it should.
+- [x] **ARIA live regions for toast notifications.** Found the existing implementation was
+      already substantially correct (`aria-live="polite"` was already present, and the container
+      was already always-mounted rather than conditionally rendered, which is what actually
+      matters for reliable announcements) — added `role="status"` alongside it, the more widely-
+      recognized semantic pairing for this exact use case, as a low-risk reinforcement rather than
+      a from-scratch fix.
 - [ ] Further code-splitting pass now that the codebase has grown past the last audit
 
 ## Tier 4 — Content and business expansion
@@ -366,6 +388,17 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Accessibility: click-outside audit, focus trapping, ARIA live regions for toasts.** Found 4
+  real click-outside gaps (`LoginModal`, `SearchModal`, the feedback modal, and
+  `CustomerCareWidget` — the last one not even on the original list, found by checking
+  systematically rather than trusting the stated scope). Built a real, reusable `useFocusTrap`
+  hook and applied it to every true modal/drawer, catching and fixing a real bug in the hook
+  itself before it shipped (`.focus()` silently does nothing on a `<div>` without `tabIndex`).
+  Toast notifications' `aria-live="polite"` was already substantially correct; added `role="status"`
+  as a low-risk reinforcement. Also fixed two unrelated stale comments found while in these exact
+  files (one still describing hash-based routing, one describing a two-step password reset flow
+  that was simplified to one step in an earlier round). Frontend-only; 189/189 backend tests
+  confirmed unaffected.
 - **Real business settings — found from a direct user report: Admin Settings (announcements,
   contact info, tax/invoice details) reset on refresh, the exact same bug already fixed for
   products and green beans, just not yet reported here.** Real single-row `settings` table

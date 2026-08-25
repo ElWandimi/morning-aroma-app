@@ -795,7 +795,7 @@ export function ToastProvider({ children }) {
   return (
     <ToastCtx.Provider value={{ addToast }}>
       {children}
-      <div className="toast-stack" aria-live="polite">
+      <div className="toast-stack" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className="toast">
             <span className="bean-shape toast-bean" /> {t.message}
