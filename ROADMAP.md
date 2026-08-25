@@ -61,7 +61,7 @@ Nothing else matters for going live until these are real, not simulated.
             itself: on Google sign-in, check for an existing user by email first before creating
             a new one (and the reverse: /auth/register should recognize an email that already
             exists via Google, once that's a real possibility).
-- [ ] **Payments** — Paystack integration (decided by the project owner — a strong fit given the
+- [x] **Payments** — Paystack integration (decided by the project owner — a strong fit given the
       business is Kenya-based; Paystack has real M-Pesa support there, which Stripe doesn't).
       Real Paystack account now exists, charging in KES.
       - [x] `POST /orders/:id/verify-payment` — never trusts a client-reported success; always
@@ -220,6 +220,31 @@ Nothing else matters for going live until these are real, not simulated.
       with no real guarantee that id still existed in the actual fetched data. Both fixed with
       safe defaults and an explicit loading/error/empty guard, checked directly against the real
       component rather than assumed safe by analogy to the products fix.
+- [x] **Real business settings — found from a direct user report, the same "resets on refresh"
+      bug already fixed for products and green beans.** `server/migrations/007_settings.sql` — a
+      genuine single-row table (`CHECK (id = 1)`), JSONB blob for the ~13 fields themselves, seeded
+      from `DEFAULT_SETTINGS` (newly extracted from inline React state into `src/data/index.js`
+      specifically so the migration's seed data can be generated from the real source rather than
+      hand-copied). `GET /settings` public, `PATCH /settings` admin-only with a real partial merge
+      matching the existing frontend contract, rejecting any key that was never a real setting.
+      Both fall back to sensible defaults if the row doesn't exist yet, rather than silently
+      returning an empty object that would leave the announcement banner and contact info blank on
+      a live, unmigrated deployment.
+      Found and fixed a second, related bug in the same area: Settings backup/restore would have
+      silently written a restored file's settings into local-only state without ever saving them
+      to the real backend — looking like it worked, then quietly reverting on the next refresh,
+      the identical bug class reachable through a different path.
+      Found a real structural risk while wiring the frontend, not assumed safe by analogy to
+      earlier rounds: naively initializing the edit form's draft state directly from
+      `useState(settings)` could capture a stale fallback value if the Settings page were opened
+      before the real fetch completed, and would never update even once the real data arrived
+      (`useState`'s initial value is never re-evaluated after the first render). Fixed by
+      splitting into an outer loading-gate component and an inner form component, so the form's
+      state only ever mounts once loading is genuinely done.
+      12 new backend tests, specifically exercising the merge-and-persist upsert pattern (`INSERT
+      ... ON CONFLICT DO UPDATE`, not used anywhere else in this codebase before now), including
+      confirming a second save doesn't wipe what an earlier one wrote. 189/189 backend tests
+      passing.
 - [x] **Order total price integrity.** `POST /orders` now looks up each item's real, current
       price from the `products` table and uses that for the actual total — the client-submitted
       `unitPriceCents` is still validated for shape (backward-compatible with the existing
@@ -341,6 +366,23 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real business settings — found from a direct user report: Admin Settings (announcements,
+  contact info, tax/invoice details) reset on refresh, the exact same bug already fixed for
+  products and green beans, just not yet reported here.** Real single-row `settings` table
+  (JSONB, enforced by a `CHECK (id = 1)` constraint), seeded from a newly-extracted
+  `DEFAULT_SETTINGS` constant (moved out of inline React state so it can't drift from what's
+  actually seeded). Real partial-merge `PATCH`, matching the existing frontend contract. Found and
+  fixed a second, related bug in the same area: Settings backup/restore would have silently
+  written a restored file's settings into local-only state without saving them to the real
+  backend — looking like it worked, then quietly reverting on the next refresh, the identical bug
+  class reachable through a different path. Also found a real structural risk while wiring the
+  frontend: naively initializing the edit form's draft state directly from `useState(settings)`
+  could capture a stale fallback value if opened before the real fetch completed, silently never
+  updating even once the real data arrived — fixed by splitting into an outer loading-gate
+  component and an inner form component, so the form's state only ever mounts once loading is
+  genuinely done. 12 new backend tests, specifically exercising the merge-and-persist upsert
+  pattern (not used anywhere else in this codebase before now), including confirming a second save
+  doesn't wipe what an earlier one wrote. 189/189 backend tests passing.
 - **Real file storage: Cloudinary integrated for product photos.** Replaces base64-in-database
   with real uploads, no frontend changes needed — the existing resize-then-base64 flow was already
   the right shape, only what the backend does with it changed. Found and fixed two real,

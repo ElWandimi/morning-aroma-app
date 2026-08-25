@@ -557,6 +557,40 @@ async function main() {
   const foundAfterOverorder = stockAfterOverorder.body.products.find((p) => p.id === overorderId);
   check("stock is clamped at zero, never negative, even when paid orders exceed what was available", foundAfterOverorder && foundAfterOverorder.stock === 0);
 
+  console.log("\nGET /settings — public, no auth needed, real seeded data:");
+  const settingsInitial = await get("/settings");
+  check("returns 200 without any token", settingsInitial.status === 200);
+  check("returns the real seeded business name, not an empty object", settingsInitial.body.settings && settingsInitial.body.settings.businessName === "Morning Aroma Coffee Roasters Ltd.");
+  check("returns the real seeded announcement text too", settingsInitial.body.settings && settingsInitial.body.settings.announcementText === "Free shipping on orders over $60 — this week only.");
+
+  console.log("\nPATCH /settings without a token:");
+  const settingsPatchNoAuth = await patch("/settings", { tagline: "New tagline" });
+  check("returns 401", settingsPatchNoAuth.status === 401);
+
+  console.log("\nPATCH /settings as a non-admin:");
+  const settingsPatchAsCustomer = await patch("/settings", { tagline: "New tagline" }, customerToken);
+  check("returns 403", settingsPatchAsCustomer.status === 403);
+
+  console.log("\nPATCH /settings with an unknown key:");
+  const settingsPatchUnknown = await patch("/settings", { thisIsNotARealSetting: "hello" }, token);
+  check("returns 400 -- rejects a key that was never a real setting, not silently accepted", settingsPatchUnknown.status === 400);
+
+  console.log("\nPATCH /settings — a real, partial update (the actual upsert path, not yet exercised by any earlier test):");
+  const settingsPatchOk = await patch("/settings", { announcementText: "A real, updated announcement" }, token);
+  check("returns 200", settingsPatchOk.status === 200);
+  check("the field that was patched genuinely changed", settingsPatchOk.body.settings && settingsPatchOk.body.settings.announcementText === "A real, updated announcement");
+  check("a field that was NOT included in this patch is still there, untouched -- this is a real merge, not a replace", settingsPatchOk.body.settings && settingsPatchOk.body.settings.businessName === "Morning Aroma Coffee Roasters Ltd.");
+
+  console.log("\nThe update genuinely persisted -- confirmed by a fresh GET, not just trusting the PATCH response:");
+  const settingsAfterPatch = await get("/settings");
+  check("re-fetching independently confirms the real, persisted change", settingsAfterPatch.body.settings && settingsAfterPatch.body.settings.announcementText === "A real, updated announcement");
+
+  console.log("\nA second, different partial update -- confirms the upsert path handles an already-existing row correctly, not just the first-ever write:");
+  const settingsSecondPatch = await patch("/settings", { businessName: "A Renamed Business" }, token);
+  check("returns 200", settingsSecondPatch.status === 200);
+  check("the newly patched field changed", settingsSecondPatch.body.settings && settingsSecondPatch.body.settings.businessName === "A Renamed Business");
+  check("the field patched in the PREVIOUS request is still there too -- confirms real accumulation across multiple saves, not each save wiping the last", settingsSecondPatch.body.settings && settingsSecondPatch.body.settings.announcementText === "A real, updated announcement");
+
   console.log("\nGET /green-beans — public, no auth needed:");
   const greenNoAuth = await get("/green-beans");
   check("returns 200 without any token", greenNoAuth.status === 200);

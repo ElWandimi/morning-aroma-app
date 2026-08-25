@@ -15,6 +15,12 @@ CREATE TABLE users (
   created_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE settings (
+  id          INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  data        TEXT NOT NULL DEFAULT '{}',
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE products (
   id                  TEXT PRIMARY KEY,
   name                TEXT NOT NULL,

@@ -865,3 +865,27 @@ export const CURRENCIES = [
   { code: "BRL", label: "Brazilian Real", flag: "🇧🇷" },
 ];
 
+// The default business settings a fresh install starts with -- extracted here (rather than left
+// inline in AdminDataProvider) specifically so server/migrations can generate real seed data
+// programmatically from this exact source, the same discipline already applied to the products
+// and green_beans migrations, instead of hand-retyping ~13 fields into SQL by hand.
+export const DEFAULT_SETTINGS = {
+  tagline: "Where quality meets its scent.",
+  announcementEnabled: true,
+  announcementText: "Free shipping on orders over $60 — this week only.",
+  contactEmail: "hello@morningaroma.com",
+  whatsappNumber: "+254712345678",
+  phoneNumber: "+254 712 345 678",
+  businessName: "Morning Aroma Coffee Roasters Ltd.",
+  businessAddress: "Nairobi, Kenya",
+  taxId: "",
+  taxRatePercent: 0,
+  invoiceNotes: "Payment due within 14 days of invoice date. Thank you for your business.",
+  instagramHandle: "",
+  facebookUrl: "",
+  // Which pending-item types actually generate a bell notification for admin -- all on by
+  // default, but an admin who doesn't want to be interrupted by, say, live chat pings can turn
+  // just that one off without losing the others.
+  notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
+};
+

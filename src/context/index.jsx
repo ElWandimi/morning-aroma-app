@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { COUNTRY_HISTORY, DEMO_ADMIN, GREEN_BEANS, KENYA_LIVE_MESSAGES_SEED, KNOWN_ROUTES, PAGE_TO_SLUG, PRODUCTS, SLUG_TO_PAGE } from "../data";
+import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, GREEN_BEANS, KENYA_LIVE_MESSAGES_SEED, KNOWN_ROUTES, PAGE_TO_SLUG, PRODUCTS, SLUG_TO_PAGE } from "../data";
 import { fmtPrice, getStorageConsent, logPageView, nameFromEmail, slugify, storage } from "../utils/helpers";
 import { api } from "../utils/api";
 
@@ -469,25 +469,24 @@ export function AdminDataProvider({ children }) {
   const [momentOverrides, setMomentOverrides] = useState({});
   const [courseOverrides, setCourseOverrides] = useState({});
   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
-  const [settings, setSettingsState] = useState({
-    tagline: "Where quality meets its scent.",
-    announcementEnabled: true,
-    announcementText: "Free shipping on orders over $60 — this week only.",
-    contactEmail: "hello@morningaroma.com",
-    whatsappNumber: "+254712345678",
-    phoneNumber: "+254 712 345 678",
-    businessName: "Morning Aroma Coffee Roasters Ltd.",
-    businessAddress: "Nairobi, Kenya",
-    taxId: "",
-    taxRatePercent: 0,
-    invoiceNotes: "Payment due within 14 days of invoice date. Thank you for your business.",
-    instagramHandle: "",
-    facebookUrl: "",
-    // Which pending-item types actually generate a bell notification for admin — all on by
-    // default, but an admin who doesn't want to be interrupted by, say, live chat pings can turn
-    // just that one off without losing the others.
-    notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
-  });
+  // Real business settings, fetched the same way as realProducts/realGreenBeans above --
+  // unconditionally on app load, since the announcement banner and structured data (business
+  // name, contact info) are shown to every visitor, not gated behind an admin/staff role.
+  // DEFAULT_SETTINGS is still the *initial* value here, purely to avoid a flash of empty content
+  // for the very first render before the real fetch resolves -- it's immediately replaced by the
+  // real, fetched settings once that completes, same reasoning as any other loading state.
+  const [settings, setSettingsState] = useState(DEFAULT_SETTINGS);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState("");
+  const refetchSettings = () => {
+    setSettingsLoading(true);
+    setSettingsError("");
+    api.getSettings()
+      .then(({ settings }) => setSettingsState(settings))
+      .catch((e) => setSettingsError(e.message))
+      .finally(() => setSettingsLoading(false));
+  };
+  useEffect(() => { refetchSettings(); }, []);
 
   const logAction = (action, detail) => {
     setAuditLog((prev) =>
@@ -712,9 +711,15 @@ export function AdminDataProvider({ children }) {
     logAction("Country history edited", countryName);
   };
 
-  const setSettings = (patch) => {
-    setSettingsState((prev) => ({ ...prev, ...patch }));
-    logAction("Settings updated", Object.keys(patch).join(", "));
+  const setSettings = async (patch) => {
+    try {
+      const { settings: updated } = await api.updateSettings(token, patch);
+      setSettingsState(updated);
+      logAction("Settings updated", Object.keys(patch).join(", "));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
   // Client-side equivalent of a database backup, since there's no real database here to back up
@@ -724,7 +729,7 @@ export function AdminDataProvider({ children }) {
   const exportAdminData = () => ({
     greenOrders,
     auditLog, kenyaMessages, quotations, serviceInquiries, liveChats, feedbackList,
-    momentOverrides, courseOverrides, countryHistoryOverrides, settings,
+    momentOverrides, courseOverrides, countryHistoryOverrides,
   });
   // Restores each piece independently rather than one big setState -- if the uploaded file is
   // missing a key (an older export, or a hand-edited partial file), that specific piece is simply
@@ -741,7 +746,6 @@ export function AdminDataProvider({ children }) {
     if (data.momentOverrides) setMomentOverrides(data.momentOverrides);
     if (data.courseOverrides) setCourseOverrides(data.courseOverrides);
     if (data.countryHistoryOverrides) setCountryHistoryOverrides(data.countryHistoryOverrides);
-    if (data.settings) setSettingsState((prev) => ({ ...prev, ...data.settings }));
     logAction("Backup restored", `${Object.keys(data).length} data sets`);
   };
 
@@ -768,7 +772,7 @@ export function AdminDataProvider({ children }) {
         getMomentContent, setMomentContent, momentOverrides,
         getCourseContent, setCourseContent, courseOverrides,
         getCountryHistory, setCountryHistory,
-        settings, setSettings,
+        settings, setSettings, settingsLoading, settingsError, refetchSettings,
         exportAdminData, restoreAdminData,
       }}
     >

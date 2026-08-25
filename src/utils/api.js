@@ -76,4 +76,7 @@ export const api = {
     request(`/green-beans/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
   deleteGreenBean: (token, id) =>
     request(`/green-beans/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  getSettings: () => request("/settings"),
+  updateSettings: (token, patch) =>
+    request("/settings", { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(patch) }),
 };

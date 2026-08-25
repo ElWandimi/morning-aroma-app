@@ -87,6 +87,17 @@ a 413 before ever reaching a route handler.
   checked against the real, current state on a partial update, not just the fields in that
   specific request — a stock-only edit that would leave an existing minimum order too high is
   correctly rejected.
+- `GET /settings` (public) and `PATCH /settings` (admin-only) — real business settings (the
+  announcement banner, contact info, tax/invoice details), found via a real user report to be
+  the same "resets on refresh" bug already fixed for products and green beans, just not yet
+  reported for this area. A genuine single-row table (`id` locked to `1` via a `CHECK` constraint)
+  holding a JSONB blob, since these ~13 fields are simple, stable, and never need SQL-level
+  filtering. `PATCH` does a real partial merge (matching the existing frontend contract — saving
+  Settings has always meant "apply these changes," not "replace everything"), rejecting any key
+  that was never a real setting. Both endpoints fall back to sensible defaults if the row doesn't
+  exist yet at all (e.g. this specific migration hasn't been run on a given deployment) rather
+  than silently returning an empty object and leaving the announcement banner and contact info
+  blank on a live site.
 
 ## Both real catalogs are fully wired, frontend included
 

@@ -1580,6 +1580,27 @@ export function AdminContent() {
 }
 
 export function AdminSettings() {
+  const { settingsLoading, settingsError, refetchSettings } = useAdmin();
+
+  // Deliberately gates on a separate component boundary, not just an early return inside one
+  // component -- useState(settings) below needs to only ever run its FIRST render (the only time
+  // its initial value is actually used) once settings has genuinely finished loading. An early
+  // return in the same component wouldn't prevent that hook from having already captured a stale
+  // fallback value on an earlier render before loading finished, since useState's initial value
+  // is never re-evaluated on subsequent renders even after the real data arrives.
+  if (settingsLoading) return <p className="hint">Loading settings…</p>;
+  if (settingsError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load settings: {settingsError}</p>
+        <button className="btn-outline" onClick={refetchSettings}>Try again</button>
+      </div>
+    );
+  }
+  return <AdminSettingsForm />;
+}
+
+function AdminSettingsForm() {
   const { settings, setSettings, exportAdminData, restoreAdminData } = useAdmin();
   const { exportUsers, restoreUsers } = useAuth();
   const { addToast } = useToast();
@@ -1587,7 +1608,10 @@ export function AdminSettings() {
   const [restoring, setRestoring] = useState(false);
   const fileInputRef = useRef(null);
 
-  const save = () => { setSettings(draft); addToast("Settings saved"); };
+  const save = async () => {
+    const result = await setSettings(draft);
+    addToast(result.ok ? "Settings saved" : result.error);
+  };
 
   // Covers only what's still genuinely in-memory (catalog/admin overrides, the vestigial demo
   // users list). Orders and real customer accounts live in Postgres now and aren't part of this
