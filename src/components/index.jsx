@@ -90,7 +90,7 @@ function GoogleIcon() {
 }
 
 export function LoginModal({ open, onClose }) {
-  const { login, register, loginWithOtp, loginWithGoogle, error, setError, pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor } = useAuth();
+  const { login, register, loginWithOtp, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -101,6 +101,12 @@ export function LoginModal({ open, onClose }) {
   const [authIntent, setAuthIntent] = useState("signin"); // signin | signup — only meaningful in password mode
   const [submitting, setSubmitting] = useState(false);
   const [twoFAStep, setTwoFAStep] = useState(false);
+  // Separate from the OTP-simulation state below (enteredCode etc.) -- this is a real code from an
+  // authenticator app the person already has, or one of their real backup codes, checked against
+  // the actual backend, not a code this app generated and is showing back to them.
+  const [twoFACode, setTwoFACode] = useState("");
+  const [twoFASubmitting, setTwoFASubmitting] = useState(false);
+  const [twoFAError, setTwoFAError] = useState("");
   const [googlePicker, setGooglePicker] = useState(false);
   const [googleCustomEmail, setGoogleCustomEmail] = useState("");
 
@@ -163,16 +169,9 @@ export function LoginModal({ open, onClose }) {
       return;
     }
     if (enteredCode === genCode) {
-      if (twoFAStep) {
-        completeTwoFactor();
-        onClose();
-        resetOtp();
-        setTwoFAStep(false);
-      } else {
-        loginWithOtp(email);
-        onClose();
-        resetOtp();
-      }
+      loginWithOtp(email);
+      onClose();
+      resetOtp();
       return;
     }
     const nextAttempts = attempts + 1;
@@ -186,10 +185,29 @@ export function LoginModal({ open, onClose }) {
     }
   };
 
+  // Real 2FA verification -- a live code from the account's authenticator app (or a backup code),
+  // checked against the actual backend. Deliberately separate from verifyCode above, which is
+  // purely the "email code (preview)" simulation's own local comparison against a code this app
+  // generated itself; real 2FA has nothing to compare locally against at all.
+  const submitTwoFACode = async () => {
+    setTwoFASubmitting(true);
+    setTwoFAError("");
+    const result = await verifyTwoFactorLogin(twoFACode);
+    setTwoFASubmitting(false);
+    if (result.ok) {
+      onClose();
+      setTwoFAStep(false);
+      setTwoFACode("");
+    } else {
+      setTwoFAError(result.error || "Incorrect code.");
+    }
+  };
+
   const cancelTwoFAStep = () => {
-    cancelTwoFactor();
+    cancelTwoFactorLogin();
     setTwoFAStep(false);
-    resetOtp();
+    setTwoFACode("");
+    setTwoFAError("");
     setPassword("");
   };
 
@@ -281,28 +299,23 @@ export function LoginModal({ open, onClose }) {
             <p className="eyebrow">two-factor authentication</p>
             <h3 className="modal-title">Verify it's you</h3>
             <p className="hint" style={{ marginTop: 0 }}>
-              This account has 2FA enabled. We've sent a code to <strong>{pendingTwoFactorUser?.email}</strong> to confirm it's really you.
+              Enter the 6-digit code from your authenticator app, or one of your backup codes if you don't have access to it.
             </p>
-            {otpSent && (
-              <>
-                <p className="hint otp-demo-code">
-                  Prototype only — no real email is sent. Your code is <strong>{genCode || "expired"}</strong>, valid for {secondsLeft}s.
-                </p>
-                <label htmlFor="twofa-code">6-digit code</label>
-                <input
-                  id="twofa-code"
-                  value={enteredCode}
-                  onChange={(e) => setEnteredCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                />
-                {otpError && <p className="form-error">{otpError}</p>}
-                <button className="btn-primary full" onClick={verifyCode} disabled={enteredCode.length !== 6}>Verify &amp; sign in</button>
-                <button className="link-btn" style={{ marginTop: 10 }} onClick={sendCode}>Resend code</button>
-              </>
-            )}
+            <label htmlFor="twofa-code">Code</label>
+            <input
+              id="twofa-code"
+              value={twoFACode}
+              onChange={(e) => { setTwoFACode(e.target.value); setTwoFAError(""); }}
+              placeholder="000000"
+              inputMode="text"
+              autoComplete="one-time-code"
+              maxLength={11}
+              autoFocus
+            />
+            {twoFAError && <p className="form-error">{twoFAError}</p>}
+            <button className="btn-primary full" onClick={submitTwoFACode} disabled={!twoFACode.trim() || twoFASubmitting}>
+              {twoFASubmitting ? "Verifying…" : "Verify & sign in"}
+            </button>
             <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelTwoFAStep}>← Use a different account</button>
           </>
         ) : googlePicker ? (
@@ -377,7 +390,6 @@ export function LoginModal({ open, onClose }) {
                   setSubmitting(false);
                   if (result.ok && result.requiresTwoFactor) {
                     setTwoFAStep(true);
-                    sendCode();
                   } else if (result.ok) {
                     onClose();
                   }

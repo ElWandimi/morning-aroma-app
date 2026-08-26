@@ -1,5 +1,7 @@
 const express = require("express");
+const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
+const { OAuth2Client } = require("google-auth-library");
 const { query } = require("../db");
 const { hashPassword, verifyPassword, isPasswordStrongEnough } = require("../utils/password");
 const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken } = require("../utils/tokens");
@@ -8,6 +10,12 @@ const { requireAuth } = require("../middleware/requireAuth");
 const { sendWelcomeEmail, sendPasswordResetEmail } = require("../utils/email");
 
 const router = express.Router();
+
+// Real, not a placeholder -- verifying a Google-issued ID token needs the actual OAuth Client ID
+// from Google Cloud Console (see ROADMAP.md) as the expected `audience`, or a forged token for a
+// completely different Google app could otherwise pass verification.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const googleClient = new OAuth2Client();
 
 // A dummy hash to compare against when a login's email isn't found — bcrypt.compare takes
 // roughly the same time whether it matches or not, so running it even on a "no such user" path
@@ -104,6 +112,87 @@ router.post("/login", async (req, res) => {
     // Correct password alone isn't enough to sign in on an account with 2FA on. This is
     // deliberately NOT a real access token -- see signPendingTwoFactorToken's own comment for why
     // it can't be used to reach anything except finishing the challenge at /2fa/verify-login.
+    return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
+  }
+
+  res.json({ user: publicUser(user), token: signAccessToken(user) });
+});
+
+// Real Google sign-in: verifies an ID token Google's own Sign-In button already produced entirely
+// client-side (no authorization code, no client secret, no redirect dance -- the frontend calls
+// this with a JWT Google itself signed, and all this route does is confirm Google really signed
+// it and that it was actually issued for *this* app). Serves as both login and registration in
+// one -- a matching email either signs into the existing account or creates a new one, same as
+// the roadmap's own requirement that email+password and Google resolve to the same account.
+router.post("/google", async (req, res) => {
+  if (!GOOGLE_CLIENT_ID) {
+    // Fails loudly rather than silently misbehaving -- same philosophy as VITE_API_URL's own
+    // check on the frontend (src/utils/api.js). A missing config here shouldn't look like "Google
+    // sign-in is broken" to a user; it should look like "not set up yet" to whoever runs this.
+    console.error("GOOGLE_CLIENT_ID is not set — Google sign-in cannot be verified.");
+    return res.status(503).json({ error: "Google sign-in isn't set up on this server yet." });
+  }
+  const { idToken } = req.body || {};
+  if (!idToken || typeof idToken !== "string") {
+    return res.status(400).json({ error: "Missing Google credential." });
+  }
+
+  let payload;
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
+    payload = ticket.getPayload();
+  } catch {
+    // Deliberately vague to the client (same principle as "Invalid email or password" above) --
+    // an expired token, a forged one, and a token issued for a different app all fail the same
+    // way here, and none of those distinctions are useful or safe to expose.
+    return res.status(401).json({ error: "Couldn't verify that Google sign-in. Please try again." });
+  }
+
+  if (!payload || !payload.email) {
+    return res.status(401).json({ error: "That Google account doesn't have a usable email." });
+  }
+  if (!payload.email_verified) {
+    return res.status(401).json({ error: "That Google account's email isn't verified yet. Verify it with Google first." });
+  }
+
+  const cleanEmail = payload.email.trim().toLowerCase();
+  const result = await query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
+  let user = result.rows[0];
+
+  if (!user) {
+    // Same first-user-becomes-admin bootstrap as /register above -- Google sign-in is a real,
+    // equal way to create the very first account on a fresh deployment, not a second-class path
+    // that skips it.
+    const countResult = await query("SELECT COUNT(*) AS count FROM users", []);
+    const isFirstUser = parseInt(countResult.rows[0].count, 10) === 0;
+    const role = isFirstUser ? "super_admin" : "customer";
+
+    // `name` isn't in every real Google ID token (only given_name/family_name are guaranteed by
+    // google-auth-library's own type definitions, even though `name` is usually present too) --
+    // falls back to combining those, then to the email's local part, rather than ever storing an
+    // empty name.
+    const displayName = payload.name
+      || [payload.given_name, payload.family_name].filter(Boolean).join(" ")
+      || cleanEmail.split("@")[0];
+
+    // A Google-only account still needs *some* password_hash (the column is NOT NULL, same as
+    // every other account) -- a real, cryptographically random value that's never disclosed or
+    // usable by anyone, not a predictable placeholder. This isn't a workaround so much as the
+    // actually-correct state: an account created this way genuinely doesn't have a password yet,
+    // and the already-real "forgot password" flow above is exactly how someone would set one
+    // later if they want email+password as a second way in.
+    const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
+    const inserted = await query(
+      "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
+      [cleanEmail, displayName, randomPasswordHash, role]
+    );
+    user = inserted.rows[0];
+    sendWelcomeEmail(user).catch((err) => console.error("Failed to send welcome email:", err));
+  }
+
+  if (user.two_factor_enabled) {
+    // An account protected with 2FA stays protected regardless of which door someone signs in
+    // through -- same branch, same reasoning as /login above.
     return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
   }
 

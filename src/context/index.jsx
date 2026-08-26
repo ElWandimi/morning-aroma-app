@@ -42,7 +42,11 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [error, setError] = useState("");
-  const [pendingTwoFactorUser, setPendingTwoFactorUser] = useState(null);
+  // Holds the short-lived pending-2FA session token (server/src/utils/tokens.js) between "password
+  // correct, second factor needed" and "code confirmed" -- deliberately not the user object itself
+  // (that was the old demo shape), since nothing about who this account belongs to should be
+  // trusted or displayed until the second factor actually checks out.
+  const [pendingTwoFactorToken, setPendingTwoFactorToken] = useState(null);
 
   // On mount, try to restore a real session from a previously-saved token -- without this, a real
   // registered/logged-in user would be signed out every time they refresh the page, which is a
@@ -95,15 +99,21 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Real login against the actual backend. NOTE: this is now async (returns a Promise), unlike
-  // the old demo version -- every call site needs to await it. 2FA is intentionally NOT part of
-  // this real flow yet (the backend doesn't implement it) -- signs straight in on success.
+  // Real login against the actual backend, including real 2FA now: an account with it enabled
+  // never gets a real session token from this call alone (see /auth/login's own branch,
+  // server/src/routes/auth.js) -- only a short-lived pending token, stashed here for
+  // verifyTwoFactorLogin to use once the actual second factor is confirmed.
   const login = async (email, password) => {
     try {
-      const { user: realUser, token: realToken } = await api.login(email, password);
+      const body = await api.login(email, password);
+      if (body.requiresTwoFactor) {
+        setPendingTwoFactorToken(pluck(body, "pendingToken"));
+        setError("");
+        return { ok: true, requiresTwoFactor: true };
+      }
       setError("");
-      setUser(realUser);
-      persistToken(realToken);
+      setUser(pluck(body, "user"));
+      persistToken(pluck(body, "token"));
       return { ok: true, requiresTwoFactor: false };
     } catch (e) {
       setError(e.message);
@@ -111,16 +121,66 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const completeTwoFactor = () => {
-    if (!pendingTwoFactorUser) return;
-    setUser(pendingTwoFactorUser);
-    setPendingTwoFactorUser(null);
+  // The second step of a 2FA login: a live 6-digit code from the account's authenticator app, or
+  // one of its remaining backup codes -- server/src/routes/auth.js's /2fa/verify-login accepts
+  // either. Only actually signs the person in (real user + real persisted token) once this
+  // succeeds; the earlier login() call alone never does for a 2FA account.
+  const verifyTwoFactorLogin = async (code) => {
+    if (!pendingTwoFactorToken) {
+      return { ok: false, error: "That sign-in session has expired. Please sign in again." };
+    }
+    try {
+      const body = await api.verifyTwoFactorLogin(pendingTwoFactorToken, code);
+      setUser(pluck(body, "user"));
+      persistToken(pluck(body, "token"));
+      setPendingTwoFactorToken(null);
+      setError("");
+      return { ok: true, usedBackupCode: !!body.usedBackupCode };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
-  const cancelTwoFactor = () => setPendingTwoFactorUser(null);
 
-  const setTwoFactorEnabled = (email, enabled) => {
-    setUsers((prev) => prev.map((u) => (u.email === email ? { ...u, twoFactorEnabled: enabled } : u)));
-    setUser((prev) => (prev && prev.email === email ? { ...prev, twoFactorEnabled: enabled } : prev));
+  const cancelTwoFactorLogin = () => setPendingTwoFactorToken(null);
+
+  // --- Real 2FA setup/disable, from Settings (Journey.jsx) once already signed in ---
+  // Setup is a two-step handshake matching the backend exactly (server/src/routes/auth.js): this
+  // generates and stores a *pending* secret and hands back a QR code, but doesn't turn 2FA on yet
+  // -- confirmTwoFactorSetup below only enables it once the person proves they can actually
+  // produce a matching code from it.
+  const startTwoFactorSetup = async () => {
+    try {
+      const body = await api.setupTwoFactor(token);
+      return { ok: true, secret: body.secret, uri: body.uri, qrDataUrl: body.qrDataUrl };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  const confirmTwoFactorSetup = async (code) => {
+    try {
+      const body = await api.verifyTwoFactorSetup(token, code);
+      // Backup codes are returned exactly once, right here -- there's no way to see them again
+      // later, since the backend only ever stores their hashes. The caller (Journey.jsx) is
+      // responsible for actually showing them to the person before this moment passes.
+      setUser((prev) => (prev ? { ...prev, twoFactorEnabled: true } : prev));
+      return { ok: true, backupCodes: body.backupCodes };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  // Requires re-entering the password (not just trusting the existing session) for the same
+  // reason the backend itself insists on it (server/src/routes/auth.js's /2fa/disable): turning
+  // off 2FA is a real security downgrade, not a cosmetic preference toggle.
+  const disableTwoFactor = async (password) => {
+    try {
+      await api.disableTwoFactor(token, password);
+      setUser((prev) => (prev ? { ...prev, twoFactorEnabled: false } : prev));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
   // A real, honest preference rather than a promise -- this prototype has no email delivery
   // infrastructure, so nothing actually gets sent either way. The setting is genuinely saved
@@ -177,7 +237,8 @@ export function AuthProvider({ children }) {
     <AuthCtx.Provider
       value={{
         user, token, users, login, register, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
-        pendingTwoFactorUser, completeTwoFactor, cancelTwoFactor, setTwoFactorEnabled, setNotificationsEnabled,
+        pendingTwoFactorToken, verifyTwoFactorLogin, cancelTwoFactorLogin,
+        startTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, setNotificationsEnabled,
         exportUsers, restoreUsers, sessionLoading,
       }}
     >

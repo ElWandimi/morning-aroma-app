@@ -44,6 +44,18 @@ export const api = {
     request("/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email }) }),
   confirmPasswordReset: (token, newPassword) =>
     request("/auth/password-reset/confirm", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
+  setupTwoFactor: (token) =>
+    request("/auth/2fa/setup", { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  verifyTwoFactorSetup: (token, code) =>
+    request("/auth/2fa/verify-setup", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ code }) }),
+  // Deliberately no Authorization header -- there's no real session yet at this point (that's the
+  // whole reason a *pending* token exists), so the pending token itself, in the body, is what
+  // authorizes this specific call. See signPendingTwoFactorToken's own comment (server/src/utils/tokens.js)
+  // for why it can't be used as a Bearer token to reach anything else.
+  verifyTwoFactorLogin: (pendingToken, code) =>
+    request("/auth/2fa/verify-login", { method: "POST", body: JSON.stringify({ pendingToken, code }) }),
+  disableTwoFactor: (token, password) =>
+    request("/auth/2fa/disable", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) }),
   getUsers: (token) =>
     request("/users", { headers: { Authorization: `Bearer ${token}` } }),
   updateUser: (token, id, updates) =>

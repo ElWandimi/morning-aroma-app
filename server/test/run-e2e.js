@@ -18,6 +18,10 @@ require.cache[resendPath] = { id: resendPath, filename: resendPath, loaded: true
 const cloudinaryPath = require.resolve("cloudinary");
 const cloudinaryMock = require("./cloudinary.mock.js");
 require.cache[cloudinaryPath] = { id: cloudinaryPath, filename: cloudinaryPath, loaded: true, exports: cloudinaryMock };
+const googlePath = require.resolve("google-auth-library");
+const googleMock = require("./google.mock.js");
+require.cache[googlePath] = { id: googlePath, filename: googlePath, loaded: true, exports: googleMock };
+process.env.GOOGLE_CLIENT_ID = "test-google-client-id.apps.googleusercontent.com";
 
 const app = require("../src/app");
 const { query } = require("./db.sqlite.js"); // direct DB access for test setup unreachable via the API (e.g. backdating a timestamp)
@@ -846,6 +850,62 @@ async function main() {
   console.log("\nPOST /auth/login again, now that 2FA is off:");
   const loginAfterDisable = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
   check("returns a real token directly again, no second step", typeof loginAfterDisable.body.token === "string" && loginAfterDisable.body.requiresTwoFactor === undefined);
+
+  console.log("\nGoogle sign-in -- register a real email+password account first, to prove Google resolves to it:");
+  const googleReg = await post("/auth/register", { email: "linked@morningaroma.local", password: "correcthorsebattery", name: "Linked Account" });
+  const linkedUserId = googleReg.body.user.id;
+
+  console.log("\nPOST /auth/google with no idToken at all:");
+  const googleMissingToken = await post("/auth/google", {});
+  check("returns 400", googleMissingToken.status === 400);
+
+  console.log("\nPOST /auth/google when Google itself rejects the token:");
+  googleMock.setNextGoogleError("Token used too late");
+  const googleBadToken = await post("/auth/google", { idToken: "garbage" });
+  check("returns 401", googleBadToken.status === 401);
+
+  console.log("\nPOST /auth/google with a real-shaped payload whose email isn't verified:");
+  googleMock.setNextGooglePayload({ email: "unverified@morningaroma.local", email_verified: false, name: "Unverified Person" });
+  const googleUnverified = await post("/auth/google", { idToken: "real-looking-token" });
+  check("returns 401 -- an unverified Google email can't be trusted to prove account ownership", googleUnverified.status === 401);
+
+  console.log("\nPOST /auth/google for a brand-new email -- creates a real account:");
+  googleMock.setNextGooglePayload({ email: "new-via-google@morningaroma.local", email_verified: true, given_name: "New", family_name: "ViaGoogle" });
+  const googleNewAccount = await post("/auth/google", { idToken: "real-looking-token" });
+  check("returns 200", googleNewAccount.status === 200);
+  check("creates a real user with the email from the token", googleNewAccount.body.user && googleNewAccount.body.user.email === "new-via-google@morningaroma.local");
+  check("falls back to given_name + family_name when the token has no top-level name", googleNewAccount.body.user.name === "New ViaGoogle");
+  check("a fresh account this far into the run is never the bootstrap admin", googleNewAccount.body.user.role === "customer");
+  check("returns a real, usable access token", typeof googleNewAccount.body.token === "string" && googleNewAccount.body.token.length > 20);
+  const newGoogleUserId = googleNewAccount.body.user.id;
+
+  console.log("\nSigning in via Google again with that exact same email:");
+  googleMock.setNextGooglePayload({ email: "new-via-google@morningaroma.local", email_verified: true, name: "New ViaGoogle" });
+  const googleSecondSignin = await post("/auth/google", { idToken: "real-looking-token" });
+  check("resolves to the SAME account, not a duplicate", googleSecondSignin.body.user.id === newGoogleUserId);
+
+  console.log("\nPOST /auth/google with the SAME email as the real password-registered account above:");
+  googleMock.setNextGooglePayload({ email: "linked@morningaroma.local", email_verified: true, name: "Linked Account" });
+  const googleLinked = await post("/auth/google", { idToken: "real-looking-token" });
+  check("returns 200", googleLinked.status === 200);
+  check("resolves to the SAME account created via email+password -- not a second, duplicate one", googleLinked.body.user.id === linkedUserId);
+
+  console.log("\nThat Google-issued token genuinely works on a protected route:");
+  const meViaGoogle = await get("/auth/me", googleNewAccount.body.token);
+  check("returns 200", meViaGoogle.status === 200);
+
+  console.log("\nSetting up a fresh account with real 2FA on, to test it against Google sign-in (not reusing the earlier 2FA account -- it gets disabled again by the end of that test block):");
+  const googleTwoFaReg = await post("/auth/register", { email: "google-twofa@morningaroma.local", password: "correcthorsebattery", name: "Google Two Factor Test" });
+  const googleTwoFaSetup = await post("/auth/2fa/setup", {}, googleTwoFaReg.body.token);
+  const googleTwoFaRealCode = await otplib.generate({ secret: googleTwoFaSetup.body.secret });
+  await post("/auth/2fa/verify-setup", { code: googleTwoFaRealCode }, googleTwoFaReg.body.token);
+
+  console.log("\nAn account with real 2FA on still gets gated behind it when signing in via Google:");
+  googleMock.setNextGooglePayload({ email: "google-twofa@morningaroma.local", email_verified: true, name: "Google Two Factor Test" });
+  const googleTwoFaLogin = await post("/auth/google", { idToken: "real-looking-token" });
+  check("does NOT return a real access token", googleTwoFaLogin.body.token === undefined);
+  check("signals a second step is required, same as password login would", googleTwoFaLogin.body.requiresTwoFactor === true);
+  check("returns a real pending session token", typeof googleTwoFaLogin.body.pendingToken === "string");
 
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();

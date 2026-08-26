@@ -8,8 +8,159 @@ import { useAdmin, useAuth, useCart, useJournal, useOrders, useRoute, useToast }
 // value is set to here.
 const CANCELLATION_WINDOW_MS = 10 * 60 * 1000;
 
+// Real 2FA setup/disable, wired to the actual backend (server/src/routes/auth.js). A small local
+// state machine rather than a single boolean toggle, matching the real multi-step flow: setup
+// isn't instant (scan a QR code, prove you can produce a matching code, save backup codes you'll
+// never see again), and disabling deliberately asks for the password again rather than just
+// flipping a switch.
+function TwoFactorPanel({ user }) {
+  const { startTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor } = useAuth();
+  const { addToast } = useToast();
+  const [step, setStep] = useState("idle"); // idle | setup | backupCodes | disabling
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [secret, setSecret] = useState("");
+  const [setupCode, setSetupCode] = useState("");
+  const [setupError, setSetupError] = useState("");
+  const [setupSubmitting, setSetupSubmitting] = useState(false);
+  const [backupCodes, setBackupCodes] = useState([]);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableError, setDisableError] = useState("");
+  const [disableSubmitting, setDisableSubmitting] = useState(false);
+
+  const beginSetup = async () => {
+    setSetupError("");
+    const result = await startTwoFactorSetup();
+    if (result.ok) {
+      setQrDataUrl(result.qrDataUrl);
+      setSecret(result.secret);
+      setStep("setup");
+    } else {
+      setSetupError(result.error || "Couldn't start setup. Try again.");
+    }
+  };
+
+  const confirmSetup = async (e) => {
+    e.preventDefault();
+    setSetupSubmitting(true);
+    setSetupError("");
+    const result = await confirmTwoFactorSetup(setupCode);
+    setSetupSubmitting(false);
+    if (result.ok) {
+      setBackupCodes(result.backupCodes);
+      setSetupCode("");
+      setStep("backupCodes");
+    } else {
+      setSetupError(result.error || "Incorrect code.");
+    }
+  };
+
+  const finishSetup = () => {
+    setStep("idle");
+    setBackupCodes([]);
+    setQrDataUrl("");
+    setSecret("");
+    addToast("Two-factor authentication enabled");
+  };
+
+  const cancelSetup = () => {
+    setStep("idle");
+    setQrDataUrl("");
+    setSecret("");
+    setSetupCode("");
+    setSetupError("");
+  };
+
+  const confirmDisable = async (e) => {
+    e.preventDefault();
+    setDisableSubmitting(true);
+    setDisableError("");
+    const result = await disableTwoFactor(disablePassword);
+    setDisableSubmitting(false);
+    if (result.ok) {
+      setStep("idle");
+      setDisablePassword("");
+      addToast("Two-factor authentication disabled");
+    } else {
+      setDisableError(result.error || "Incorrect password.");
+    }
+  };
+
+  const cancelDisable = () => {
+    setStep("idle");
+    setDisablePassword("");
+    setDisableError("");
+  };
+
+  if (step === "backupCodes") {
+    return (
+      <>
+        <p className="hint" style={{ marginTop: 0 }}>{user.email}</p>
+        <p className="form-error" style={{ marginTop: 0 }}>
+          Save these somewhere safe — each code works once, and this is the only time they'll ever be shown. If you lose access to your authenticator app, they're the only way back in.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", margin: "12px 0" }}>
+          {backupCodes.map((code) => (
+            <code key={code} style={{ padding: "6px 10px", border: "1px solid currentColor", borderRadius: 6, fontSize: 14 }}>{code}</code>
+          ))}
+        </div>
+        <button className="btn-primary full" onClick={finishSetup}>I've saved these — done</button>
+      </>
+    );
+  }
+
+  if (step === "setup") {
+    return (
+      <>
+        <p className="hint" style={{ marginTop: 0 }}>{user.email}</p>
+        <p className="hint">Scan this with an authenticator app (Google Authenticator, Authy, 1Password, etc.):</p>
+        {qrDataUrl && <img src={qrDataUrl} alt="Two-factor authentication QR code" width={180} height={180} />}
+        <p className="hint">Can't scan it? Enter this code manually: <code>{secret}</code></p>
+        <form onSubmit={confirmSetup}>
+          <label htmlFor="twofa-setup-code">6-digit code from the app</label>
+          <input id="twofa-setup-code" value={setupCode} onChange={(e) => { setSetupCode(e.target.value); setSetupError(""); }} placeholder="000000" inputMode="numeric" maxLength={6} autoFocus required />
+          {setupError && <p className="form-error">{setupError}</p>}
+          <button type="submit" className="btn-primary full" disabled={setupSubmitting}>{setupSubmitting ? "Verifying…" : "Confirm & enable"}</button>
+        </form>
+        <button className="link-btn" style={{ marginTop: 10 }} onClick={cancelSetup}>Cancel</button>
+      </>
+    );
+  }
+
+  if (step === "disabling") {
+    return (
+      <>
+        <p className="hint" style={{ marginTop: 0 }}>{user.email}</p>
+        <form onSubmit={confirmDisable}>
+          <label htmlFor="twofa-disable-password">Confirm your password to turn this off</label>
+          <input id="twofa-disable-password" type="password" value={disablePassword} onChange={(e) => { setDisablePassword(e.target.value); setDisableError(""); }} autoComplete="current-password" autoFocus required />
+          {disableError && <p className="form-error">{disableError}</p>}
+          <button type="submit" className="btn-outline full" disabled={disableSubmitting}>{disableSubmitting ? "Please wait…" : "Disable two-factor authentication"}</button>
+        </form>
+        <button className="link-btn" style={{ marginTop: 10 }} onClick={cancelDisable}>Cancel</button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className="hint" style={{ marginTop: 0 }}>{user.email}</p>
+      <p className="hint">
+        {user.twoFactorEnabled
+          ? "Enabled — after your password, you'll need a code from your authenticator app to sign in."
+          : "Off — sign in with just your password. Turn this on for an extra layer of protection."}
+      </p>
+      {setupError && <p className="form-error">{setupError}</p>}
+      {user.twoFactorEnabled ? (
+        <button className="btn-outline small" onClick={() => setStep("disabling")}>Disable two-factor authentication</button>
+      ) : (
+        <button className="btn-outline small" onClick={beginSetup}>Enable two-factor authentication</button>
+      )}
+    </>
+  );
+}
+
 export function JourneyPage() {
-  const { user, setTwoFactorEnabled, setNotificationsEnabled } = useAuth();
+  const { user, setNotificationsEnabled } = useAuth();
   const { go } = useRoute();
   const { addEntry, removeEntry, entriesFor } = useJournal();
   const { add: addToCart } = useCart();
@@ -86,23 +237,7 @@ export function JourneyPage() {
         <div className="journey-col">
           <div className="mini-brew">
             <h3>Account &amp; Security</h3>
-            <p className="hint" style={{ marginTop: 0 }}>{user.email}</p>
-            <label className="filter-label" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-              <input
-                type="checkbox"
-                checked={!!user.twoFactorEnabled}
-                onChange={(e) => {
-                  setTwoFactorEnabled(user.email, e.target.checked);
-                  addToast(e.target.checked ? "Two-factor authentication enabled" : "Two-factor authentication disabled");
-                }}
-              />
-              Two-factor authentication
-            </label>
-            <p className="hint">
-              {user.twoFactorEnabled
-                ? "Enabled — after your password, we'll send a code to your email to confirm it's you."
-                : "Off — sign in with just your password. Turn this on for an extra layer of protection."}
-            </p>
+            <TwoFactorPanel user={user} />
             <label className="filter-label" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18 }}>
               <input
                 type="checkbox"
