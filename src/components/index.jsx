@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
-import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, MOCK_GOOGLE_ACCOUNTS, TRANSLATE_LANGUAGES } from "../data";
+import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, TRANSLATE_LANGUAGES } from "../data";
 import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTranslate } from "../hooks";
 import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent } from "../utils/helpers";
 import { api } from "../utils/api";
@@ -89,6 +89,63 @@ function GoogleIcon() {
   );
 }
 
+// Real, not a placeholder -- the frontend counterpart to server/src/routes/auth.js's own
+// GOOGLE_CLIENT_ID check. This one specifically must be the *same* Client ID as the backend's, or
+// verifyIdToken there would correctly reject every token this button produces as issued for the
+// wrong app.
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+if (!GOOGLE_CLIENT_ID && import.meta.env.PROD) {
+  // Same pattern as VITE_API_URL (utils/api.js) and VITE_PAYSTACK_PUBLIC_KEY (pages/Checkout.jsx)
+  // -- fails loudly rather than a Google button that silently never renders, with no clue why.
+  console.error("VITE_GOOGLE_CLIENT_ID is not set — Google sign-in cannot be shown. Set it in the frontend service's environment variables.");
+}
+
+// Loads Google's real Identity Services script on demand -- same pattern as loadPaystackScript in
+// pages/Checkout.jsx: only loaded once (checks whether it's already present first), only when the
+// sign-in modal actually needs it, not on every page load site-wide.
+function loadGoogleScript() {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Couldn't load Google Sign-In. Check your connection and try again."));
+    document.body.appendChild(script);
+  });
+}
+
+// Renders Google's own real Sign-In button (not a custom-styled lookalike) via Identity Services
+// -- the officially recommended approach, more reliable than trying to trigger Google's flow from
+// an arbitrary custom button. `onCredential` receives the real ID token once someone actually
+// completes sign-in; server/src/routes/auth.js's /auth/google is what verifies it's genuine.
+function GoogleSignInButton({ active, onCredential }) {
+  const containerRef = useRef(null);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (!active || !GOOGLE_CLIENT_ID) return;
+    let cancelled = false;
+    loadGoogleScript()
+      .then(() => {
+        if (cancelled || !containerRef.current) return;
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response) => onCredential(response.credential),
+        });
+        window.google.accounts.id.renderButton(containerRef.current, {
+          theme: "outline", size: "large", width: 320, text: "continue_with",
+        });
+      })
+      .catch((e) => { if (!cancelled) setLoadError(e.message); });
+    return () => { cancelled = true; };
+  }, [active]);
+
+  if (!GOOGLE_CLIENT_ID) return null; // not configured at all -- nothing to show rather than a broken button
+  if (loadError) return <p className="form-error">{loadError}</p>;
+  return <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }} />;
+}
+
 export function LoginModal({ open, onClose }) {
   const { login, register, loginWithOtp, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
   const [email, setEmail] = useState("");
@@ -107,8 +164,6 @@ export function LoginModal({ open, onClose }) {
   const [twoFACode, setTwoFACode] = useState("");
   const [twoFASubmitting, setTwoFASubmitting] = useState(false);
   const [twoFAError, setTwoFAError] = useState("");
-  const [googlePicker, setGooglePicker] = useState(false);
-  const [googleCustomEmail, setGoogleCustomEmail] = useState("");
 
   // Forgot-password flow: null (not active) -> true (real request sent, entering the code)
   const [resetStep, setResetStep] = useState(null);
@@ -318,54 +373,6 @@ export function LoginModal({ open, onClose }) {
             </button>
             <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelTwoFAStep}>← Use a different account</button>
           </>
-        ) : googlePicker ? (
-          <>
-            <p className="eyebrow">choose an account</p>
-            <h3 className="modal-title">Continue with Google</h3>
-            <p className="form-error" style={{ marginTop: -4 }}>Preview only — these aren't real Google accounts, and picking one doesn't create a real saved account on Morning Aroma.</p>
-            <div className="google-account-list">
-              {MOCK_GOOGLE_ACCOUNTS.map((a) => (
-                <button
-                  key={a.email}
-                  className="google-account-row"
-                  onClick={() => {
-                    loginWithGoogle(a.email, a.name);
-                    setGooglePicker(false);
-                    onClose();
-                  }}
-                >
-                  <span className="google-avatar" />
-                  <span>
-                    <span className="google-name">{a.name}</span>
-                    <span className="google-email">{a.email}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="mode-toggle" style={{ marginTop: 14 }}>
-              <input
-                value={googleCustomEmail}
-                onChange={(e) => setGoogleCustomEmail(e.target.value)}
-                placeholder="Use another Google account"
-                type="email"
-                style={{ flex: 1, border: "1px solid var(--gold)", borderRadius: 8, padding: "10px 12px" }}
-              />
-            </div>
-            <button
-              className="btn-primary full"
-              style={{ marginTop: 10 }}
-              disabled={!googleCustomEmail}
-              onClick={() => {
-                loginWithGoogle(googleCustomEmail);
-                setGooglePicker(false);
-                onClose();
-              }}
-            >
-              Continue
-            </button>
-            <p className="hint">If this email already has a Morning Aroma account, we'll sign you into it — no duplicate accounts.</p>
-            <button className="link-btn" style={{ marginTop: 10 }} onClick={() => setGooglePicker(false)}>← Back</button>
-          </>
         ) : (
           <>
             <Steam className="login-steam" />
@@ -472,11 +479,18 @@ export function LoginModal({ open, onClose }) {
             )}
 
             <div className="divider"><span>or</span></div>
-            <button className="btn-google full" onClick={() => setGooglePicker(true)}>
-              <GoogleIcon />
-              Continue with Google (preview)
-            </button>
-            <p className="hint" style={{ marginTop: 8 }}>Preview mode — doesn't create a real saved account. Use "Email &amp; password" above for a real one.</p>
+            <GoogleSignInButton
+              active={open}
+              onCredential={async (idToken) => {
+                const result = await loginWithGoogle(idToken);
+                if (result.ok && result.requiresTwoFactor) {
+                  setTwoFAStep(true);
+                } else if (result.ok) {
+                  onClose();
+                }
+              }}
+            />
+            {error && <p className="form-error" style={{ marginTop: 8 }}>{error}</p>}
           </>
         )}
         </div>

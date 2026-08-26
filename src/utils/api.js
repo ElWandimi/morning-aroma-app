@@ -56,6 +56,10 @@ export const api = {
     request("/auth/2fa/verify-login", { method: "POST", body: JSON.stringify({ pendingToken, code }) }),
   disableTwoFactor: (token, password) =>
     request("/auth/2fa/disable", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) }),
+  // idToken is what Google's own Sign-In button hands back client-side (see components/index.jsx's
+  // GoogleSignInButton) -- a JWT Google itself already signed, not anything this app generates.
+  loginWithGoogle: (idToken) =>
+    request("/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
   getUsers: (token) =>
     request("/users", { headers: { Authorization: `Bearer ${token}` } }),
   updateUser: (token, id, updates) =>

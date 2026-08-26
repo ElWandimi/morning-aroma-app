@@ -199,13 +199,27 @@ export function AuthProvider({ children }) {
     return true;
   };
 
-  // Still demo/local-only -- needs a real Google Cloud OAuth app (client ID/secret), which is a
-  // manual setup step outside what Claude can do, not just more code.
-  const loginWithGoogle = (email, displayName) => {
-    const acct = findOrCreateUser(email, displayName);
-    setUser(acct);
-    setError("");
-    return true;
+  // Real Google sign-in, backed by the actual deployed backend (server/src/routes/auth.js's
+  // /auth/google). Takes the real ID token Google's own Sign-In button produces
+  // (components/index.jsx's GoogleSignInButton) -- not a locally-picked demo email like before.
+  // Mirrors login()'s own 2FA branch exactly, since an account reached through Google is subject
+  // to the same real 2FA gate as one reached through a password.
+  const loginWithGoogle = async (idToken) => {
+    try {
+      const body = await api.loginWithGoogle(idToken);
+      if (body.requiresTwoFactor) {
+        setPendingTwoFactorToken(pluck(body, "pendingToken"));
+        setError("");
+        return { ok: true, requiresTwoFactor: true };
+      }
+      setError("");
+      setUser(pluck(body, "user"));
+      persistToken(pluck(body, "token"));
+      return { ok: true, requiresTwoFactor: false };
+    } catch (e) {
+      setError(e.message);
+      return { ok: false };
+    }
   };
 
   const logout = () => {
@@ -950,4 +964,3 @@ export function CurrencyProvider({ children }) {
   );
 }
 export const useCurrency = () => useContext(CurrencyCtx);
-
