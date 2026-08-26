@@ -14,7 +14,17 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Missing or malformed Authorization header" });
   }
   try {
-    req.user = verifyAccessToken(token);
+    const payload = verifyAccessToken(token);
+    // A valid signature alone isn't enough -- signPendingTwoFactorToken (utils/tokens.js) is
+    // signed with this same secret, since there's only one JWT_SECRET in this app, but it must
+    // never be usable as a real session token. Real access tokens (signAccessToken) never set a
+    // `type` claim at all, so refusing anything that does is a general, future-proof check, not
+    // just a special case hardcoded for "2fa_pending" specifically -- any other short-lived,
+    // narrowly-scoped token type added later gets the same protection automatically.
+    if (payload.type) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    req.user = payload;
     next();
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });

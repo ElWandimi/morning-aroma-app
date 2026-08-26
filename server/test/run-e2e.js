@@ -749,6 +749,104 @@ async function main() {
   resendMock.clearError();
   delete process.env.RESEND_API_KEY;
 
+  console.log("\nTwo-factor authentication -- register a fresh account to test against:");
+  const otplib = require("otplib");
+  const twoFaReg = await post("/auth/register", { email: "twofa@morningaroma.local", password: "correcthorsebattery", name: "Two Factor Test" });
+  check("returns 201", twoFaReg.status === 201);
+  const twoFaToken = twoFaReg.body.token;
+
+  console.log("\nPOST /auth/2fa/verify-setup before ever calling /auth/2fa/setup:");
+  const verifyBeforeSetup = await post("/auth/2fa/verify-setup", { code: "123456" }, twoFaToken);
+  check("returns 400", verifyBeforeSetup.status === 400);
+
+  console.log("\nPOST /auth/2fa/setup:");
+  const setup = await post("/auth/2fa/setup", {}, twoFaToken);
+  check("returns 200", setup.status === 200);
+  check("returns a real base32-looking secret", typeof setup.body.secret === "string" && setup.body.secret.length >= 16);
+  check("returns a real otpauth:// URI", typeof setup.body.uri === "string" && setup.body.uri.startsWith("otpauth://totp/"));
+  check("returns a real QR code data URL, not a placeholder", typeof setup.body.qrDataUrl === "string" && setup.body.qrDataUrl.startsWith("data:image/png;base64,"));
+  const pendingSecret = setup.body.secret;
+
+  console.log("\nPOST /auth/2fa/verify-setup with a wrong code:");
+  const verifyWrongCode = await post("/auth/2fa/verify-setup", { code: "000000" }, twoFaToken);
+  check("returns 400", verifyWrongCode.status === 400);
+
+  console.log("\nPOST /auth/2fa/verify-setup with the real, correct code:");
+  const realCode1 = await otplib.generate({ secret: pendingSecret });
+  const verifySetup = await post("/auth/2fa/verify-setup", { code: realCode1 }, twoFaToken);
+  check("returns 200", verifySetup.status === 200);
+  check("confirms enabled", verifySetup.body.enabled === true);
+  check("returns 8 real backup codes, each in the expected grouped format", Array.isArray(verifySetup.body.backupCodes) && verifySetup.body.backupCodes.length === 8 && verifySetup.body.backupCodes.every((c) => /^[0-9A-F]{5}-[0-9A-F]{5}$/.test(c)));
+  const backupCodes = verifySetup.body.backupCodes;
+
+  console.log("\nGET /auth/me reflects 2FA is genuinely on now:");
+  const meAfterSetup = await get("/auth/me", twoFaToken);
+  check("twoFactorEnabled is true", meAfterSetup.body.user && meAfterSetup.body.user.twoFactorEnabled === true);
+
+  console.log("\nPOST /auth/2fa/setup again while already enabled:");
+  const setupAgain = await post("/auth/2fa/setup", {}, twoFaToken);
+  check("returns 400, refuses to overwrite an already-enabled account's secret", setupAgain.status === 400);
+
+  console.log("\nPOST /auth/login with the right password, now that 2FA is on:");
+  const twoFaLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  check("returns 200", twoFaLogin.status === 200);
+  check("does NOT return a real access token", twoFaLogin.body.token === undefined);
+  check("signals a second step is required", twoFaLogin.body.requiresTwoFactor === true);
+  check("returns a pending session token instead", typeof twoFaLogin.body.pendingToken === "string" && twoFaLogin.body.pendingToken.length > 20);
+  const pendingToken1 = twoFaLogin.body.pendingToken;
+
+  console.log("\nThat pending token alone can't reach a real protected route:");
+  const meWithPendingToken = await get("/auth/me", pendingToken1);
+  check("returns 401 -- requireAuth correctly refuses a 2fa_pending token, not just a real access token", meWithPendingToken.status === 401);
+
+  console.log("\nPOST /auth/2fa/verify-login with a garbage pending token:");
+  const verifyLoginBadSession = await post("/auth/2fa/verify-login", { pendingToken: "not-a-real-token", code: "123456" });
+  check("returns 401", verifyLoginBadSession.status === 401);
+
+  console.log("\nPOST /auth/2fa/verify-login with the right session but a wrong code:");
+  const verifyLoginWrongCode = await post("/auth/2fa/verify-login", { pendingToken: pendingToken1, code: "000000" });
+  check("returns 401", verifyLoginWrongCode.status === 401);
+
+  console.log("\nPOST /auth/2fa/verify-login with the right session and the real, correct code:");
+  const realCode2 = await otplib.generate({ secret: pendingSecret });
+  const verifyLoginOk = await post("/auth/2fa/verify-login", { pendingToken: pendingToken1, code: realCode2 });
+  check("returns 200", verifyLoginOk.status === 200);
+  check("returns a real user object", verifyLoginOk.body.user && verifyLoginOk.body.user.email === "twofa@morningaroma.local");
+  check("returns a real, usable access token this time", typeof verifyLoginOk.body.token === "string" && verifyLoginOk.body.token.length > 20);
+  const twoFaRealToken = verifyLoginOk.body.token;
+
+  console.log("\nThat real token genuinely works on a protected route:");
+  const meWithRealToken = await get("/auth/me", twoFaRealToken);
+  check("returns 200", meWithRealToken.status === 200);
+
+  console.log("\nSigning in again to test a backup code (each pending token is single-use per login attempt):");
+  const secondLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  const pendingToken2 = secondLogin.body.pendingToken;
+
+  console.log("\nPOST /auth/2fa/verify-login using a real backup code instead of a live TOTP code:");
+  const verifyLoginBackup = await post("/auth/2fa/verify-login", { pendingToken: pendingToken2, code: backupCodes[0] });
+  check("returns 200", verifyLoginBackup.status === 200);
+  check("signals a backup code was used", verifyLoginBackup.body.usedBackupCode === true);
+  check("still returns a real, usable token", typeof verifyLoginBackup.body.token === "string");
+
+  console.log("\nReusing that exact same backup code a second time:");
+  const thirdLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  const verifyLoginBackupReplay = await post("/auth/2fa/verify-login", { pendingToken: thirdLogin.body.pendingToken, code: backupCodes[0] });
+  check("returns 401 -- an already-used backup code can never be replayed", verifyLoginBackupReplay.status === 401);
+
+  console.log("\nPOST /auth/2fa/disable with the wrong password:");
+  const disableWrongPassword = await post("/auth/2fa/disable", { password: "not-the-real-password" }, twoFaRealToken);
+  check("returns 401", disableWrongPassword.status === 401);
+
+  console.log("\nPOST /auth/2fa/disable with the real password:");
+  const disable = await post("/auth/2fa/disable", { password: "correcthorsebattery" }, twoFaRealToken);
+  check("returns 200", disable.status === 200);
+  check("confirms disabled", disable.body.enabled === false);
+
+  console.log("\nPOST /auth/login again, now that 2FA is off:");
+  const loginAfterDisable = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  check("returns a real token directly again, no second step", typeof loginAfterDisable.body.token === "string" && loginAfterDisable.body.requiresTwoFactor === undefined);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();
   process.exit(fail > 0 ? 1 : 0);

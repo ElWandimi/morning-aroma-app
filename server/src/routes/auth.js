@@ -2,7 +2,8 @@ const express = require("express");
 const rateLimit = require("express-rate-limit");
 const { query } = require("../db");
 const { hashPassword, verifyPassword, isPasswordStrongEnough } = require("../utils/password");
-const { signAccessToken, generateResetToken, hashResetToken } = require("../utils/tokens");
+const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken } = require("../utils/tokens");
+const { newSecret, totpQrCode, verifyTotp, generateBackupCodes, hashBackupCode } = require("../utils/twoFactor");
 const { requireAuth } = require("../middleware/requireAuth");
 const { sendWelcomeEmail, sendPasswordResetEmail } = require("../utils/email");
 
@@ -39,7 +40,10 @@ function publicUser(row) {
     name: row.name,
     role: row.role,
     permissions: row.permissions,
-    twoFactorEnabled: row.two_factor_enabled,
+    // Explicit coercion, not just passed through -- Postgres's driver returns a real boolean for
+    // a BOOLEAN column, but this keeps the API response shape guaranteed regardless of what the
+    // underlying driver happens to hand back (the SQLite test adapter, for one, returns 0/1).
+    twoFactorEnabled: !!row.two_factor_enabled,
     notificationsEnabled: row.notifications_enabled,
   };
 }
@@ -96,6 +100,13 @@ router.post("/login", async (req, res) => {
 
   if (!user || !ok) return res.status(401).json({ error: "Invalid email or password." });
 
+  if (user.two_factor_enabled) {
+    // Correct password alone isn't enough to sign in on an account with 2FA on. This is
+    // deliberately NOT a real access token -- see signPendingTwoFactorToken's own comment for why
+    // it can't be used to reach anything except finishing the challenge at /2fa/verify-login.
+    return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
+  }
+
   res.json({ user: publicUser(user), token: signAccessToken(user) });
 });
 
@@ -151,6 +162,111 @@ router.post("/password-reset/confirm", async (req, res) => {
     [passwordHash, user.id]
   );
   res.json({ message: "Password updated. You can sign in with your new password now." });
+});
+
+// --- Two-factor authentication (TOTP) ---
+// Setup is a two-step handshake, not one call: /setup generates and stores a *pending* secret and
+// hands back a QR code, but doesn't turn 2FA on yet. /verify-setup only enables it once the user
+// proves they can actually produce a matching code from it -- otherwise a typo while scanning, or
+// a secret that silently failed to save into the authenticator app, would lock someone out of
+// their own account the next time they try to sign in.
+
+router.post("/2fa/setup", requireAuth, async (req, res) => {
+  const result = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
+  const user = result.rows[0];
+  if (!user) return res.status(404).json({ error: "Account no longer exists." });
+  if (user.two_factor_enabled) return res.status(400).json({ error: "Two-factor authentication is already enabled." });
+
+  const secret = newSecret();
+  await query("UPDATE users SET two_factor_pending_secret = $1 WHERE id = $2", [secret, user.id]);
+  const { uri, qrDataUrl } = await totpQrCode(user.email, secret);
+  // `secret` is also returned directly (not just inside the QR/uri) for the standard "can't scan?
+  // enter this code manually" fallback every real authenticator app offers.
+  res.json({ secret, uri, qrDataUrl });
+});
+
+router.post("/2fa/verify-setup", requireAuth, async (req, res) => {
+  const { code } = req.body || {};
+  const result = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
+  const user = result.rows[0];
+  if (!user) return res.status(404).json({ error: "Account no longer exists." });
+  if (!user.two_factor_pending_secret) {
+    return res.status(400).json({ error: "Start setup first with /auth/2fa/setup." });
+  }
+
+  const valid = await verifyTotp(user.two_factor_pending_secret, code);
+  if (!valid) return res.status(400).json({ error: "Incorrect code. Check your authenticator app and try again." });
+
+  const backupCodes = generateBackupCodes();
+  await query(
+    "UPDATE users SET two_factor_enabled = true, two_factor_secret = $1, two_factor_pending_secret = NULL, two_factor_backup_codes = $2 WHERE id = $3",
+    [user.two_factor_pending_secret, backupCodes.map(hashBackupCode), user.id]
+  );
+  // Returned exactly once, right now -- there is no way to retrieve these again later, since only
+  // their hashes are ever stored. Losing them means generating a fresh set (which invalidates the
+  // old ones), not recovering the originals.
+  res.json({ enabled: true, backupCodes });
+});
+
+router.post("/2fa/verify-login", async (req, res) => {
+  const { pendingToken, code } = req.body || {};
+  if (!pendingToken || typeof pendingToken !== "string") {
+    return res.status(400).json({ error: "Missing or invalid sign-in session. Please sign in again." });
+  }
+
+  let payload;
+  try {
+    payload = verifyPendingTwoFactorToken(pendingToken);
+  } catch {
+    return res.status(401).json({ error: "That sign-in session has expired. Please sign in again." });
+  }
+
+  const result = await query("SELECT * FROM users WHERE id = $1", [payload.sub]);
+  const user = result.rows[0];
+  if (!user || !user.two_factor_enabled) {
+    return res.status(401).json({ error: "That sign-in session is no longer valid. Please sign in again." });
+  }
+  if (typeof code !== "string" || !code.trim()) {
+    return res.status(400).json({ error: "Enter your 6-digit code or a backup code." });
+  }
+
+  const totpValid = await verifyTotp(user.two_factor_secret, code);
+  if (totpValid) {
+    return res.json({ user: publicUser(user), token: signAccessToken(user) });
+  }
+
+  // Not a valid live TOTP code -- check whether it matches one of this account's remaining,
+  // unused backup codes instead. Removed from the stored list the moment it's used, successful or
+  // not this specific request, so the same backup code can never be replayed a second time.
+  const hashedInput = hashBackupCode(code);
+  const remainingCodes = user.two_factor_backup_codes || [];
+  if (remainingCodes.includes(hashedInput)) {
+    const updatedCodes = remainingCodes.filter((c) => c !== hashedInput);
+    await query("UPDATE users SET two_factor_backup_codes = $1 WHERE id = $2", [updatedCodes, user.id]);
+    return res.json({ user: publicUser(user), token: signAccessToken(user), usedBackupCode: true });
+  }
+
+  res.status(401).json({ error: "Incorrect code." });
+});
+
+router.post("/2fa/disable", requireAuth, async (req, res) => {
+  const { password } = req.body || {};
+  const result = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
+  const user = result.rows[0];
+  if (!user) return res.status(404).json({ error: "Account no longer exists." });
+
+  // Re-confirming the password (not just trusting the existing session) matters here specifically
+  // because disabling 2FA is a real security downgrade -- someone with a few minutes of access to
+  // an unlocked, already-signed-in device shouldn't be able to turn off the account's second
+  // factor without proving they know the password too.
+  const ok = await verifyPassword(typeof password === "string" ? password : "", user.password_hash);
+  if (!ok) return res.status(401).json({ error: "Incorrect password." });
+
+  await query(
+    "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_pending_secret = NULL, two_factor_backup_codes = $1 WHERE id = $2",
+    [[], user.id]
+  );
+  res.json({ enabled: false });
 });
 
 module.exports = router;

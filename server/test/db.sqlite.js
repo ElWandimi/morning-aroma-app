@@ -84,7 +84,7 @@ async function query(text, params = []) {
   // and `items` as strings, when routes/users.js and routes/orders.js (correctly, for
   // production) expect and return real arrays.
   const parseJsonColumns = (row) => {
-    for (const col of ["permissions", "items", "tags", "profile", "data"]) {
+    for (const col of ["permissions", "items", "tags", "profile", "data", "two_factor_backup_codes"]) {
       if (row && typeof row[col] === "string") {
         try { row[col] = JSON.parse(row[col]); } catch { /* leave as-is if malformed */ }
       }
@@ -92,9 +92,34 @@ async function query(text, params = []) {
     return row;
   };
 
+  // SQLite's datetime('now') (used everywhere Postgres's now() got translated above) produces a
+  // non-standard string like "2026-08-26 05:13:01" -- space-separated, no timezone. This is
+  // genuinely UTC (SQLite's `now` modifier defaults to UTC), but that string shape isn't part of
+  // the ECMAScript Date Time String Format, so how `new Date(...)` parses it back is technically
+  // engine-dependent, not spec-guaranteed. Found this the hard way: it parsed correctly as UTC on
+  // one Node/V8 version and as local time on another, which silently broke every real date-math
+  // check (like the order-cancellation window) on whichever machine happened to disagree -- not a
+  // logic bug in the actual route code at all, and not reachable in production (Postgres's driver
+  // hands back real Date objects directly, no string parsing involved). Converting to a real,
+  // unambiguous ISO 8601 UTC string here (append "T"/"Z" the way Postgres's own driver already
+  // effectively does) removes that engine-dependence entirely, for every column, present or future
+  // -- a generic pattern match rather than a hardcoded list of known timestamp column names, so a
+  // newly added datetime column is automatically covered too, not silently exempt until it causes
+  // the same bug somewhere else.
+  const SQLITE_DATETIME = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+  const parseDatetimeColumns = (row) => {
+    if (!row) return row;
+    for (const key of Object.keys(row)) {
+      if (typeof row[key] === "string" && SQLITE_DATETIME.test(row[key])) {
+        row[key] = row[key].replace(" ", "T") + "Z";
+      }
+    }
+    return row;
+  };
+
   try {
     if (isSelect || isReturning) {
-      const rows = (isReturning ? [stmt.get(...values)] : stmt.all(...values)).map(parseJsonColumns);
+      const rows = (isReturning ? [stmt.get(...values)] : stmt.all(...values)).map(parseJsonColumns).map(parseDatetimeColumns);
       return { rows: rows.filter(Boolean) };
     }
     stmt.run(...values);

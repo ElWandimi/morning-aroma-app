@@ -20,6 +20,32 @@ function signAccessToken(user) {
   );
 }
 
+// Issued after a correct password when the account has 2FA enabled -- proves "this request
+// already supplied the right password" without yet being a real, usable session token. Deliberately
+// a different shape (`type: "2fa_pending"`) and far shorter-lived (5 minutes, matching how long a
+// person should reasonably take to open their authenticator app) than a real access token, and
+// requireAuth (middleware/requireAuth.js) never accepts this type -- so it can't be used to reach
+// any route except /auth/2fa/verify-login itself, even if it leaked somewhere in that 5-minute
+// window.
+function signPendingTwoFactorToken(user) {
+  return jwt.sign(
+    { sub: user.id, type: "2fa_pending" },
+    requireSecret(),
+    { expiresIn: "5m" }
+  );
+}
+
+function verifyPendingTwoFactorToken(token) {
+  const payload = jwt.verify(token, requireSecret());
+  if (payload.type !== "2fa_pending") {
+    // Never actually reachable via a normally-issued real access token today (they don't carry a
+    // `type` claim at all), but explicit rather than assumed -- if a second short-lived token type
+    // is ever added later, this stops it from silently also being accepted here.
+    throw new Error("Not a valid 2FA session token.");
+  }
+  return payload;
+}
+
 function verifyAccessToken(token) {
   return jwt.verify(token, requireSecret());
 }
@@ -38,4 +64,4 @@ function hashResetToken(raw) {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
-module.exports = { signAccessToken, verifyAccessToken, generateResetToken, hashResetToken };
+module.exports = { signAccessToken, verifyAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken };
