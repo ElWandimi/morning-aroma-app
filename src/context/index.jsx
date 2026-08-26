@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, GREEN_BEANS, KENYA_LIVE_MESSAGES_SEED, KNOWN_ROUTES, PAGE_TO_SLUG, PRODUCTS, SLUG_TO_PAGE } from "../data";
-import { fmtPrice, getStorageConsent, logPageView, nameFromEmail, slugify, storage } from "../utils/helpers";
+import { fmtPrice, getStorageConsent, logPageView, slugify, storage } from "../utils/helpers";
 import { api } from "../utils/api";
 
 // Pulls `field` out of a parsed API response body and throws instead of returning `undefined` if
@@ -66,22 +66,6 @@ export function AuthProvider({ children }) {
   const persistToken = (newToken) => {
     setToken(newToken);
     if (getStorageConsent() === "accepted") storage.set("ma_auth_token", newToken);
-  };
-
-  const findOrCreateUser = (email, displayName) => {
-    const clean = email.trim().toLowerCase();
-    let found;
-    setUsers((prev) => {
-      const existing = prev.find((u) => u.email === clean);
-      if (existing) {
-        found = existing;
-        return prev;
-      }
-      const created = { email: clean, name: displayName || nameFromEmail(clean), role: "customer", twoFactorEnabled: false, createdAt: new Date().toISOString().slice(0, 10), notificationsEnabled: true };
-      found = created;
-      return [...prev, created];
-    });
-    return found || { email: clean, name: displayName || nameFromEmail(clean), role: "customer", twoFactorEnabled: false, createdAt: new Date().toISOString().slice(0, 10), notificationsEnabled: true };
   };
 
   // Real registration against the actual backend. Returns { ok, error? } rather than throwing, so
@@ -190,13 +174,36 @@ export function AuthProvider({ children }) {
     setUser((prev) => (prev && prev.email === email ? { ...prev, notificationsEnabled: enabled } : prev));
   };
 
-  // Still demo/local-only -- needs real email delivery to send the code, which isn't connected
-  // yet (see ROADMAP.md Tier 2).
-  const loginWithOtp = (email) => {
-    const acct = findOrCreateUser(email);
-    setUser(acct);
-    setError("");
-    return true;
+  // Real OTP (email-code) login, backed by the actual deployed backend
+  // (server/src/routes/auth.js's /auth/otp/request + /verify) -- two real steps, not a single
+  // local function like the old fake version. requestOtpLogin sends a real email with a real
+  // code; verifyOtpLogin is what actually signs someone in once they enter it, same 2FA branch as
+  // login()/loginWithGoogle() above, since an account reached this way is subject to the same
+  // real 2FA gate as any other.
+  const requestOtpLogin = async (email) => {
+    try {
+      await api.requestOtpLogin(email);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  const verifyOtpLogin = async (email, code) => {
+    try {
+      const body = await api.verifyOtpLogin(email, code);
+      if (body.requiresTwoFactor) {
+        setPendingTwoFactorToken(pluck(body, "pendingToken"));
+        setError("");
+        return { ok: true, requiresTwoFactor: true };
+      }
+      setError("");
+      setUser(pluck(body, "user"));
+      persistToken(pluck(body, "token"));
+      return { ok: true, requiresTwoFactor: false };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
   // Real Google sign-in, backed by the actual deployed backend (server/src/routes/auth.js's
@@ -250,7 +257,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthCtx.Provider
       value={{
-        user, token, users, login, register, loginWithOtp, loginWithGoogle, logout, setRole, setPermissions, error, setError,
+        user, token, users, login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, logout, setRole, setPermissions, error, setError,
         pendingTwoFactorToken, verifyTwoFactorLogin, cancelTwoFactorLogin,
         startTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, setNotificationsEnabled,
         exportUsers, restoreUsers, sessionLoading,

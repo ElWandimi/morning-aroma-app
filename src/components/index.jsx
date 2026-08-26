@@ -147,7 +147,7 @@ function GoogleSignInButton({ active, onCredential }) {
 }
 
 export function LoginModal({ open, onClose }) {
-  const { login, register, loginWithOtp, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
+  const { login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -174,20 +174,14 @@ export function LoginModal({ open, onClose }) {
   const [resetError, setResetError] = useState("");
   const [resetDone, setResetDone] = useState(false);
 
-  // OTP state — shared by both the "email code" login tab and the 2FA-after-password step
+  // OTP state -- real now: otpSent means a real request succeeded (a real email is genuinely on
+  // its way), enteredCode is what's being typed, otpError surfaces the backend's real error
+  // messages (wrong code, expired, locked out after 3 attempts -- all enforced server-side now,
+  // not simulated in state that meant nothing on its own).
   const [otpSent, setOtpSent] = useState(false);
-  const [genCode, setGenCode] = useState("");
   const [enteredCode, setEnteredCode] = useState("");
-  const [secondsLeft, setSecondsLeft] = useState(0);
-  const [attempts, setAttempts] = useState(0);
-  const [requestCount, setRequestCount] = useState(0);
   const [otpError, setOtpError] = useState("");
-
-  useEffect(() => {
-    if (!otpSent || secondsLeft <= 0) return;
-    const t = setInterval(() => setSecondsLeft((s) => s - 1), 1000);
-    return () => clearInterval(t);
-  }, [otpSent, secondsLeft]);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
 
   const modalRef = useRef(null);
   useEscapeKey(open, onClose);
@@ -197,46 +191,36 @@ export function LoginModal({ open, onClose }) {
 
   const resetOtp = () => {
     setOtpSent(false);
-    setGenCode("");
     setEnteredCode("");
-    setAttempts(0);
     setOtpError("");
   };
 
-  const sendCode = () => {
-    if (requestCount >= 3) {
-      setOtpError("Too many code requests — wait 5 minutes and try again.");
-      return;
-    }
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    setGenCode(code);
-    setOtpSent(true);
-    setSecondsLeft(60);
-    setAttempts(0);
-    setEnteredCode("");
+  const requestOtpCode = async () => {
+    setOtpSubmitting(true);
     setOtpError("");
-    setRequestCount((c) => c + 1);
+    const result = await requestOtpLogin(email);
+    setOtpSubmitting(false);
+    if (result.ok) {
+      setOtpSent(true);
+      setEnteredCode("");
+    } else {
+      setOtpError(result.error || "Couldn't send a code. Try again.");
+    }
   };
 
-  const verifyCode = () => {
-    if (secondsLeft <= 0) {
-      setOtpError("That code expired — send a new one.");
-      return;
-    }
-    if (enteredCode === genCode) {
-      loginWithOtp(email);
+  const verifyOtpCode = async () => {
+    setOtpSubmitting(true);
+    setOtpError("");
+    const result = await verifyOtpLogin(email, enteredCode);
+    setOtpSubmitting(false);
+    if (result.ok && result.requiresTwoFactor) {
+      resetOtp();
+      setTwoFAStep(true);
+    } else if (result.ok) {
       onClose();
       resetOtp();
-      return;
-    }
-    const nextAttempts = attempts + 1;
-    setAttempts(nextAttempts);
-    if (nextAttempts >= 3) {
-      setOtpError("Too many wrong attempts — that code is now invalid. Send a new one.");
-      setGenCode("");
-      setOtpSent(false);
     } else {
-      setOtpError(`Wrong code (${nextAttempts}/3 attempts).`);
+      setOtpError(result.error || "Incorrect code.");
     }
   };
 
@@ -384,7 +368,7 @@ export function LoginModal({ open, onClose }) {
                 <span className="mode-toggle-icon" aria-hidden="true">🔑</span> Email &amp; password
               </button>
               <button className={mode === "otp" ? "active" : ""} onClick={() => { setMode("otp"); resetOtp(); }}>
-                <span className="mode-toggle-icon" aria-hidden="true">✉️</span> Email code (preview)
+                <span className="mode-toggle-icon" aria-hidden="true">✉️</span> Email code
               </button>
             </div>
 
@@ -450,29 +434,30 @@ export function LoginModal({ open, onClose }) {
               <div>
                 <label htmlFor="login-email-otp">Email</label>
                 <input id="login-email-otp" value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" autoComplete="username" maxLength={254} disabled={otpSent} />
-                {!otpSent && <p className="hint" style={{ marginTop: -4 }}>Quick preview mode — signs you in without a password, but doesn't create a real saved account. Use "Email & password" above for a real one.</p>}
+                {!otpSent && <p className="hint" style={{ marginTop: -4 }}>We'll email you a 6-digit code — no password needed. If that email doesn't have an account yet, one is created automatically.</p>}
                 {!otpSent ? (
-                  <button className="btn-primary full" onClick={sendCode} disabled={!email}>
-                    Send me a code
+                  <button className="btn-primary full" onClick={requestOtpCode} disabled={!email || otpSubmitting}>
+                    {otpSubmitting ? "Sending…" : "Send me a code"}
                   </button>
                 ) : (
                   <>
-                    <p className="hint otp-demo-code">
-                      Prototype only — no real email is sent. Your code is <strong>{genCode || "expired"}</strong>, valid for {secondsLeft}s.
-                    </p>
+                    <p className="hint">Check <strong>{email}</strong> for a 6-digit code — it's valid for 10 minutes.</p>
                     <label htmlFor="login-otp-code">6-digit code</label>
                     <input
                       id="login-otp-code"
                       value={enteredCode}
-                      onChange={(e) => setEnteredCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      onChange={(e) => { setEnteredCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setOtpError(""); }}
                       placeholder="000000"
                       inputMode="numeric"
                       autoComplete="one-time-code"
                       maxLength={6}
+                      autoFocus
                     />
                     {otpError && <p className="form-error">{otpError}</p>}
-                    <button className="btn-primary full" onClick={verifyCode} disabled={enteredCode.length !== 6}>Verify &amp; sign in</button>
-                    <button className="link-btn" style={{ marginTop: 10 }} onClick={sendCode}>Resend code</button>
+                    <button className="btn-primary full" onClick={verifyOtpCode} disabled={enteredCode.length !== 6 || otpSubmitting}>
+                      {otpSubmitting ? "Verifying…" : "Verify & sign in"}
+                    </button>
+                    <button className="link-btn" style={{ marginTop: 10 }} onClick={requestOtpCode} disabled={otpSubmitting}>Resend code</button>
                   </>
                 )}
               </div>

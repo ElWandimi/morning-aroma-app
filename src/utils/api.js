@@ -60,6 +60,10 @@ export const api = {
   // GoogleSignInButton) -- a JWT Google itself already signed, not anything this app generates.
   loginWithGoogle: (idToken) =>
     request("/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
+  requestOtpLogin: (email) =>
+    request("/auth/otp/request", { method: "POST", body: JSON.stringify({ email }) }),
+  verifyOtpLogin: (email, code) =>
+    request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ email, code }) }),
   getUsers: (token) =>
     request("/users", { headers: { Authorization: `Bearer ${token}` } }),
   updateUser: (token, id, updates) =>
