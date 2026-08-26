@@ -34,7 +34,17 @@ export function CheckoutPage() {
   const { getPrice, getAllProducts } = useAdmin();
   const { format, rates, ratesLoading } = useCurrency();
   const [loginOpen, setLoginOpen] = useState(false);
-  const [step, setStep] = useState(0); // index into CHECKOUT_STEPS
+  // A signed-in customer still starts at Review (0) to see their bag before continuing. A
+  // signed-out guest skips straight to Sign-in (1) -- there's nothing for them to do at Review
+  // that isn't also available once they're back from signing in, and this is what the cart
+  // drawer's "Checkout" button is actually meant to feel like: sign in first, review after.
+  // Evaluated once via useState's lazy initializer, not on every render -- if `user` is still
+  // resolving (an existing session being restored) at the exact moment this mounts, a guest-looking
+  // visitor who turns out to already be signed in will briefly see both this step's Sign-in panel
+  // and the "Signed in as ... Continue to shipping" row it already shows once `user` resolves
+  // (see below) rather than snapping cleanly to Review -- rare, and not a dead end, so not worth
+  // the extra complexity of an effect just to avoid it.
+  const [step, setStep] = useState(() => (user ? 0 : 1)); // index into CHECKOUT_STEPS
   const [shipping, setShipping] = useState({ name: "", address: "", city: "", country: "", phone: "" });
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   // The order is created once, on the first payment attempt, and reused across retries -- so a

@@ -6,7 +6,7 @@ import { QUIZ_QUESTIONS } from "../data";
 export function QuizPage() {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getAllProducts } = useAdmin();
+  const { getAllProducts, realProductsLoading, realProductsError, refetchRealProducts } = useAdmin();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({});
 
@@ -18,6 +18,21 @@ export function QuizPage() {
   const restart = () => { setAnswers({}); setStep(0); };
 
   if (step >= QUIZ_QUESTIONS.length) {
+    // The catalog this match is computed from loads asynchronously (see AdminDataProvider's
+    // refetchRealProducts) and can still be mid-flight the moment someone finishes the last
+    // question -- or it can have failed outright. Either way, `getAllProducts()` returning `[]`
+    // here used to leave `best` as `null` and crash on `best.name` below with nothing useful on
+    // screen. Handling these explicitly, the same way Shop.jsx already does, means a genuinely
+    // slow or failed catalog fetch shows up as a real loading/retry state instead of a silent
+    // crash into the error boundary.
+    if (realProductsLoading) {
+      return (
+        <div className="quiz-page">
+          <p className="hint" style={{ padding: 80, textAlign: "center" }}>Finding your match…</p>
+        </div>
+      );
+    }
+
     let best = null, bestScore = -1;
     getAllProducts().forEach((p) => {
       let score = 0;
@@ -26,6 +41,19 @@ export function QuizPage() {
       if (answers.moment && p.tags.moment === answers.moment) score += 3;
       if (score > bestScore) { bestScore = score; best = p; }
     });
+
+    if (!best) {
+      return (
+        <div className="quiz-page">
+          <div className="empty-state" style={{ padding: 80 }}>
+            <p>{realProductsError ? "Couldn't load the catalog to match you with a variety." : "No varieties are available to match right now."}</p>
+            <button className="btn-outline small" onClick={refetchRealProducts}>Try again</button>
+            <button className="link-btn" style={{ marginTop: 16 }} onClick={restart}>Take the quiz again</button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="quiz-page">
         <div className="quiz-result">

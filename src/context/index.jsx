@@ -3,6 +3,23 @@ import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, GREEN_BEANS, KENYA_LIVE_
 import { fmtPrice, getStorageConsent, logPageView, nameFromEmail, slugify, storage } from "../utils/helpers";
 import { api } from "../utils/api";
 
+// Pulls `field` out of a parsed API response body and throws instead of returning `undefined` if
+// it's missing or the wrong shape. Every fetch below used to do `.then(({ field }) => setX(field))`
+// directly -- if a response ever came back without that field (wrong endpoint, a non-JSON body that
+// silently parsed to {}, an error body shaped differently than expected, etc.), `field` would
+// destructure to `undefined` and get handed straight to setState, permanently overwriting a safe
+// initial value like `useState([])`. The next render's `.find()`/`.map()` on that now-undefined
+// state would then crash the whole app days later, far from the actual bad response that caused it.
+// Throwing here instead routes a malformed response into the same .catch() the caller already has
+// for real network errors, so it becomes a visible, retryable error state instead of a silent crash.
+function pluck(body, field, { array = false } = {}) {
+  const value = body && body[field];
+  if (array ? !Array.isArray(value) : value === undefined) {
+    throw new Error(`Unexpected response from the server — missing "${field}". Please try again.`);
+  }
+  return value;
+}
+
 export const AuthCtx = createContext(null);
 
 // Real register/login/session/logout, backed by the actual deployed backend (server/, see
@@ -37,8 +54,8 @@ export function AuthProvider({ children }) {
     const saved = storage.get("ma_auth_token", null);
     if (!saved) { setSessionLoading(false); return; }
     api.me(saved)
-      .then(({ user: realUser }) => { setUser(realUser); setToken(saved); })
-      .catch(() => { storage.set("ma_auth_token", null); }) // expired/invalid token — fail silently, just stay signed out
+      .then((body) => { setUser(pluck(body, "user")); setToken(saved); })
+      .catch(() => { storage.set("ma_auth_token", null); }) // expired/invalid token (or a malformed response) — fail silently, just stay signed out
       .finally(() => setSessionLoading(false));
   }, []);
 
@@ -309,7 +326,7 @@ export function OrdersProvider({ children }) {
     setMyOrdersLoading(true);
     setMyOrdersError("");
     api.getMyOrders(token)
-      .then(({ orders }) => setMyOrders(orders))
+      .then((body) => setMyOrders(pluck(body, "orders", { array: true })))
       .catch((e) => setMyOrdersError(e.message))
       .finally(() => setMyOrdersLoading(false));
   };
@@ -369,7 +386,7 @@ export function AdminDataProvider({ children }) {
     setRealUsersLoading(true);
     setRealUsersError("");
     api.getUsers(token)
-      .then(({ users: fetched }) => setRealUsers(fetched))
+      .then((body) => setRealUsers(pluck(body, "users", { array: true })))
       .catch((e) => {
         // A non-admin's token 403ing here is expected and not a real error -- their dashboard
         // access is already gated elsewhere, so surfacing "you're not allowed" for a section they
@@ -395,7 +412,7 @@ export function AdminDataProvider({ children }) {
     setRealOrdersLoading(true);
     setRealOrdersError("");
     api.getAllOrders(token)
-      .then(({ orders }) => setRealOrders(orders))
+      .then((body) => setRealOrders(pluck(body, "orders", { array: true })))
       .catch((e) => { if (e.status !== 403) setRealOrdersError(e.message); }) // same reasoning as realUsers above -- a non-admin 403ing here is expected, not a real error
       .finally(() => setRealOrdersLoading(false));
   };
@@ -438,7 +455,7 @@ export function AdminDataProvider({ children }) {
     setRealProductsLoading(true);
     setRealProductsError("");
     api.getProducts()
-      .then(({ products }) => setRealProducts(products))
+      .then((body) => setRealProducts(pluck(body, "products", { array: true })))
       .catch((e) => setRealProductsError(e.message))
       .finally(() => setRealProductsLoading(false));
   };
@@ -453,7 +470,7 @@ export function AdminDataProvider({ children }) {
     setRealGreenBeansLoading(true);
     setRealGreenBeansError("");
     api.getGreenBeans()
-      .then(({ greenBeans }) => setRealGreenBeans(greenBeans))
+      .then((body) => setRealGreenBeans(pluck(body, "greenBeans", { array: true })))
       .catch((e) => setRealGreenBeansError(e.message))
       .finally(() => setRealGreenBeansLoading(false));
   };
@@ -482,7 +499,7 @@ export function AdminDataProvider({ children }) {
     setSettingsLoading(true);
     setSettingsError("");
     api.getSettings()
-      .then(({ settings }) => setSettingsState(settings))
+      .then((body) => setSettingsState(pluck(body, "settings")))
       .catch((e) => setSettingsError(e.message))
       .finally(() => setSettingsLoading(false));
   };
