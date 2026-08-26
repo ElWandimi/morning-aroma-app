@@ -131,10 +131,24 @@ Nothing else matters for going live until these are real, not simulated.
             scenario this feature exists for: an order marked paid through the webhook alone, with
             no frontend verify-payment call involved at all, simulating a customer closing the tab
             right after paying. 97/97 backend tests passing.
-            **Requires a manual dashboard step, not an environment variable:** the webhook URL
-            (`<backend-url>/webhooks/paystack`) needs to be registered in Paystack's dashboard
-            (Settings → API Keys & Webhooks) before Paystack will ever actually call it — not done
-            yet as of this writing.
+            **Registered and confirmed working for real, not just built.** The webhook URL
+            (`<backend-url>/webhooks/paystack`) is now registered in Paystack's Live-mode
+            dashboard. Confirmed with a real small purchase, real money, not simulated — Railway's
+            logs showed `Paystack webhook received (signature present)` followed by
+            `processed charge.success for order #1013 -- verified: true`, real, independent proof
+            Paystack's own servers reached the backend, not just the frontend's own immediate
+            verification call.
+            **Two real bugs found and fixed while confirming this, not left as loose ends:**
+            (1) the webhook route logged nothing at all, on any path, success or failure — meaning
+            there was previously no way to ever confirm from Railway's logs whether it had actually
+            been reached; every branch now logs something real. (2) When a payment was already
+            confirmed (the normal case: whichever of the frontend's own call or the webhook gets
+            there first), the *other* one was treated as a genuine failure — a bare 400 error with
+            no order data — rather than the success it actually was, leaving the checkout page
+            stuck showing an error with an active "pay again" button for an order that was
+            genuinely fine. Fixed at the root: "already paid" now returns a real 200 with the real
+            order, so the frontend's existing success path just handles it correctly with no
+            frontend changes needed. 254/254 backend tests passing.
       - [x] **Real stock decrement, a real cancellation window, and a real refund workflow.**
             Found from a direct user report right after live payments started working: stock
             never actually decremented on a real sale. Stock now decrements on genuine payment
@@ -480,6 +494,16 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Paystack webhook registered and confirmed working with a real payment, real money — plus two
+  real bugs found and fixed while confirming it, neither left as a loose end.** The webhook route
+  previously logged nothing at all, making it impossible to ever confirm from Railway's logs
+  whether Paystack had genuinely reached it — every branch now logs something real, and a real
+  purchase proved it: `Paystack webhook received` followed by `verified: true` in the logs. Also
+  found: when a payment was already confirmed by whichever of the frontend's own call or the
+  webhook got there first, the *other* one was wrongly treated as a genuine failure instead of the
+  success it actually was, leaving checkout visibly stuck with an error and an active "pay again"
+  button. Fixed at the root — "already paid" now returns a real 200 with the real order. 254/254
+  backend tests. See Tier 1 for full detail.
 - **A real domain, purchased and fully wired in — `morning-aroma.com`.** Two genuinely separate
   pieces, both done and confirmed live, not just configured: real email delivery (Resend domain
   verification, `EMAIL_FROM_ADDRESS` updated, confirmed by sending to an address outside the
