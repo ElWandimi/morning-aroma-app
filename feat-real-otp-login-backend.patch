@@ -1,0 +1,293 @@
+diff --git a/server/migrations/009_login_codes.sql b/server/migrations/009_login_codes.sql
+new file mode 100644
+index 0000000..e82e10c
+--- /dev/null
++++ b/server/migrations/009_login_codes.sql
+@@ -0,0 +1,20 @@
++-- Real OTP (email-code) login. Deliberately its own table, not columns on `users` (the way
++-- reset_token_hash/reset_token_expires are) -- a code can legitimately be requested for an email
++-- that has no account yet (this is passwordless login AND signup combined, same principle as
++-- Google sign-in creating an account on first use), so there's no user row to attach it to at
++-- request time.
++
++CREATE TABLE IF NOT EXISTS login_codes (
++  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++  email       TEXT NOT NULL,
++  -- Hashed (sha256), same principle as reset_token_hash -- never the raw code at rest.
++  code_hash   TEXT NOT NULL,
++  expires_at  TIMESTAMPTZ NOT NULL,
++  -- Mirrors the 3-attempt lockout the frontend already simulated before this was real --
++  -- enforced server-side now, not just in client-side UI state that meant nothing.
++  attempts    INT NOT NULL DEFAULT 0,
++  consumed    BOOLEAN NOT NULL DEFAULT false,
++  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++
++CREATE INDEX IF NOT EXISTS login_codes_email_idx ON login_codes (email);
+diff --git a/server/src/routes/auth.js b/server/src/routes/auth.js
+index 4fdc2ae..d81afdc 100644
+--- a/server/src/routes/auth.js
++++ b/server/src/routes/auth.js
+@@ -6,8 +6,9 @@ const { query } = require("../db");
+ const { hashPassword, verifyPassword, isPasswordStrongEnough } = require("../utils/password");
+ const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken } = require("../utils/tokens");
+ const { newSecret, totpQrCode, verifyTotp, generateBackupCodes, hashBackupCode } = require("../utils/twoFactor");
++const { generateLoginCode, hashLoginCode } = require("../utils/otp");
+ const { requireAuth } = require("../middleware/requireAuth");
+-const { sendWelcomeEmail, sendPasswordResetEmail } = require("../utils/email");
++const { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail } = require("../utils/email");
+ 
+ const router = express.Router();
+ 
+@@ -199,6 +200,95 @@ router.post("/google", async (req, res) => {
+   res.json({ user: publicUser(user), token: signAccessToken(user) });
+ });
+ 
++// Real OTP (email-code) sign-in: a genuine passwordless alternative to /login, not the old
++// frontend simulation that generated a code locally and displayed it back on screen. Serves as
++// both login and registration, same principle as /google -- a matching email signs into the
++// existing account, a new email creates one, only once the code is actually verified (not at
++// request time, so simply requesting a code for a random email never creates a real account).
++router.post("/otp/request", async (req, res) => {
++  const { email } = req.body || {};
++  if (!isValidEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
++
++  const cleanEmail = email.trim().toLowerCase();
++  const code = generateLoginCode();
++  // Invalidates any earlier still-active code for this email first -- otherwise an old code from
++  // a previous request would stay valid alongside the new one, and /otp/verify's "most recent"
++  // lookup below would be the only thing standing between an attacker and a stale, weaker code.
++  await query("DELETE FROM login_codes WHERE email = $1 AND consumed = false", [cleanEmail]);
++  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes -- real email delivery has
++  // real latency, unlike the old frontend simulation's 60-second local countdown, which assumed
++  // the code was already on screen the instant it was "sent."
++  await query(
++    "INSERT INTO login_codes (email, code_hash, expires_at) VALUES ($1, $2, $3)",
++    [cleanEmail, hashLoginCode(code), expiresAt]
++  );
++  sendLoginCodeEmail(cleanEmail, code).catch((err) => console.error("Failed to send login code email:", err));
++  // Same generic response regardless of anything about this email -- there's genuinely nothing to
++  // differentiate on here (unlike password login), since this endpoint behaves identically whether
++  // or not an account exists yet.
++  res.json({ message: "If that's a real email address, a sign-in code has been sent." });
++});
++
++router.post("/otp/verify", async (req, res) => {
++  const { email, code } = req.body || {};
++  if (!isValidEmail(email) || typeof code !== "string" || !code.trim()) {
++    return res.status(400).json({ error: "Enter your email and the 6-digit code." });
++  }
++  const cleanEmail = email.trim().toLowerCase();
++
++  const result = await query(
++    "SELECT * FROM login_codes WHERE email = $1 AND consumed = false ORDER BY created_at DESC LIMIT 1",
++    [cleanEmail]
++  );
++  const loginCode = result.rows[0];
++  if (!loginCode) return res.status(400).json({ error: "No active code for that email. Request a new one." });
++  if (new Date(loginCode.expires_at).getTime() < Date.now()) {
++    return res.status(400).json({ error: "That code has expired. Request a new one." });
++  }
++  // Mirrors the frontend's own pre-existing 3-attempt lockout UX, now actually enforced
++  // server-side instead of just in client-side state that meant nothing on its own.
++  if (loginCode.attempts >= 3) {
++    return res.status(400).json({ error: "Too many wrong attempts. Request a new code." });
++  }
++
++  if (hashLoginCode(code) !== loginCode.code_hash) {
++    await query("UPDATE login_codes SET attempts = attempts + 1 WHERE id = $1", [loginCode.id]);
++    return res.status(400).json({ error: "Incorrect code." });
++  }
++
++  // Consumed the moment it's confirmed correct -- whatever happens next (even an unexpected
++  // error below), this exact code can never be used to sign in again.
++  await query("UPDATE login_codes SET consumed = true WHERE id = $1", [loginCode.id]);
++
++  let userResult = await query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
++  let user = userResult.rows[0];
++
++  if (!user) {
++    // Same first-user-becomes-admin bootstrap as /register and /google above.
++    const countResult = await query("SELECT COUNT(*) AS count FROM users", []);
++    const isFirstUser = parseInt(countResult.rows[0].count, 10) === 0;
++    const role = isFirstUser ? "super_admin" : "customer";
++    // Same reasoning as Google sign-in's account creation: a real, cryptographically random,
++    // never-disclosed password_hash -- this account genuinely doesn't have a password yet, and
++    // "forgot password" is exactly how someone would set one later if they want it.
++    const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
++    const inserted = await query(
++      "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
++      [cleanEmail, cleanEmail.split("@")[0], randomPasswordHash, role]
++    );
++    user = inserted.rows[0];
++    sendWelcomeEmail(user).catch((err) => console.error("Failed to send welcome email:", err));
++  }
++
++  if (user.two_factor_enabled) {
++    // Same reasoning as /login and /google above -- 2FA applies regardless of which door someone
++    // signs in through.
++    return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
++  }
++
++  res.json({ user: publicUser(user), token: signAccessToken(user) });
++});
++
+ router.get("/me", requireAuth, async (req, res) => {
+   const result = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
+   const user = result.rows[0];
+diff --git a/server/src/utils/email.js b/server/src/utils/email.js
+index 8d4c9d8..c6049dd 100644
+--- a/server/src/utils/email.js
++++ b/server/src/utils/email.js
+@@ -76,6 +76,18 @@ your password hasn't been changed.`;
+   await sendEmail("Password reset email", email, subject, body);
+ }
+ 
++async function sendLoginCodeEmail(email, code) {
++  const subject = `${code} is your Morning Aroma sign-in code`;
++  const body = `Here's the code to sign in to Morning Aroma:
++
++${code}
++
++Enter it on the sign-in screen at ${SITE_URL}. This code expires in 10 minutes and can only be
++used once. If you didn't request this, you can safely ignore this email — no account changes were
++made.`;
++  await sendEmail("Login code email", email, subject, body);
++}
++
+ // Sent to every super_admin the moment a customer cancels a paid order (see
+ // routes/orders.js's POST /:id/cancel) -- a real refund is now owed, and this is the only signal
+ // an admin gets that one is needed, since refunds are deliberately a manual, admin-triggered
+@@ -99,4 +111,4 @@ customer once a refund is initiated -- initiating it promptly is what's in your
+   await sendEmail("Refund needed notification", adminEmail, subject, body);
+ }
+ 
+-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendRefundNeededEmail };
++module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendRefundNeededEmail };
+diff --git a/server/src/utils/otp.js b/server/src/utils/otp.js
+new file mode 100644
+index 0000000..c9044cf
+--- /dev/null
++++ b/server/src/utils/otp.js
+@@ -0,0 +1,16 @@
++const crypto = require("crypto");
++
++// crypto.randomInt (cryptographically secure) rather than Math.random() (not) -- the old frontend
++// simulation used Math.random() only because it never mattered for a fake, locally-compared demo
++// code. A real login code is functionally a temporary password and deserves the same randomness
++// guarantee a real password reset token already gets.
++function generateLoginCode() {
++  return String(crypto.randomInt(100000, 1000000)); // always 6 digits, 100000-999999
++}
++
++// Same principle as hashResetToken (utils/tokens.js): only ever store a hash, never the raw code.
++function hashLoginCode(code) {
++  return crypto.createHash("sha256").update(String(code).trim()).digest("hex");
++}
++
++module.exports = { generateLoginCode, hashLoginCode };
+diff --git a/server/test/run-e2e.js b/server/test/run-e2e.js
+index e008c47..8e2a230 100644
+--- a/server/test/run-e2e.js
++++ b/server/test/run-e2e.js
+@@ -907,6 +907,80 @@ async function main() {
+   check("signals a second step is required, same as password login would", googleTwoFaLogin.body.requiresTwoFactor === true);
+   check("returns a real pending session token", typeof googleTwoFaLogin.body.pendingToken === "string");
+ 
++  console.log("\nOTP (email-code) login -- request a code for a brand-new email:");
++  process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
++  resendMock.resetSentEmails();
++  const otpRequest = await post("/auth/otp/request", { email: "otp-new@morningaroma.local" });
++  check("returns 200", otpRequest.status === 200);
++  const otpEmails1 = resendMock.getSentEmails();
++  check("a real login-code email was actually sent through the provider", otpEmails1.length === 1 && otpEmails1[0].to === "otp-new@morningaroma.local");
++  const otpCodeMatch1 = otpEmails1[0] && otpEmails1[0].text.match(/\n(\d{6})\n/);
++  check("email contains a real 6-digit code, not a placeholder", !!otpCodeMatch1);
++  const otpCode1 = otpCodeMatch1 && otpCodeMatch1[1];
++
++  console.log("\nPOST /auth/otp/verify with no code ever requested for a different email:");
++  const otpNoCode = await post("/auth/otp/verify", { email: "never-requested@morningaroma.local", code: "000000" });
++  check("returns 400", otpNoCode.status === 400);
++
++  console.log("\nPOST /auth/otp/verify with the wrong code:");
++  const otpWrongCode = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: "000000" });
++  check("returns 400", otpWrongCode.status === 400);
++
++  console.log("\nTwo more wrong attempts, to hit the real 3-attempt lockout:");
++  await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: "111111" });
++  const otpLockout = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: "222222" });
++  check("returns 400 -- locked out after 3 wrong attempts, even though the real code was never actually tried", otpLockout.status === 400);
++  const otpStillLocked = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode1 });
++  check("the real, correct code no longer works either, once locked out", otpStillLocked.status === 400);
++
++  console.log("\nRequesting a fresh code un-does the lockout (a new code invalidates the old, locked one):");
++  resendMock.resetSentEmails();
++  const otpRequest2 = await post("/auth/otp/request", { email: "otp-new@morningaroma.local" });
++  const otpCodeMatch2 = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/);
++  const otpCode2 = otpCodeMatch2[1];
++
++  console.log("\nPOST /auth/otp/verify with the real, correct new code -- creates a real new account:");
++  const otpVerify = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode2 });
++  check("returns 200", otpVerify.status === 200);
++  check("creates a real user with the email that requested the code", otpVerify.body.user && otpVerify.body.user.email === "otp-new@morningaroma.local");
++  check("a fresh account this far into the run is never the bootstrap admin", otpVerify.body.user.role === "customer");
++  check("returns a real, usable access token", typeof otpVerify.body.token === "string" && otpVerify.body.token.length > 20);
++  const otpNewUserId = otpVerify.body.user.id;
++
++  console.log("\nReusing that exact same code a second time:");
++  const otpReplay = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode2 });
++  check("returns 400 -- an already-used code can never be replayed", otpReplay.status === 400);
++
++  console.log("\nRequesting and verifying a code again for that SAME, now-existing email:");
++  resendMock.resetSentEmails();
++  await post("/auth/otp/request", { email: "otp-new@morningaroma.local" });
++  const otpCode3 = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/)[1];
++  const otpSecondSignin = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode3 });
++  check("resolves to the SAME account, not a duplicate", otpSecondSignin.body.user.id === otpNewUserId);
++
++  console.log("\nAn expired code is rejected, even if it's otherwise correct (backdated directly in the DB, the same way the order-cancellation-window test backdates a timestamp):");
++  resendMock.resetSentEmails();
++  await post("/auth/otp/request", { email: "otp-expiry@morningaroma.local" });
++  const otpExpiryCode = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/)[1];
++  const otpCodeExpiredAt = new Date(Date.now() - 11 * 60 * 1000);
++  await query("UPDATE login_codes SET expires_at = $1 WHERE email = $2", [otpCodeExpiredAt, "otp-expiry@morningaroma.local"]);
++  const otpExpired = await post("/auth/otp/verify", { email: "otp-expiry@morningaroma.local", code: otpExpiryCode });
++  check("returns 400 -- a real, correct code is still rejected once genuinely expired", otpExpired.status === 400);
++
++  console.log("\nAn account with real 2FA on still gets gated behind it when signing in via OTP:");
++  const otpTwoFaReg = await post("/auth/register", { email: "otp-twofa@morningaroma.local", password: "correcthorsebattery", name: "OTP Two Factor Test" });
++  const otpTwoFaSetup = await post("/auth/2fa/setup", {}, otpTwoFaReg.body.token);
++  const otpTwoFaRealCode = await otplib.generate({ secret: otpTwoFaSetup.body.secret });
++  await post("/auth/2fa/verify-setup", { code: otpTwoFaRealCode }, otpTwoFaReg.body.token);
++  resendMock.resetSentEmails();
++  await post("/auth/otp/request", { email: "otp-twofa@morningaroma.local" });
++  const otpTwoFaLoginCode = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/)[1];
++  const otpTwoFaLogin = await post("/auth/otp/verify", { email: "otp-twofa@morningaroma.local", code: otpTwoFaLoginCode });
++  check("does NOT return a real access token", otpTwoFaLogin.body.token === undefined);
++  check("signals a second step is required, same as password and Google login would", otpTwoFaLogin.body.requiresTwoFactor === true);
++  check("returns a real pending session token", typeof otpTwoFaLogin.body.pendingToken === "string");
++  delete process.env.RESEND_API_KEY;
++
+   console.log(`\n${pass} passed, ${fail} failed`);
+   server.close();
+   process.exit(fail > 0 ? 1 : 0);
+diff --git a/server/test/schema.sqlite.sql b/server/test/schema.sqlite.sql
+index 0a7353a..40eb127 100644
+--- a/server/test/schema.sqlite.sql
++++ b/server/test/schema.sqlite.sql
+@@ -80,3 +80,15 @@ CREATE TABLE orders (
+   payment_mode        TEXT,
+   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+ );
++
++CREATE TABLE login_codes (
++  id          INTEGER PRIMARY KEY AUTOINCREMENT,
++  email       TEXT NOT NULL,
++  code_hash   TEXT NOT NULL,
++  expires_at  TEXT NOT NULL,
++  attempts    INTEGER NOT NULL DEFAULT 0,
++  consumed    INTEGER NOT NULL DEFAULT 0,
++  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
++);
++
++CREATE INDEX login_codes_email_idx ON login_codes (email);

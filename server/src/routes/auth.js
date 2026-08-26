@@ -6,8 +6,9 @@ const { query } = require("../db");
 const { hashPassword, verifyPassword, isPasswordStrongEnough } = require("../utils/password");
 const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken } = require("../utils/tokens");
 const { newSecret, totpQrCode, verifyTotp, generateBackupCodes, hashBackupCode } = require("../utils/twoFactor");
+const { generateLoginCode, hashLoginCode } = require("../utils/otp");
 const { requireAuth } = require("../middleware/requireAuth");
-const { sendWelcomeEmail, sendPasswordResetEmail } = require("../utils/email");
+const { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail } = require("../utils/email");
 
 const router = express.Router();
 
@@ -193,6 +194,95 @@ router.post("/google", async (req, res) => {
   if (user.two_factor_enabled) {
     // An account protected with 2FA stays protected regardless of which door someone signs in
     // through -- same branch, same reasoning as /login above.
+    return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
+  }
+
+  res.json({ user: publicUser(user), token: signAccessToken(user) });
+});
+
+// Real OTP (email-code) sign-in: a genuine passwordless alternative to /login, not the old
+// frontend simulation that generated a code locally and displayed it back on screen. Serves as
+// both login and registration, same principle as /google -- a matching email signs into the
+// existing account, a new email creates one, only once the code is actually verified (not at
+// request time, so simply requesting a code for a random email never creates a real account).
+router.post("/otp/request", async (req, res) => {
+  const { email } = req.body || {};
+  if (!isValidEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
+
+  const cleanEmail = email.trim().toLowerCase();
+  const code = generateLoginCode();
+  // Invalidates any earlier still-active code for this email first -- otherwise an old code from
+  // a previous request would stay valid alongside the new one, and /otp/verify's "most recent"
+  // lookup below would be the only thing standing between an attacker and a stale, weaker code.
+  await query("DELETE FROM login_codes WHERE email = $1 AND consumed = false", [cleanEmail]);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes -- real email delivery has
+  // real latency, unlike the old frontend simulation's 60-second local countdown, which assumed
+  // the code was already on screen the instant it was "sent."
+  await query(
+    "INSERT INTO login_codes (email, code_hash, expires_at) VALUES ($1, $2, $3)",
+    [cleanEmail, hashLoginCode(code), expiresAt]
+  );
+  sendLoginCodeEmail(cleanEmail, code).catch((err) => console.error("Failed to send login code email:", err));
+  // Same generic response regardless of anything about this email -- there's genuinely nothing to
+  // differentiate on here (unlike password login), since this endpoint behaves identically whether
+  // or not an account exists yet.
+  res.json({ message: "If that's a real email address, a sign-in code has been sent." });
+});
+
+router.post("/otp/verify", async (req, res) => {
+  const { email, code } = req.body || {};
+  if (!isValidEmail(email) || typeof code !== "string" || !code.trim()) {
+    return res.status(400).json({ error: "Enter your email and the 6-digit code." });
+  }
+  const cleanEmail = email.trim().toLowerCase();
+
+  const result = await query(
+    "SELECT * FROM login_codes WHERE email = $1 AND consumed = false ORDER BY created_at DESC LIMIT 1",
+    [cleanEmail]
+  );
+  const loginCode = result.rows[0];
+  if (!loginCode) return res.status(400).json({ error: "No active code for that email. Request a new one." });
+  if (new Date(loginCode.expires_at).getTime() < Date.now()) {
+    return res.status(400).json({ error: "That code has expired. Request a new one." });
+  }
+  // Mirrors the frontend's own pre-existing 3-attempt lockout UX, now actually enforced
+  // server-side instead of just in client-side state that meant nothing on its own.
+  if (loginCode.attempts >= 3) {
+    return res.status(400).json({ error: "Too many wrong attempts. Request a new code." });
+  }
+
+  if (hashLoginCode(code) !== loginCode.code_hash) {
+    await query("UPDATE login_codes SET attempts = attempts + 1 WHERE id = $1", [loginCode.id]);
+    return res.status(400).json({ error: "Incorrect code." });
+  }
+
+  // Consumed the moment it's confirmed correct -- whatever happens next (even an unexpected
+  // error below), this exact code can never be used to sign in again.
+  await query("UPDATE login_codes SET consumed = true WHERE id = $1", [loginCode.id]);
+
+  let userResult = await query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
+  let user = userResult.rows[0];
+
+  if (!user) {
+    // Same first-user-becomes-admin bootstrap as /register and /google above.
+    const countResult = await query("SELECT COUNT(*) AS count FROM users", []);
+    const isFirstUser = parseInt(countResult.rows[0].count, 10) === 0;
+    const role = isFirstUser ? "super_admin" : "customer";
+    // Same reasoning as Google sign-in's account creation: a real, cryptographically random,
+    // never-disclosed password_hash -- this account genuinely doesn't have a password yet, and
+    // "forgot password" is exactly how someone would set one later if they want it.
+    const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
+    const inserted = await query(
+      "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
+      [cleanEmail, cleanEmail.split("@")[0], randomPasswordHash, role]
+    );
+    user = inserted.rows[0];
+    sendWelcomeEmail(user).catch((err) => console.error("Failed to send welcome email:", err));
+  }
+
+  if (user.two_factor_enabled) {
+    // Same reasoning as /login and /google above -- 2FA applies regardless of which door someone
+    // signs in through.
     return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
   }
 

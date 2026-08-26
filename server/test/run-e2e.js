@@ -907,6 +907,80 @@ async function main() {
   check("signals a second step is required, same as password login would", googleTwoFaLogin.body.requiresTwoFactor === true);
   check("returns a real pending session token", typeof googleTwoFaLogin.body.pendingToken === "string");
 
+  console.log("\nOTP (email-code) login -- request a code for a brand-new email:");
+  process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
+  resendMock.resetSentEmails();
+  const otpRequest = await post("/auth/otp/request", { email: "otp-new@morningaroma.local" });
+  check("returns 200", otpRequest.status === 200);
+  const otpEmails1 = resendMock.getSentEmails();
+  check("a real login-code email was actually sent through the provider", otpEmails1.length === 1 && otpEmails1[0].to === "otp-new@morningaroma.local");
+  const otpCodeMatch1 = otpEmails1[0] && otpEmails1[0].text.match(/\n(\d{6})\n/);
+  check("email contains a real 6-digit code, not a placeholder", !!otpCodeMatch1);
+  const otpCode1 = otpCodeMatch1 && otpCodeMatch1[1];
+
+  console.log("\nPOST /auth/otp/verify with no code ever requested for a different email:");
+  const otpNoCode = await post("/auth/otp/verify", { email: "never-requested@morningaroma.local", code: "000000" });
+  check("returns 400", otpNoCode.status === 400);
+
+  console.log("\nPOST /auth/otp/verify with the wrong code:");
+  const otpWrongCode = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: "000000" });
+  check("returns 400", otpWrongCode.status === 400);
+
+  console.log("\nTwo more wrong attempts, to hit the real 3-attempt lockout:");
+  await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: "111111" });
+  const otpLockout = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: "222222" });
+  check("returns 400 -- locked out after 3 wrong attempts, even though the real code was never actually tried", otpLockout.status === 400);
+  const otpStillLocked = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode1 });
+  check("the real, correct code no longer works either, once locked out", otpStillLocked.status === 400);
+
+  console.log("\nRequesting a fresh code un-does the lockout (a new code invalidates the old, locked one):");
+  resendMock.resetSentEmails();
+  const otpRequest2 = await post("/auth/otp/request", { email: "otp-new@morningaroma.local" });
+  const otpCodeMatch2 = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/);
+  const otpCode2 = otpCodeMatch2[1];
+
+  console.log("\nPOST /auth/otp/verify with the real, correct new code -- creates a real new account:");
+  const otpVerify = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode2 });
+  check("returns 200", otpVerify.status === 200);
+  check("creates a real user with the email that requested the code", otpVerify.body.user && otpVerify.body.user.email === "otp-new@morningaroma.local");
+  check("a fresh account this far into the run is never the bootstrap admin", otpVerify.body.user.role === "customer");
+  check("returns a real, usable access token", typeof otpVerify.body.token === "string" && otpVerify.body.token.length > 20);
+  const otpNewUserId = otpVerify.body.user.id;
+
+  console.log("\nReusing that exact same code a second time:");
+  const otpReplay = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode2 });
+  check("returns 400 -- an already-used code can never be replayed", otpReplay.status === 400);
+
+  console.log("\nRequesting and verifying a code again for that SAME, now-existing email:");
+  resendMock.resetSentEmails();
+  await post("/auth/otp/request", { email: "otp-new@morningaroma.local" });
+  const otpCode3 = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/)[1];
+  const otpSecondSignin = await post("/auth/otp/verify", { email: "otp-new@morningaroma.local", code: otpCode3 });
+  check("resolves to the SAME account, not a duplicate", otpSecondSignin.body.user.id === otpNewUserId);
+
+  console.log("\nAn expired code is rejected, even if it's otherwise correct (backdated directly in the DB, the same way the order-cancellation-window test backdates a timestamp):");
+  resendMock.resetSentEmails();
+  await post("/auth/otp/request", { email: "otp-expiry@morningaroma.local" });
+  const otpExpiryCode = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/)[1];
+  const otpCodeExpiredAt = new Date(Date.now() - 11 * 60 * 1000);
+  await query("UPDATE login_codes SET expires_at = $1 WHERE email = $2", [otpCodeExpiredAt, "otp-expiry@morningaroma.local"]);
+  const otpExpired = await post("/auth/otp/verify", { email: "otp-expiry@morningaroma.local", code: otpExpiryCode });
+  check("returns 400 -- a real, correct code is still rejected once genuinely expired", otpExpired.status === 400);
+
+  console.log("\nAn account with real 2FA on still gets gated behind it when signing in via OTP:");
+  const otpTwoFaReg = await post("/auth/register", { email: "otp-twofa@morningaroma.local", password: "correcthorsebattery", name: "OTP Two Factor Test" });
+  const otpTwoFaSetup = await post("/auth/2fa/setup", {}, otpTwoFaReg.body.token);
+  const otpTwoFaRealCode = await otplib.generate({ secret: otpTwoFaSetup.body.secret });
+  await post("/auth/2fa/verify-setup", { code: otpTwoFaRealCode }, otpTwoFaReg.body.token);
+  resendMock.resetSentEmails();
+  await post("/auth/otp/request", { email: "otp-twofa@morningaroma.local" });
+  const otpTwoFaLoginCode = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/)[1];
+  const otpTwoFaLogin = await post("/auth/otp/verify", { email: "otp-twofa@morningaroma.local", code: otpTwoFaLoginCode });
+  check("does NOT return a real access token", otpTwoFaLogin.body.token === undefined);
+  check("signals a second step is required, same as password and Google login would", otpTwoFaLogin.body.requiresTwoFactor === true);
+  check("returns a real pending session token", typeof otpTwoFaLogin.body.pendingToken === "string");
+  delete process.env.RESEND_API_KEY;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();
   process.exit(fail > 0 ? 1 : 0);

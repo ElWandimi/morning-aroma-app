@@ -80,3 +80,15 @@ CREATE TABLE orders (
   payment_mode        TEXT,
   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE login_codes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  email       TEXT NOT NULL,
+  code_hash   TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  consumed    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX login_codes_email_idx ON login_codes (email);

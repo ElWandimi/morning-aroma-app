@@ -76,6 +76,18 @@ your password hasn't been changed.`;
   await sendEmail("Password reset email", email, subject, body);
 }
 
+async function sendLoginCodeEmail(email, code) {
+  const subject = `${code} is your Morning Aroma sign-in code`;
+  const body = `Here's the code to sign in to Morning Aroma:
+
+${code}
+
+Enter it on the sign-in screen at ${SITE_URL}. This code expires in 10 minutes and can only be
+used once. If you didn't request this, you can safely ignore this email — no account changes were
+made.`;
+  await sendEmail("Login code email", email, subject, body);
+}
+
 // Sent to every super_admin the moment a customer cancels a paid order (see
 // routes/orders.js's POST /:id/cancel) -- a real refund is now owed, and this is the only signal
 // an admin gets that one is needed, since refunds are deliberately a manual, admin-triggered
@@ -99,4 +111,4 @@ customer once a refund is initiated -- initiating it promptly is what's in your 
   await sendEmail("Refund needed notification", adminEmail, subject, body);
 }
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendRefundNeededEmail };
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendRefundNeededEmail };
