@@ -316,10 +316,12 @@ async function main() {
   check("real paystack reference stored", verifyOk.body.order && verifyOk.body.order.paystackReference === "ref_real_payment");
   check("actual paid amount/currency stored, not just the expected ones", verifyOk.body.order && verifyOk.body.order.paidAmountCents === 806000 && verifyOk.body.order.paidCurrency === "KES");
 
-  console.log("\nPOST /orders/:id/verify-payment — trying to pay the same order again:");
+  console.log("\nPOST /orders/:id/verify-payment — trying to \"pay\" the same order again (a real success from the customer's side, not a failure -- their payment already went through):");
   paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 806000 });
   const verifyAgain = await post(`/orders/${orderId}/verify-payment`, { reference: "ref_second_attempt" }, customerToken);
-  check("returns 400 -- already paid", verifyAgain.status === 400);
+  check("returns 200, not an error -- the order genuinely is paid, this call just didn't cause it", verifyAgain.status === 200);
+  check("returns the real order, still correctly showing paid", verifyAgain.body.order && verifyAgain.body.order.paymentStatus === "paid");
+  check("does NOT overwrite the real reference from the first, genuine payment", verifyAgain.body.order && verifyAgain.body.order.paystackReference === "ref_real_payment");
 
   console.log("\nPOST /orders/:id/verify-payment — reusing a reference that already paid a different order:");
   paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 13000 }); // exact match for the $1.00 order below (100 cents * 130 rate)

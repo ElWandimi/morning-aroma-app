@@ -225,6 +225,11 @@ router.post("/:id/verify-payment", requireAuth, async (req, res) => {
   if (!order) return res.status(404).json({ error: "No order found with that ID." });
 
   const result = await verifyAndMarkOrderPaid(order, reference);
+  // "Already paid" is genuinely a success from the customer's point of view -- their payment did
+  // go through, just possibly confirmed by the webhook a moment before this call got here. Real
+  // order data included either way, so the frontend can show the same confirmed-order screen
+  // regardless of which path actually confirmed the payment.
+  if (result.alreadyPaid) return res.json({ order: publicOrder(result.order) });
   if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
   res.json({ order: publicOrder(result.order) });
 });

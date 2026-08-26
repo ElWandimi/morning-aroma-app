@@ -15,7 +15,12 @@ const { verifyTransaction, getUsdToKesRate } = require("./paystack");
 // otherwise -- never throws for an expected rejection, only for a genuine unexpected error.
 async function verifyAndMarkOrderPaid(order, reference) {
   if (order.payment_status === "paid") {
-    return { ok: false, error: "This order has already been paid." };
+    // Genuinely not a failure -- the payment succeeded, just possibly confirmed by a different
+    // caller already (the frontend's own verify() call and this same webhook both exist
+    // specifically because either one might be the one that actually gets there first). Includes
+    // the real order and a distinct `alreadyPaid` flag so callers can treat this the same as
+    // success rather than showing a "payment failed" error for a payment that didn't fail.
+    return { ok: false, alreadyPaid: true, order, error: "This order has already been paid." };
   }
 
   let transaction;
@@ -70,7 +75,14 @@ async function verifyAndMarkOrderPaid(order, reference) {
        WHERE id = $5 AND payment_status = 'unpaid' RETURNING *`,
       [transaction.reference, transaction.amount, transaction.currency, paymentMode, order.id]
     );
-    if (!result.rows[0]) return { ok: false, error: "This order has already been paid." };
+    if (!result.rows[0]) {
+      // Same reasoning as the early check above -- not a failure, the other simultaneous caller
+      // (frontend verify() call vs. this webhook, most commonly) already won this exact race and
+      // marked it paid a moment earlier. Re-fetches rather than reusing the stale `order` param,
+      // since that still reflects pre-payment state from before whichever call actually won.
+      const refetched = await query("SELECT * FROM orders WHERE id = $1", [order.id]);
+      return { ok: false, alreadyPaid: true, order: refetched.rows[0], error: "This order has already been paid." };
+    }
 
     // Decrement real stock now, not at order creation -- an order that's merely created but never
     // paid (an abandoned checkout) must never reduce what's actually available. CASE WHEN rather
