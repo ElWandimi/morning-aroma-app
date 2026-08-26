@@ -45,22 +45,51 @@ Nothing else matters for going live until these are real, not simulated.
             connected yet (the reset is genuinely real server-side, but the code must be relayed
             manually for now). Also made "Continue with Google" unmistakably a preview — it
             previously showed a picker of fake accounts styled exactly like a real Google login.
-      - [ ] **New, split out as its own item (Tier 1.5 below):** admin user-management API. The
-            Customers section's user list and role/permission management still operate on demo,
-            in-memory-only data — a real registered customer will not show up there. OTP login,
-            "Continue with Google", and 2FA also remain demo-only, each blocked on its own
-            separate piece (real email delivery; a Google Cloud OAuth app; 2FA design work).
-      - [ ] **Requirement captured for when Google OAuth is real** (project owner's request):
-            registering via email+password must NOT create a duplicate account if that email
-            already has an account via Google, and vice versa — one email should always resolve
-            to one account regardless of which method was used to sign in. Not implemented yet
-            because "Continue with Google" is still fake/local-only right now and doesn't share
-            any storage with the real email+password accounts, so there's no actual collision to
-            prevent yet — building linking logic against a placeholder that's getting replaced
-            wouldn't be real work. Implement this as part of the real Google OAuth integration
-            itself: on Google sign-in, check for an existing user by email first before creating
-            a new one (and the reverse: /auth/register should recognize an email that already
-            exists via Google, once that's a real possibility).
+      - [x] **Admin user-management API — done, see Tier 1.5 below.**
+      - [x] **Real OTP (email-code) login, done.** `server/migrations/009_login_codes.sql` +
+            `server/src/utils/otp.js` + two real endpoints (`/auth/otp/request`, `/verify`) — a
+            dedicated `login_codes` table, deliberately separate from `users` (a code can be
+            requested for an email with no account yet; this is passwordless login and signup
+            combined, same principle as Google sign-in). Real 6-digit codes via
+            `crypto.randomInt` (not `Math.random()`, which the old fake simulation used only
+            because it never mattered locally), sha256-hashed at rest, genuinely expire after 10
+            minutes, and a real 3-attempt lockout enforced server-side — mirroring what the old
+            frontend only ever simulated in state that meant nothing. Serves as both login and
+            registration, and respects 2FA the same way password and Google sign-in do. Frontend
+            fully wired — the "Email code" tab no longer generates and displays a code to itself;
+            it sends a real email and verifies a real response, with the backend's real errors
+            (wrong code, expired, locked out) surfaced directly. 252/252 backend tests. Confirmed
+            for real, not just by the test suite: requested a code with a real inbox, received a
+            real email with a real 6-digit code (landed in Gmail's Updates tab rather than
+            Primary — expected for now, tied to the same missing-verified-domain limitation
+            already tracked below, not a bug), entered it, and signed in successfully.
+      - [x] **Real 2FA (TOTP), done.** `server/migrations/008_two_factor.sql` +
+            `server/src/utils/twoFactor.js` (otplib + qrcode) + four real endpoints
+            (`/auth/2fa/setup`, `/verify-setup`, `/verify-login`, `/disable`). Real QR-code setup
+            with a manual-entry fallback, 8 one-time hashed backup codes shown exactly once, login
+            genuinely gated behind a second factor for any account with it enabled. A real security
+            bug was caught and fixed while building this, not just a design nicety: the short-lived
+            "pending 2FA" token was signed with the same secret as a real session token, and
+            `requireAuth` never checked *which kind* it was — it would have granted full API access
+            without the second factor ever actually being confirmed. Fixed by rejecting any token
+            carrying a `type` claim. Frontend fully wired (real QR display, real code entry, real
+            backup-codes-shown-once, disable requires password re-confirmation). 220/220 backend
+            tests on its own, 235/235 once Google sign-in's own tests were added alongside it, then
+            252/252 with OTP login's tests on top. Manually confirmed end to end in a real browser:
+            enabled, signed out, signed back in and was actually prompted for a code, disabled
+            again.
+      - [x] **Real Google sign-in, done — including the account-linking requirement the project
+            owner asked for.** `server/src/routes/auth.js`'s `/auth/google` verifies a real
+            Google-issued ID token (`google-auth-library`) that Google's own real Identity Services
+            "Sign in with Google" button produces client-side — no authorization code, no client
+            secret, no redirect flow, so no `GOOGLE_CLIENT_SECRET` is even needed. Serves as both
+            login and registration: a matching email signs into the existing account regardless of
+            which method created it, a new email creates one — one email always resolves to one
+            account, now actually implemented and tested, not just captured as a future TODO.
+            Respects 2FA the same way password login does. Confirmed for real, not just by the
+            test suite: signed in with a real Google account, received Google's own official "you
+            used Sign in with Google" confirmation email, and the app showed the correct signed-in
+            state afterward.
 - [x] **Payments** — Paystack integration (decided by the project owner — a strong fit given the
       business is Kenya-based; Paystack has real M-Pesa support there, which Stripe doesn't).
       Real Paystack account now exists, charging in KES.
@@ -347,38 +376,38 @@ Nothing else matters for going live until these are real, not simulated.
 These don't need the backend and could be picked up any time, but are intentionally paused while
 Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
-- [ ] **Playwright test suite — real progress made, explicitly not "everything," tracked
-      honestly rather than implied done.**
-      Fixed a real, separate bug found while doing this: `shopping.spec.js`'s checkout test had
-      gone stale along with the app — it referenced the old fake card-entry form ("Name on card,"
-      "Place Order (demo)") that was fully replaced by real Paystack integration in an earlier
-      round; that test would have failed immediately if anyone had actually run it. Now correctly
-      stops at confirming the real "Pay with Paystack" step is reached, rather than attempting to
-      automate Paystack's own external popup UI (would need real network access this environment
-      can't guarantee, real test credentials, and would really be testing Paystack's own UI
-      stability, not this app's code).
-      New `admin.spec.js`: a self-contained test needing no special credentials (a freshly
-      registered account is never admin by default) confirming non-admin access is genuinely
-      blocked — checked directly against the real guard in `admin/index.jsx`, not assumed from
-      the nav link being hidden alone. Two more tests, gated behind real admin credentials
-      provided locally via `PLAYWRIGHT_ADMIN_EMAIL`/`PLAYWRIGHT_ADMIN_PASSWORD` (never hardcoded)
-      and skipped cleanly when unset: signing in reaches the dashboard, and — the single most
-      explicitly-flagged gap from this file's own previous version — adding a product and editing
-      its price via Admin genuinely reflects on the real, public Shop page. Found and fixed two
-      real ambiguity bugs while writing these: both the sign-in and create-account forms show
-      identical text on their mode-toggle button and their submit button simultaneously (e.g.
-      "Sign in" appears on both at once in sign-in mode), which would have caused a Playwright
-      strict-mode failure; fixed by targeting the submit button via `type="submit"` instead of by
-      its (ambiguous) visible text.
-      **Real, honest constraint, not a caveat to gloss over**: this sandbox can't download real
-      browser binaries (`cdn.playwright.dev` isn't on the allowed network list, confirmed
-      directly, not assumed) — the exact same restriction the original two test files' own
-      documentation already disclosed. Every test here was verified structurally valid via
-      `npx playwright test --list` (real test discovery, no browser needed) and every selector
-      checked directly against the actual current source, but nobody has watched these pass
-      against a real, running browser. **Still explicitly not covered**, tracked honestly rather
-      than implied done: green coffee admin CRUD, staff permission grants specifically,
-      invoicing, admin notifications, Settings backup/restore, the OTP flow's own behavior, mobile
+- [x] **Playwright test suite — actually run now, not just structurally validated, and 8/8 passing
+      against the real deployed backend.** The "can't download browser binaries" limitation
+      described below was specific to the sandbox that originally wrote these tests — running them
+      for real, on the project owner's own machine, surfaced a long chain of genuinely real bugs
+      that had gone undetected precisely because nobody had ever run this suite before:
+      - Vite's dev-server file watcher was catching Playwright's own `test-results/` writes and
+        triggering a full app reload mid-test, tearing down whatever element a test was mid-click
+        on — fixed by excluding those directories from the watcher (`vite.config.js`).
+      - `VITE_API_URL` was never set in local dev, so every API call was silently hitting the Vite
+        dev server itself (which returned `index.html` disguised as a 200) instead of the real
+        backend — the actual root cause behind most of what follows, not each item individually.
+      - Every `.then(({ field }) => setState(field))` call in `AdminDataProvider`/`AuthProvider`
+        would silently overwrite a safe initial value with `undefined` the moment a response came
+        back malformed, crashing the app several renders later with no clue why — hardened with a
+        shared `pluck()` helper that throws immediately into the caller's existing `.catch()`
+        instead of destructuring blind.
+      - A real race condition in the Aroma Quiz: it computed a match from the product catalog
+        without ever checking whether that catalog had actually finished loading yet.
+      - A real UX gap in guest checkout: a signed-out guest clicking "Checkout" landed on the
+        Review step instead of skipping straight to Sign-in, contradicting both the test and the
+        intended behavior.
+      - The admin nav test waited for a link that only exists inside the collapsed mobile menu,
+        instead of the button that's actually visible in the desktop nav.
+      - Real IP-based currency auto-detection was overriding a hardcoded `"$22.00"` assertion —
+        fixed by deliberately blocking the geo-lookup in that one test, relying on the app's own
+        intentional USD fallback rather than fighting a real, working feature.
+      - Playwright's default 5-second assertion timeout was too tight for genuine round-trips to
+        the real backend (sign-in, registration, product creation) — raised to 15s on those
+        specific assertions, not globally.
+      **Still explicitly not covered**, tracked honestly rather than implied done: green coffee
+      admin CRUD, staff permission grants specifically, invoicing, admin notifications, Settings
+      backup/restore, the OTP flow's own behavior (now real, still untested by Playwright), mobile
       viewport, visual regression, and the real Cloudinary upload flow.
 - [ ] Subscriptions / recurring orders (FAQ already says "coming soon")
 - [x] **Click-outside dismiss audit — real gaps found, not just confirmed already-correct.**
@@ -419,6 +448,20 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real OTP (email-code) login, real 2FA, and real Google sign-in — all three now done — plus the
+  Playwright suite actually run for the first time, surfacing and fixing a real chain of bugs
+  along the way.** See Tier 1 for full detail on each auth method, and Tier 3 for the Playwright
+  findings (a Vite dev-server reload loop, `VITE_API_URL` never being set locally, unguarded
+  response destructuring that could crash the app renders later, a real quiz race condition, a
+  real checkout UX gap, a stale admin nav locator, real currency auto-detection fighting a test
+  assertion, and Playwright's default timeout being too tight for genuine backend round-trips). A
+  real security bug was also caught while building 2FA: the short-lived pending-2FA token could
+  have bypassed `requireAuth` entirely since nothing checked *which kind* of token it was. All
+  three sign-in methods now share the same real 2FA gate and the same real account-resolution
+  logic (one email, one account, regardless of which door someone signs in through). 252/252
+  backend tests, 8/8 Playwright tests, all three auth methods confirmed manually end to end in a
+  real browser against the real deployed backend — including a real email with a real code
+  actually landing in a real inbox.
 - **Playwright test suite expanded, and a real stale-test bug fixed along the way.**
   `shopping.spec.js`'s checkout test still referenced the old fake card-entry form fully replaced
   by real Paystack integration rounds ago — would have failed immediately if run. Fixed to stop
