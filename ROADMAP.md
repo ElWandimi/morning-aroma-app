@@ -494,6 +494,19 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **`trust proxy` set — the rate limiter now correctly identifies real visitors behind Railway's
+  proxy, instead of sharing one shared bucket across literally everyone.** Surfaced as a real
+  warning in Railway's logs (`ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`) — traced all the way into
+  `express-rate-limit`'s actual source before concluding anything, not guessed at: confirmed the
+  warning itself was always non-fatal (caught and logged once per restart internally, which is why
+  every real auth test today succeeded despite it appearing), but the underlying cause was a real,
+  separate fairness bug — without `trust proxy` set, every visitor's rate-limit key resolved to
+  Railway's own internal proxy address, not their real IP, meaning the 20-requests-per-15-minutes
+  production limit was effectively shared across all visitors combined rather than scoped
+  per-person. Fixed with `app.set("trust proxy", 1)` — trusting exactly one hop, matching Railway's
+  architecture, deliberately not `true` (which would let a client spoof their own IP and bypass
+  rate limiting entirely). 254/254 backend tests, unaffected since no request behavior actually
+  changed, only which IP the limiter keys on.
 - **Paystack webhook registered and confirmed working with a real payment, real money — plus two
   real bugs found and fixed while confirming it, neither left as a loose end.** The webhook route
   previously logged nothing at all, making it impossible to ever confirm from Railway's logs
