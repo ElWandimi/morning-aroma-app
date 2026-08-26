@@ -1,0 +1,87 @@
+diff --git a/ROADMAP.md b/ROADMAP.md
+index f644a85..10c5a60 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -60,9 +60,9 @@ Nothing else matters for going live until these are real, not simulated.
+             it sends a real email and verifies a real response, with the backend's real errors
+             (wrong code, expired, locked out) surfaced directly. 252/252 backend tests. Confirmed
+             for real, not just by the test suite: requested a code with a real inbox, received a
+-            real email with a real 6-digit code (landed in Gmail's Updates tab rather than
+-            Primary — expected for now, tied to the same missing-verified-domain limitation
+-            already tracked below, not a bug), entered it, and signed in successfully.
++            real email with a real 6-digit code (at the time, landed in Gmail's Updates tab rather
++            than Primary, tied to the missing-verified-domain limitation now resolved — see the
++            domain section below), entered it, and signed in successfully.
+       - [x] **Real 2FA (TOTP), done.** `server/migrations/008_two_factor.sql` +
+             `server/src/utils/twoFactor.js` (otplib + qrcode) + four real endpoints
+             (`/auth/2fa/setup`, `/verify-setup`, `/verify-login`, `/disable`). Real QR-code setup
+@@ -302,14 +302,46 @@ Nothing else matters for going live until these are real, not simulated.
+       deployed `FRONTEND_URL` instead); and the auth rate limiter's real 20-requests/15-min limit
+       (correct for production) was too strict for a thorough test suite's own request volume,
+       raised specifically in test mode rather than weakened for production.
+-      **Real remaining limitation, not more code needed:** Resend requires a verified domain to
+-      deliver to arbitrary customers — without one, only Resend's shared `onboarding@resend.dev`
+-      sender works, and even that can only reach the Resend account's own registered email, not
+-      real customers. The project owner doesn't own a domain yet (confirmed directly) — this is
+-      genuinely blocked on that purchase, not on anything left to build.
++      **Previously a real remaining limitation, now resolved:** Resend requires a verified domain
++      to deliver to arbitrary customers — without one, only Resend's shared `onboarding@resend.dev`
++      sender worked, and even that could only reach the Resend account's own registered email, not
++      real customers. The project owner has now purchased and verified a real domain
++      (`morning-aroma.com`, via Cloudflare) — see the domain section further down for the full
++      detail. `EMAIL_FROM_ADDRESS` is now `Morning Aroma <hello@morning-aroma.com>` on Railway, and
++      a real email to an address genuinely different from the Resend account's own registered one
++      was confirmed delivered.
+       Order confirmations and the notification preference toggles could reuse this same real
+-      sending infrastructure once written — not yet built, but no longer blocked on a provider
+-      decision the way they were.
++      sending infrastructure once written — not yet built, but no longer blocked on anything.
++- [x] **Real domain purchased and fully wired in — `morning-aroma.com`, via Cloudflare.** Two
++      genuinely separate things, both done:
++      1. **Email domain verified with Resend** — DKIM, SPF, and DMARC all show verified in
++         Resend's dashboard (auto-configured directly against Cloudflare via Resend's own
++         integration, not manually copy-pasted). `EMAIL_FROM_ADDRESS` set to
++         `Morning Aroma <hello@morning-aroma.com>` on Railway. Confirmed for real: a login code
++         sent to an email address genuinely different from the Resend account's own registered
++         one was delivered successfully — the exact restriction this was blocked on before.
++      2. **The site itself now serves from the real domain** — added as a custom domain on
++         Railway's frontend service (same port, 8080, as the existing default domain), verified
++         live at `https://morning-aroma.com`. `FRONTEND_URL` updated on the backend to match
++         (this is what CORS and email links both read from — no code change needed, just the env
++         var), and the Google OAuth Client's Authorized JavaScript origins updated to include the
++         new domain alongside the existing localhost/railway.app entries. Confirmed for real:
++         signed in directly on `https://morning-aroma.com` itself (not localhost), proving CORS,
++         the custom domain, and the Google origin whitelist are all genuinely connected, not just
++         configured.
++      **Found and fixed while cleaning up, not left as a loose end:** every remaining reference to
++      the old placeholder domain from before one was owned — `morningaroma.com` (no hyphen, never
++      real) instead of the actual `morning-aroma.com`. Three `index.html` social-share meta tags
++      (`og:image`, `og:url`, `twitter:image`) were pointing at a domain that never existed, which
++      meant link previews on WhatsApp/Twitter/etc. were silently broken this whole time — the
++      referenced `og-image.jpg` genuinely exists in `public/`, so this is a real, visible fix, not
++      cosmetic. `robots.txt`'s `Sitemap:` line and all 20 URLs in `sitemap.xml` updated too (the
++      sitemap previously pointed at the working `railway.app` URL, not the placeholder — functional
++      before, but now correctly canonical). Two `contactEmail` fallback defaults
++      (`src/data/index.js`, `server/src/routes/settings.js`) corrected to the real, deliverable
++      address — checked directly against the live Settings page afterward too, in case the old
++      placeholder had already been saved to the real database rather than just sitting in a
++      fallback default.
+ - [x] **Real file storage for admin product photo uploads — Cloudinary, real account.** Real
+       upload via `src/utils/cloudinary.js` on both product create and update, replacing base64
+       stored directly in the database. The existing client-side resize-then-base64-encode flow
+@@ -448,6 +480,15 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
+ 
+ ## Change log (most recent first)
+ 
++- **A real domain, purchased and fully wired in — `morning-aroma.com`.** Two genuinely separate
++  pieces, both done and confirmed live, not just configured: real email delivery (Resend domain
++  verification, `EMAIL_FROM_ADDRESS` updated, confirmed by sending to an address outside the
++  Resend account itself — the exact restriction this was blocked on) and the actual site now
++  serving from the real domain (Railway custom domain, `FRONTEND_URL` updated, Google OAuth's
++  origins updated, confirmed by signing in directly on the real domain rather than localhost).
++  Also found and fixed every remaining reference to the old placeholder domain from before one was
++  owned — three broken social-share meta tags, the sitemap and robots.txt, and two contact-email
++  defaults. See Tier 1 for full detail.
+ - **Real OTP (email-code) login, real 2FA, and real Google sign-in — all three now done — plus the
+   Playwright suite actually run for the first time, surfacing and fixing a real chain of bugs
+   along the way.** See Tier 1 for full detail on each auth method, and Tier 3 for the Playwright
