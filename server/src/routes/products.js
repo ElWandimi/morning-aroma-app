@@ -1,7 +1,7 @@
 const express = require("express");
 const { query } = require("../db");
 const { requireAuth } = require("../middleware/requireAuth");
-const { requireAdmin } = require("../middleware/requireAdmin");
+const { requirePermission } = require("../middleware/requireAdmin");
 const { resolvePhotoUrl } = require("../utils/cloudinary");
 
 const router = express.Router();
@@ -61,7 +61,7 @@ router.get("/", async (req, res) => {
   res.json({ products: result.rows.map(publicProduct) });
 });
 
-router.post("/", requireAuth, requireAdmin, async (req, res) => {
+router.post("/", requireAuth, requirePermission("Products", "Inventory"), async (req, res) => {
   const validationError = validateProductInput(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
 
@@ -91,7 +91,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
   res.status(201).json({ product: publicProduct(result.rows[0]) });
 });
 
-router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
+router.patch("/:id", requireAuth, requirePermission("Products", "Inventory"), async (req, res) => {
   const validationError = validateProductInput(req.body, { partial: true });
   if (validationError) return res.status(400).json({ error: validationError });
 
@@ -146,7 +146,7 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
 // Soft delete, matching the existing "discontinued item" behavior already built on the frontend
 // (Journey.jsx shows a "Discontinued item" fallback for order history referencing a removed
 // product) -- a real order that referenced this product by id needs the id to keep existing.
-router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+router.delete("/:id", requireAuth, requirePermission("Products", "Inventory"), async (req, res) => {
   const result = await query("UPDATE products SET removed = true, updated_at = now() WHERE id = $1 RETURNING *", [req.params.id]);
   if (!result.rows[0]) return res.status(404).json({ error: "No product found with that ID." });
   res.json({ ok: true });

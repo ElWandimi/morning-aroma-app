@@ -1,7 +1,7 @@
 const express = require("express");
 const { query } = require("../db");
 const { requireAuth } = require("../middleware/requireAuth");
-const { requireAdmin } = require("../middleware/requireAdmin");
+const { requirePermission } = require("../middleware/requireAdmin");
 
 const router = express.Router();
 
@@ -52,7 +52,7 @@ router.get("/", async (req, res) => {
 // rather than Postgres's jsonb `||` concatenation operator -- keeps this portable to the SQLite
 // test harness, where `||` means string concatenation, not JSONB merge, and would silently do the
 // wrong thing rather than error.
-router.patch("/", requireAuth, requireAdmin, async (req, res) => {
+router.patch("/", requireAuth, requirePermission("Settings"), async (req, res) => {
   const patch = req.body || {};
   const unknownKeys = Object.keys(patch).filter((k) => !VALID_KEYS.has(k));
   if (unknownKeys.length > 0) {

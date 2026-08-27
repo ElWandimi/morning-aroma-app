@@ -983,6 +983,32 @@ async function main() {
   check("returns a real pending session token", typeof otpTwoFaLogin.body.pendingToken === "string");
   delete process.env.RESEND_API_KEY;
 
+  console.log("\nStaff permissions -- previously cosmetic only (every route rejected any non-super_admin regardless of what was granted). Setting up a staff account with real, granted permissions:");
+  const staffCandidate = await post("/auth/register", { email: "staff-inventory@morningaroma.local", password: "correcthorsebattery", name: "Staff Inventory Test" });
+  const staffToken = staffCandidate.body.token;
+  await patch(`/users/${staffCandidate.body.user.id}`, { role: "staff", permissions: ["Inventory"] }, reg.body.token);
+
+  console.log("\nA staff member granted \"Inventory\" can now genuinely create a green bean lot, not just see the panel and get rejected on every action:");
+  const staffGreenBean = await post("/green-beans", {
+    name: "Staff Permission Test Lot", country: "Kenya", pricePerKgCents: 900, stockKg: 100, minOrderKg: 5,
+    cuppingScore: 84, moisture: "11.0%", grade: "—", process: "Washed", notes: "Created by a permission test.",
+  }, staffToken);
+  check("returns 201, not a 403 -- the fix actually works, not just the middleware accepting the call", staffGreenBean.status === 201);
+
+  console.log("\nThat SAME staff member, trying an action outside what they were actually granted:");
+  const staffSettingsAttempt = await patch("/settings", { tagline: "Hijacked by a test" }, staffToken);
+  check("returns 403 -- \"Inventory\" doesn't imply \"Settings\" too", staffSettingsAttempt.status === 403);
+
+  console.log("\nGranting a second staff member \"Customers\" specifically, to confirm the one real security boundary that must NOT have moved:");
+  const staffCustomersCandidate = await post("/auth/register", { email: "staff-customers@morningaroma.local", password: "correcthorsebattery", name: "Staff Customers Test" });
+  await patch(`/users/${staffCustomersCandidate.body.user.id}`, { role: "staff", permissions: ["Customers"] }, reg.body.token);
+  const staffCustomersToken = staffCustomersCandidate.body.token;
+
+  const staffViewUsers = await get("/users", staffCustomersToken);
+  check("still returns 403, even with \"Customers\" granted -- role/permission management stays super_admin-only, since a safe subset genuinely doesn't exist here (granting this would let a staff member change roles, including their own)", staffViewUsers.status === 403);
+  const staffChangeRole = await patch(`/users/${staffCustomersCandidate.body.user.id}`, { role: "super_admin" }, staffCustomersToken);
+  check("a staff member can't promote themselves either, even with \"Customers\" granted", staffChangeRole.status === 403);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();
   process.exit(fail > 0 ? 1 : 0);

@@ -1,7 +1,7 @@
 const express = require("express");
 const { query } = require("../db");
 const { requireAuth } = require("../middleware/requireAuth");
-const { requireAdmin } = require("../middleware/requireAdmin");
+const { requirePermission } = require("../middleware/requireAdmin");
 
 const router = express.Router();
 
@@ -62,7 +62,7 @@ router.get("/", async (req, res) => {
   res.json({ greenBeans: result.rows.map(publicGreenBean) });
 });
 
-router.post("/", requireAuth, requireAdmin, async (req, res) => {
+router.post("/", requireAuth, requirePermission("Inventory"), async (req, res) => {
   const validationError = validateGreenBeanInput(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
 
@@ -80,7 +80,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
   res.status(201).json({ greenBean: publicGreenBean(result.rows[0]) });
 });
 
-router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
+router.patch("/:id", requireAuth, requirePermission("Inventory"), async (req, res) => {
   const existing = await query("SELECT * FROM green_beans WHERE id = $1", [req.params.id]);
   if (!existing.rows[0]) return res.status(404).json({ error: "No green coffee lot found with that ID." });
   const current = existing.rows[0];
@@ -120,7 +120,7 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
 
 // Soft delete, matching products.js's DELETE /:id exactly -- a real green order that referenced
 // this lot by id needs the id to keep existing.
-router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+router.delete("/:id", requireAuth, requirePermission("Inventory"), async (req, res) => {
   const result = await query("UPDATE green_beans SET removed = true, updated_at = now() WHERE id = $1 RETURNING *", [req.params.id]);
   if (!result.rows[0]) return res.status(404).json({ error: "No green coffee lot found with that ID." });
   res.json({ ok: true });

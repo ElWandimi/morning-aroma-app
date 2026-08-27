@@ -1,7 +1,7 @@
 const express = require("express");
 const { query } = require("../db");
 const { requireAuth } = require("../middleware/requireAuth");
-const { requireAdmin } = require("../middleware/requireAdmin");
+const { requirePermission } = require("../middleware/requireAdmin");
 const { verifyAndMarkOrderPaid } = require("../utils/paymentVerification");
 const { initiateRefund } = require("../utils/paystack");
 const { sendRefundNeededEmail } = require("../utils/email");
@@ -93,7 +93,7 @@ router.get("/mine", requireAuth, async (req, res) => {
   res.json({ orders: result.rows.map(publicOrder) });
 });
 
-router.get("/", requireAuth, requireAdmin, async (req, res) => {
+router.get("/", requireAuth, requirePermission("Orders"), async (req, res) => {
   const result = await query(
     `SELECT orders.*, users.email AS customer_email, users.name AS customer_name
      FROM orders JOIN users ON users.id = orders.user_id
@@ -103,7 +103,7 @@ router.get("/", requireAuth, requireAdmin, async (req, res) => {
   res.json({ orders: result.rows.map(publicOrder) });
 });
 
-router.patch("/:id/status", requireAuth, requireAdmin, async (req, res) => {
+router.patch("/:id/status", requireAuth, requirePermission("Orders"), async (req, res) => {
   const { status } = req.body || {};
   if (!VALID_STATUSES.includes(status)) {
     return res.status(400).json({ error: `Status must be one of: ${VALID_STATUSES.join(", ")}` });
@@ -188,7 +188,7 @@ router.post("/:id/cancel", requireAuth, async (req, res) => {
 // automatic. Requires the order to genuinely be in refund_pending (set by a customer cancellation
 // above), not just any paid order, so this can't be used to refund an order that's still being
 // legitimately fulfilled.
-router.post("/:id/refund", requireAuth, requireAdmin, async (req, res) => {
+router.post("/:id/refund", requireAuth, requirePermission("Orders"), async (req, res) => {
   const orderResult = await query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
   const order = orderResult.rows[0];
   if (!order) return res.status(404).json({ error: "No order found with that ID." });
