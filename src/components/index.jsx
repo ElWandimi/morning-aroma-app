@@ -746,6 +746,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
           {links.map((l) => (
             <a key={l.label} href={pathFor(l.page)} onClick={(e) => { e.preventDefault(); go(l.page); setOpen(false); }}>{l.label}</a>
           ))}
+          {user && <button className="link-btn nav-mobile-signout" onClick={() => { logout(); setOpen(false); }}>Sign out</button>}
         </div>
       )}
     </header>

@@ -66,6 +66,10 @@ a { color: inherit; text-decoration: none; }
 .nav-actions { display: flex; align-items: center; gap: 14px; }
 .hamburger { background: none; border: none; font-size: 1.3rem; cursor: pointer; }
 .nav-mobile { display: flex; flex-direction: column; padding: 12px 24px 18px; gap: 10px; font-weight: 600; }
+/* Overrides link-btn's small, underlined, inline-link styling (built for sitting next to text in
+   the desktop user-chip) so this reads as a normal item in the mobile menu's vertical list,
+   consistent with its sibling <a> links rather than looking like a stray inline link. */
+.nav-mobile-signout { text-align: left; text-decoration: none; margin-left: 0; font-size: inherit; font-weight: inherit; color: inherit; padding: 0; }
 .user-chip { display: flex; align-items: center; gap: 4px; font-size: 0.85rem; font-weight: 700; }
 .user-chip .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; }
 .user-chip .role { color: var(--almond-text); font-weight: 600; }
@@ -74,7 +78,13 @@ a { color: inherit; text-decoration: none; }
   .nav-inner { padding: 12px 14px; }
   .nav-actions { gap: 6px; }
   .admin-btn { display: none; } /* still reachable via the hamburger menu's "Admin Dashboard" link */
-  .user-chip .role { display: none; } /* role badge text dropped on narrow screens to prevent nav overflow; the dot + name remain */
+  /* Whole chip hidden, not just the role badge -- a real Playwright trace at this exact width
+     (390px, iPhone 13) showed the user-chip's "Sign out" button physically intercepting clicks
+     meant for the hamburger next to it: 6 icon buttons, the user's name, Sign out, and the
+     hamburger all crowded into one row with no wrapping was a real, not hypothetical, mobile
+     usability bug -- a signed-in visitor on a real narrow phone would hit the same problem.
+     "My Aroma Journey" and "Sign out" are both reachable via the hamburger menu instead. */
+  .user-chip { display: none; }
   .brand-name { font-size: 1.05rem; }
   .brand-mark-img { height: 36px; }
   .cart-btn { min-width: 40px; min-height: 40px; font-size: 1.15rem; }
