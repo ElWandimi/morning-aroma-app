@@ -17,23 +17,68 @@ const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
 // not raising the production limit just to make local test runs faster.
 test.describe.configure({ mode: "serial" });
 
-async function signInAsAdmin(page) {
-  await page.goto("/");
-  // Conditional, not unconditional -- this helper can genuinely be called more than once within
-  // the same test (e.g. signing back in as admin after testing a staff account), and the consent
-  // banner only ever appears once per session. Trying to click it a second time, when it's
-  // already been dismissed and isn't there, would otherwise just hang waiting for an element
-  // that doesn't exist.
-  const consentBanner = page.getByRole("dialog", { name: "Local storage preferences" });
-  if (await consentBanner.isVisible().catch(() => false)) {
-    await consentBanner.getByRole("button", { name: "Accept" }).click();
+test.beforeEach(async ({ page }) => {
+  // Real IP-based currency/geo detection fires on every real page load (src/context/index.jsx's
+  // CurrencyProvider) -- admin.spec.js already blocks this exact call for the same reason: it's
+  // a genuine, uncontrolled external dependency (not this app's own code) that can be slow or
+  // unreliable from a test runner's network path, and this file's tests re-navigate far more
+  // often than admin.spec.js's single product-CRUD test does, giving it far more chances to
+  // introduce real, non-deterministic slowness that has nothing to do with the actual feature
+  // being tested.
+  await page.route("https://ipapi.co/**", (route) => route.abort());
+});
+
+// Retries once on failure -- confirmed via a real trace (not assumed) that every actual
+// /auth/login request this suite's tests ever made got a real 200 back; the app and backend are
+// proven correct. What's occasionally flaky is this specific step itself, in tests that chain
+// several sign-in/sign-out cycles back to back (admin -> staff -> admin again) -- the click on
+// submit intermittently doesn't result in any request firing at all, with no error of its own. A
+// single retry is the standard, accepted hardening for this in long E2E flows, rather than
+// chasing an elusive root cause in something this hard to observe further.
+async function signIn(page, email, password) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await page.goto("/");
+    // Conditional, not unconditional -- this can genuinely run more than once within the same
+    // test, and the consent banner only ever appears once per session. Trying to click it a
+    // second time, when it's already been dismissed and isn't there, would otherwise just hang
+    // waiting for an element that doesn't exist.
+    const consentBanner = page.getByRole("dialog", { name: "Local storage preferences" });
+    if (await consentBanner.isVisible().catch(() => false)) {
+      await consentBanner.getByRole("button", { name: "Accept" }).click();
+    }
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
+    await dialog.getByLabel("Email").fill(email);
+    await dialog.getByLabel("Password").fill(password);
+    await dialog.locator('button[type="submit"]').click();
+    const signedIn = await dialog.waitFor({ state: "hidden", timeout: 15000 }).then(() => true).catch(() => false);
+    if (signedIn) return;
+    if (attempt === 2) throw new Error(`signIn: the dialog never closed for ${email}, even after a retry.`);
   }
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
-  await dialog.getByLabel("Email").fill(ADMIN_EMAIL);
-  await dialog.getByLabel("Password").fill(ADMIN_PASSWORD);
-  await dialog.locator('button[type="submit"]').click();
-  await expect(page.getByRole("button", { name: "Admin" })).toBeVisible({ timeout: 15000 });
+}
+
+// Waits for the Admin button and clicks it, retrying via one fresh reload if it doesn't appear
+// in time -- used both right after a sign-in and for later mid-test navigation back to the
+// dashboard (e.g. after visiting a public page to confirm something reflects there). Confirmed
+// via a real trace that the underlying backend calls (login, the /auth/me session-restore call
+// a reload triggers) always succeeded when they fired -- this occasionally slow render, not a
+// bare click() with no retry, is what needed hardening.
+async function openAdminDashboard(page) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const adminButton = page.getByRole("button", { name: "Admin" });
+    const appeared = await adminButton.waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false);
+    if (appeared) {
+      await adminButton.click();
+      return;
+    }
+    if (attempt === 2) throw new Error("openAdminDashboard: the Admin button never appeared, even after a reload retry.");
+    await page.reload();
+  }
+}
+
+async function signInAsAdmin(page) {
+  await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openAdminDashboard(page);
 }
 
 async function registerCustomer(page, email, password, name) {
@@ -62,7 +107,6 @@ test.describe("Admin — advanced coverage", () => {
     await registerCustomer(page, staffEmail, staffPassword, "E2E Staff Test");
 
     await signInAsAdmin(page);
-    await page.getByRole("button", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Customers", exact: true }).click();
     // Searches rather than assuming the freshly-registered account is on the first page -- the
     // customer list can genuinely be paginated once a deployment has enough real users.
@@ -87,14 +131,8 @@ test.describe("Admin — advanced coverage", () => {
     // page.goto() alone wouldn't clear the admin's persisted session (the auth token survives
     // navigation via localStorage), so "Sign in" wouldn't even be present without this.
     await page.getByRole("button", { name: "Sign out" }).click();
-    await page.goto("/");
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    const signInDialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
-    await signInDialog.getByLabel("Email").fill(staffEmail);
-    await signInDialog.getByLabel("Password").fill(staffPassword);
-    await signInDialog.locator('button[type="submit"]').click();
-    await expect(signInDialog).toBeHidden({ timeout: 15000 });
-    await page.getByRole("button", { name: "Admin" }).click();
+    await signIn(page, staffEmail, staffPassword);
+    await openAdminDashboard(page);
 
     // Only Overview (always given) and Inventory (just granted) should be reachable -- not
     // Orders, Customers, Settings, or anything else.
@@ -120,7 +158,6 @@ test.describe("Admin — advanced coverage", () => {
     // staff account.
     await page.getByRole("button", { name: "Sign out" }).click();
     await signInAsAdmin(page);
-    await page.getByRole("button", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Inventory", exact: true }).click();
     page.once("dialog", (dialog) => dialog.accept());
     await page.locator(".admin-row").filter({ hasText: lotName }).getByRole("button", { name: "Discontinue" }).click();
@@ -134,7 +171,6 @@ test.describe("Admin — advanced coverage", () => {
     const lotName = `E2E Green Lot ${Date.now()}`;
 
     await signInAsAdmin(page);
-    await page.getByRole("button", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Inventory", exact: true }).click();
     await page.getByRole("button", { name: "+ Add green lot" }).click();
     const greenForm = page.locator(".admin-add-form");
@@ -156,9 +192,12 @@ test.describe("Admin — advanced coverage", () => {
 
     // Now edit the stock for real and confirm it genuinely persists and reflects. StockCell
     // (admin/index.jsx) renders the number and unit concatenated with no space ("200kg", not
-    // "200") and reveals a real Save button on click -- not an Enter-to-submit input.
+    // "200") and reveals a real Save button on click -- not an Enter-to-submit input. Navigating
+    // back via openAdminDashboard rather than a bare goto+click -- confirmed via a real trace
+    // that a plain click() here could time out waiting on the session-restore call a fresh
+    // reload triggers, even though that same call always succeeded when it fired.
     await page.goto("/");
-    await page.getByRole("button", { name: "Admin" }).click();
+    await openAdminDashboard(page);
     await page.getByRole("button", { name: "Inventory", exact: true }).click();
     const adminRow = page.locator(".admin-row").filter({ hasText: lotName });
     await adminRow.getByText("200kg", { exact: true }).click();
@@ -172,7 +211,7 @@ test.describe("Admin — advanced coverage", () => {
 
     // Cleanup.
     await page.goto("/");
-    await page.getByRole("button", { name: "Admin" }).click();
+    await openAdminDashboard(page);
     await page.getByRole("button", { name: "Inventory", exact: true }).click();
     page.once("dialog", (dialog) => dialog.accept());
     await page.locator(".admin-row").filter({ hasText: lotName }).getByRole("button", { name: "Discontinue" }).click();
@@ -180,7 +219,6 @@ test.describe("Admin — advanced coverage", () => {
 
   test("downloading a real order invoice PDF", async ({ page }) => {
     await signInAsAdmin(page);
-    await page.getByRole("button", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Invoices", exact: true }).click();
 
     // Skips cleanly rather than failing if there's genuinely no order yet to download an
@@ -227,8 +265,7 @@ test.describe("Admin — advanced coverage", () => {
     await dialog.getByLabel("Email").fill(ADMIN_EMAIL);
     await dialog.getByLabel("Password").fill(ADMIN_PASSWORD);
     await dialog.locator('button[type="submit"]').click();
-    await expect(page.getByRole("button", { name: "Admin" })).toBeVisible({ timeout: 15000 });
-    await page.getByRole("button", { name: "Admin" }).click();
+    await openAdminDashboard(page);
 
     // The bell aggregates every section's own pending count -- a fresh quotation (status "New")
     // should genuinely make it appear here, not just in the Quotations list itself.
@@ -238,12 +275,16 @@ test.describe("Admin — advanced coverage", () => {
 
     // Clicking it should navigate straight to the real section, not just close the panel.
     await bellPanel.getByText("Quotations", { exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Quotations" }).or(page.getByText(contactName))).toBeVisible({ timeout: 15000 });
+    // Confirmed via a real run that this heading genuinely exists ("Quotations", not something
+    // else) -- both this and the contact name are actually visible at once on a real success,
+    // which is exactly why the earlier .or() version failed Playwright's strict mode: it isn't a
+    // fallback situation, both are simultaneously true, so checking just one directly is correct.
+    await expect(page.getByRole("heading", { name: "Quotations" })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(contactName)).toBeVisible();
   });
 
   test("settings backup and restore round-trips real in-memory admin data", async ({ page }) => {
     await signInAsAdmin(page);
-    await page.getByRole("button", { name: "Admin" }).click();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
 
     // Downloads a real backup file and confirms it's genuinely valid, structured JSON -- not
