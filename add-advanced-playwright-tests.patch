@@ -1,0 +1,249 @@
+diff --git a/tests/e2e/admin-advanced.spec.js b/tests/e2e/admin-advanced.spec.js
+new file mode 100644
+index 0000000..e5b505a
+--- /dev/null
++++ b/tests/e2e/admin-advanced.spec.js
+@@ -0,0 +1,243 @@
++import { test, expect } from "@playwright/test";
++import { readFileSync } from "fs";
++
++// Same real admin credentials pattern as admin.spec.js -- these tests genuinely sign in against
++// the real, deployed backend, so they need a real super_admin account. Skipped entirely (not
++// failed) when unset, same reasoning as admin.spec.js.
++//
++// Usage: PLAYWRIGHT_ADMIN_EMAIL=you@example.com PLAYWRIGHT_ADMIN_PASSWORD=yourpassword npx playwright test admin-advanced.spec.js
++const ADMIN_EMAIL = process.env.PLAYWRIGHT_ADMIN_EMAIL;
++const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
++
++// Identical to admin.spec.js's own helper -- duplicated rather than imported, matching how each
++// spec file in this suite is already self-contained.
++async function signInAsAdmin(page) {
++  await page.goto("/");
++  // Conditional, not unconditional like a single-use flow could get away with -- this helper can
++  // genuinely be called more than once within the same test (e.g. signing back in as admin after
++  // testing a staff account), and the consent banner only ever appears once per session. Trying
++  // to click it a second time, when it's already been dismissed and isn't there, would otherwise
++  // just hang waiting for an element that doesn't exist.
++  const consentBanner = page.getByRole("dialog", { name: "Local storage preferences" });
++  if (await consentBanner.isVisible().catch(() => false)) {
++    await consentBanner.getByRole("button", { name: "Accept" }).click();
++  }
++  await page.getByRole("button", { name: "Sign in", exact: true }).click();
++  const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
++  await dialog.getByLabel("Email").fill(ADMIN_EMAIL);
++  await dialog.getByLabel("Password").fill(ADMIN_PASSWORD);
++  await dialog.locator('button[type="submit"]').click();
++  await expect(page.getByRole("button", { name: "Admin" })).toBeVisible({ timeout: 15000 });
++}
++
++async function registerCustomer(page, email, password, name) {
++  await page.goto("/");
++  await page.getByRole("button", { name: "Sign in", exact: true }).click();
++  const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
++  await dialog.getByRole("button", { name: "Create account", exact: true }).click();
++  await dialog.getByLabel("Name").fill(name);
++  await dialog.getByLabel("Email").fill(email);
++  await dialog.getByLabel("Password").fill(password);
++  await dialog.locator('button[type="submit"]').click();
++  await expect(dialog).toBeHidden({ timeout: 15000 });
++  await page.getByRole("button", { name: "Sign out" }).click();
++}
++
++test.describe("Admin — advanced coverage", () => {
++  test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "Set PLAYWRIGHT_ADMIN_EMAIL and PLAYWRIGHT_ADMIN_PASSWORD to run these against the real backend.");
++
++  test("staff permissions are genuinely enforced, not just hidden from the sidebar", async ({ page }) => {
++    // A real, uniquely-named customer this test creates and promotes itself, not an edit to a
++    // real existing account -- same isolation principle as the product CRUD test's own uniquely-
++    // named test product.
++    const staffEmail = `e2e-staff-${Date.now()}@example.com`;
++    const staffPassword = "correcthorsebattery123";
++    await registerCustomer(page, staffEmail, staffPassword, "E2E Staff Test");
++
++    await signInAsAdmin(page);
++    await page.getByRole("button", { name: "Admin" }).click();
++    await page.getByRole("button", { name: "Customers", exact: true }).click();
++    // Searches rather than assuming the freshly-registered account is on the first page -- the
++    // customer list can genuinely be paginated once a deployment has enough real users.
++    await page.getByPlaceholder("Search by name, email, or role…").fill(staffEmail);
++    const customerRow = page.locator(".admin-row").filter({ hasText: staffEmail });
++    // "Make staff" saves immediately (role: staff, permissions: []) -- there's no separate Save
++    // step for this specific action, and it opens the permissions panel as a side effect.
++    await customerRow.getByRole("button", { name: "Make staff" }).click();
++    // The permissions checkboxes render as a sibling section below the row, not inside it, so
++    // this is scoped from the page, not from customerRow.
++    const permissionsPanel = page.locator(".admin-permissions-row").filter({ has: page.getByText("Inventory", { exact: true }) });
++    const inventoryChip = permissionsPanel.getByText("Inventory", { exact: true }).locator("..");
++    await inventoryChip.click();
++    // Grants save immediately too (togglePermission -> updateUser, no separate button) -- this
++    // waits on the chip's own real active-state class rather than a toast, since this specific
++    // action doesn't show one.
++    await expect(inventoryChip).toHaveClass(/chip-active/, { timeout: 15000 });
++
++    // Now sign in AS that staff account, on a clean slate. Explicitly signing out first --
++    // page.goto() alone wouldn't clear the admin's persisted session (the auth token survives
++    // navigation via localStorage), so "Sign in" wouldn't even be present without this.
++    await page.getByRole("button", { name: "Sign out" }).click();
++    await page.goto("/");
++    await page.getByRole("button", { name: "Sign in", exact: true }).click();
++    const signInDialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
++    await signInDialog.getByLabel("Email").fill(staffEmail);
++    await signInDialog.getByLabel("Password").fill(staffPassword);
++    await signInDialog.locator('button[type="submit"]').click();
++    await expect(signInDialog).toBeHidden({ timeout: 15000 });
++    await page.getByRole("button", { name: "Admin" }).click();
++
++    // Only Overview (always given) and Inventory (just granted) should be reachable -- not
++    // Orders, Customers, Settings, or anything else.
++    await expect(page.getByRole("button", { name: "Inventory", exact: true })).toBeVisible();
++    await expect(page.getByRole("button", { name: "Orders", exact: true })).not.toBeVisible();
++    await expect(page.getByRole("button", { name: "Settings", exact: true })).not.toBeVisible();
++
++    // The real proof this is genuinely fixed, not just that the button is visible: an actual
++    // green bean lot creation, previously rejected with a real 403 regardless of what the UI
++    // showed.
++    const lotName = `E2E Staff Lot ${Date.now()}`;
++    await page.getByRole("button", { name: "Inventory", exact: true }).click();
++    await page.getByRole("button", { name: "+ Add green lot" }).click();
++    const greenForm = page.locator(".admin-add-form");
++    await greenForm.getByLabel("Name").fill(lotName);
++    await greenForm.getByLabel("Price per kg (USD)").fill("7.50");
++    await greenForm.getByLabel("Stock (kg)").fill("150");
++    await greenForm.getByRole("button", { name: "Add green lot", exact: true }).click();
++    await expect(page.getByText("Green bean lot added").or(page.getByText(lotName))).toBeVisible({ timeout: 15000 });
++
++    // Cleanup: sign back in as super admin, discontinue the test lot, and reset the test
++    // account back to a plain customer so re-running this test doesn't collide with a leftover
++    // staff account.
++    await page.getByRole("button", { name: "Sign out" }).click();
++    await signInAsAdmin(page);
++    await page.getByRole("button", { name: "Admin" }).click();
++    await page.getByRole("button", { name: "Inventory", exact: true }).click();
++    page.once("dialog", (dialog) => dialog.accept());
++    await page.locator(".admin-row").filter({ hasText: lotName }).getByRole("button", { name: "Discontinue" }).click();
++
++    await page.getByRole("button", { name: "Customers", exact: true }).click();
++    await page.getByPlaceholder("Search by name, email, or role…").fill(staffEmail);
++    await page.locator(".admin-row").filter({ hasText: staffEmail }).getByRole("button", { name: "Revoke staff" }).click();
++  });
++
++  test("adding a green coffee lot and editing its stock genuinely reflects on the real public Green Coffee page", async ({ page }) => {
++    const lotName = `E2E Green Lot ${Date.now()}`;
++
++    await signInAsAdmin(page);
++    await page.getByRole("button", { name: "Admin" }).click();
++    await page.getByRole("button", { name: "Inventory", exact: true }).click();
++    await page.getByRole("button", { name: "+ Add green lot" }).click();
++    const greenForm = page.locator(".admin-add-form");
++    await greenForm.getByLabel("Name").fill(lotName);
++    await greenForm.getByLabel("Price per kg (USD)").fill("8.25");
++    await greenForm.getByLabel("Stock (kg)").fill("200");
++    await greenForm.getByRole("button", { name: "Add green lot", exact: true }).click();
++    await expect(page.getByText("Green bean lot added")).toBeVisible({ timeout: 15000 });
++
++    // The real point: genuinely reachable on the actual public page, not just present in the
++    // admin list.
++    await page.goto("/green-beans");
++    const publicCard = page.locator(".green-bean-card").filter({ hasText: lotName });
++    await expect(publicCard).toBeVisible({ timeout: 15000 });
++    await expect(publicCard.getByText("200kg in stock")).toBeVisible();
++
++    // Now edit the stock for real and confirm it genuinely persists and reflects. StockCell
++    // (admin/index.jsx) renders the number and unit concatenated with no space ("200kg", not
++    // "200") and reveals a real Save button on click -- not an Enter-to-submit input.
++    await page.goto("/");
++    await page.getByRole("button", { name: "Admin" }).click();
++    await page.getByRole("button", { name: "Inventory", exact: true }).click();
++    const adminRow = page.locator(".admin-row").filter({ hasText: lotName });
++    await adminRow.getByText("200kg", { exact: true }).click();
++    await adminRow.locator(".admin-price-input").fill("40");
++    await adminRow.getByRole("button", { name: "Save", exact: true }).click();
++    await expect(adminRow.getByText("Low")).toBeVisible({ timeout: 15000 });
++
++    await page.goto("/green-beans");
++    const publicCardAfterEdit = page.locator(".green-bean-card").filter({ hasText: lotName });
++    await expect(publicCardAfterEdit.getByText("40kg in stock")).toBeVisible({ timeout: 15000 });
++
++    // Cleanup.
++    await page.goto("/");
++    await page.getByRole("button", { name: "Admin" }).click();
++    await page.getByRole("button", { name: "Inventory", exact: true }).click();
++    page.once("dialog", (dialog) => dialog.accept());
++    await page.locator(".admin-row").filter({ hasText: lotName }).getByRole("button", { name: "Discontinue" }).click();
++  });
++
++  test("downloading a real order invoice PDF", async ({ page }) => {
++    await signInAsAdmin(page);
++    await page.getByRole("button", { name: "Admin" }).click();
++    await page.getByRole("button", { name: "Invoices", exact: true }).click();
++
++    // Skips cleanly rather than failing if there's genuinely no order yet to download an
++    // invoice for -- a fresh deployment or a test environment with zero real orders shouldn't
++    // fail this test, since there's nothing wrong with the invoice feature itself in that case.
++    const downloadButton = page.getByRole("button", { name: "Download PDF" }).first();
++    const hasOrder = await downloadButton.isVisible().catch(() => false);
++    test.skip(!hasOrder, "No real orders exist yet to download an invoice for.");
++
++    // Invoice generation is entirely client-side (utils/pdf.js, jsPDF) -- a real blob download,
++    // not a network request, so this is what actually proves it works: a real file, not just a
++    // click registering.
++    const downloadPromise = page.waitForEvent("download");
++    await downloadButton.click();
++    const download = await downloadPromise;
++    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
++    const path = await download.path();
++    expect(path).toBeTruthy();
++  });
++
++  test("submitting a real quotation makes it show up in the admin notification bell", async ({ page }) => {
++    const contactName = `E2E Notification Test ${Date.now()}`;
++    const contactEmail = `e2e-notif-${Date.now()}@example.com`;
++
++    // No auth needed -- the footer quotation form is public, reachable from any page.
++    await page.goto("/");
++    await page.getByRole("dialog", { name: "Local storage preferences" }).getByRole("button", { name: "Accept" }).click();
++    await page.getByLabel("Name").fill(contactName);
++    await page.getByLabel("Email").fill(contactEmail);
++    await page.getByLabel("Variety of interest").selectOption({ label: "Not sure yet" });
++    await page.getByLabel("Estimated quantity").fill("40kg/month");
++    await page.getByRole("button", { name: "Send request", exact: true }).click();
++    await expect(page.getByText("Thank you")).toBeVisible();
++
++    await signInAsAdmin(page);
++    await page.getByRole("button", { name: "Admin" }).click();
++    // The bell aggregates every section's own pending count -- a fresh quotation (status "New")
++    // should genuinely make it appear here, not just in the Quotations list itself.
++    await page.getByRole("button", { name: /notifications/i }).click();
++    const bellPanel = page.getByRole("menu");
++    await expect(bellPanel.getByText("Quotations", { exact: true })).toBeVisible();
++
++    // Clicking it should navigate straight to the real section, not just close the panel.
++    await bellPanel.getByText("Quotations", { exact: true }).click();
++    await expect(page.getByRole("heading", { name: "Quotations" }).or(page.getByText(contactName))).toBeVisible({ timeout: 15000 });
++  });
++
++  test("settings backup and restore round-trips real in-memory admin data", async ({ page }) => {
++    await signInAsAdmin(page);
++    await page.getByRole("button", { name: "Admin" }).click();
++    await page.getByRole("button", { name: "Settings", exact: true }).click();
++
++    // Downloads a real backup file and confirms it's genuinely valid, structured JSON -- not
++    // just that a click happened.
++    const downloadPromise = page.waitForEvent("download");
++    await page.getByRole("button", { name: "Download backup" }).click();
++    const download = await downloadPromise;
++    expect(download.suggestedFilename()).toMatch(/morning-aroma-backup-.*\.json$/);
++    const path = await download.path();
++    const contents = JSON.parse(readFileSync(path, "utf8"));
++    expect(contents.version).toBe(1);
++    expect(contents).toHaveProperty("admin");
++    expect(contents).toHaveProperty("users");
++
++    // Restoring that exact same file back should succeed cleanly and confirm via a real toast --
++    // this doesn't change any real data (it's the same file just downloaded), but proves the
++    // restore path genuinely parses and applies a real backup, not a fabricated one.
++    page.once("dialog", (dialog) => dialog.accept());
++    await page.setInputFiles('input[type="file"][accept="application/json"]', path);
++    await expect(page.getByText("Backup restored")).toBeVisible({ timeout: 15000 });
++  });
++});
