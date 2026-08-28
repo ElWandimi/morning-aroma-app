@@ -1,0 +1,189 @@
+diff --git a/src/admin/index.jsx b/src/admin/index.jsx
+index bef9267..0c7d253 100644
+--- a/src/admin/index.jsx
++++ b/src/admin/index.jsx
+@@ -702,7 +702,7 @@ const ACIDITY_RATING = { low: 3, medium: 5, high: 8 };
+ const emptyProductForm = { name: "", country: COUNTRIES[0].name, tier: "everyday", price: "", stock: "", note: "", growing: "", aroma: [], body: "light", acidity: "medium", roast: "light", brew: [] };
+ 
+ export function AdminProducts() {
+-  const { getPrice, setPrice, getTier, getStock, setStock, getAllProducts, addProduct, removeProduct, setProductPhoto, realProductsLoading: loading, realProductsError: loadError, refetchRealProducts } = useAdmin();
++  const { getPrice, setPrice, getTier, getStock, setStock, getAllProducts, addProduct, removeProduct, setProductPhoto, updateProductDetails, realProductsLoading: loading, realProductsError: loadError, refetchRealProducts } = useAdmin();
+   const { addToast } = useToast();
+   const [editing, setEditing] = useState(null);
+   const [draft, setDraft] = useState("");
+@@ -710,6 +710,11 @@ export function AdminProducts() {
+   const [stockDraft, setStockDraft] = useState("");
+   const [query, setQuery] = useState("");
+   const [showAddForm, setShowAddForm] = useState(false);
++  // Holds the full real product row being edited, not just its id -- needed so submitEditProduct
++  // can safely preserve fields the edit form has no direct control over (tags.moment, profile,
++  // brewGuide, momentMatch, course), rather than silently blanking them the way a from-scratch
++  // reconstruction (matching how the "add new product" flow already builds these) would.
++  const [editingProduct, setEditingProduct] = useState(null);
+   const [form, setForm] = useState(emptyProductForm);
+   const [formError, setFormError] = useState("");
+   const [formPhotoUrl, setFormPhotoUrl] = useState(null);
+@@ -800,6 +805,71 @@ export function AdminProducts() {
+     setShowAddForm(false);
+   };
+ 
++  // Opens the same rich form used for "+ Add new product", pre-filled with this product's real
++  // current values -- previously the only editable fields on an existing product were price,
++  // stock, and photo; there was no way to fix a typo in the name, correct the country, or move a
++  // product between tiers without discontinuing it and starting over from scratch.
++  const startEditDetails = (p) => {
++    setShowAddForm(false);
++    setEditingProduct(p);
++    setForm({
++      name: p.name,
++      country: p.country,
++      tier: getTier(p.id),
++      price: (getPrice(p.id) / 100).toFixed(2),
++      stock: String(getStock(p.id)),
++      note: p.note || "",
++      growing: p.growing || "",
++      aroma: (p.tags && p.tags.aroma) || [],
++      body: (p.tags && p.tags.body) || "light",
++      acidity: (p.tags && p.tags.acidity) || "medium",
++      roast: (p.tags && p.tags.roast) || "light",
++      brew: (p.tags && p.tags.brew) || [],
++    });
++    setFormPhotoUrl(null); // a fresh upload slot -- leaving this untouched keeps the existing real photo, only replaced if the admin deliberately picks a new one
++    setPhotoUploadError("");
++    setFormError("");
++  };
++
++  const cancelEditDetails = () => {
++    setEditingProduct(null);
++    setForm(emptyProductForm);
++    setFormPhotoUrl(null);
++    setFormError("");
++  };
++
++  const submitEditProduct = async (e) => {
++    e.preventDefault();
++    setFormError("");
++    const priceCents = Math.round(parseFloat(form.price) * 100);
++    const stock = parseInt(form.stock, 10);
++    if (!form.name.trim()) { setFormError("Name is required."); return; }
++    if (isNaN(priceCents) || priceCents <= 0) { setFormError("Enter a valid price."); return; }
++    if (isNaN(stock) || stock < 0) { setFormError("Enter a valid stock quantity."); return; }
++    if (form.aroma.length === 0) { setFormError("Select at least one aroma tag."); return; }
++    if (form.brew.length === 0) { setFormError("Select at least one brew method."); return; }
++
++    // Deliberately does NOT touch profile, brewGuide, momentMatch, or course -- this form has no
++    // real control over any of them (same true of the "add" form above; a from-scratch rebuild
++    // there is fine since a new product has no prior curated data to lose, but doing the same on
++    // an EDIT would silently blank out real, hand-tuned values on an existing product just from
++    // fixing an unrelated typo). tags is spread from the existing product first, then only the
++    // fields this form genuinely controls are overridden, preserving tags.moment either way.
++    const patch = {
++      name: form.name.trim(), country: form.country, tier: form.tier,
++      priceCents, stock,
++      note: form.note.trim() || editingProduct.note,
++      growing: form.growing.trim() || editingProduct.growing,
++      tags: { ...editingProduct.tags, aroma: form.aroma, body: form.body, acidity: form.acidity, roast: form.roast, brew: form.brew },
++    };
++    if (formPhotoUrl) patch.photoUrl = formPhotoUrl; // only sent if a genuinely new photo was chosen
++
++    const result = await updateProductDetails(editingProduct.id, patch);
++    if (!result.ok) { setFormError(result.error); return; }
++    addToast(`${form.name} updated`);
++    cancelEditDetails();
++  };
++
+   // No more "Custom" column -- once every product is a real, uniform database row, there's no
+   // longer a meaningful distinction between the original 9 and anything admin has added since,
+   // the way there was when the original 9 came from static frontend data and admin additions were
+@@ -822,12 +892,13 @@ export function AdminProducts() {
+     <div>
+       <h3 className="matched-head">Product catalog ({filtered.length}{query ? ` of ${allProducts.length}` : ""})</h3>
+       <AdminTableToolbar query={query} setQuery={setQuery} onExport={exportProducts} placeholder="Search by name, country, or tier…" />
+-      <button className="btn-outline small" style={{ marginBottom: 14 }} onClick={() => setShowAddForm((v) => !v)}>
++      <button className="btn-outline small" style={{ marginBottom: 14 }} onClick={() => { setShowAddForm((v) => !v); cancelEditDetails(); }}>
+         {showAddForm ? "Cancel" : "+ Add new product"}
+       </button>
+ 
+-      {showAddForm && (
+-        <form className="admin-add-form" onSubmit={submitNewProduct}>
++      {(showAddForm || editingProduct) && (
++        <form className="admin-add-form" onSubmit={editingProduct ? submitEditProduct : submitNewProduct}>
++          {editingProduct && <p className="eyebrow" style={{ marginTop: 0 }}>Editing {editingProduct.name}</p>}
+           <div className="admin-form-grid">
+             <div>
+               <label className="filter-label" htmlFor="np-name">Name</label>
+@@ -900,19 +971,24 @@ export function AdminProducts() {
+           <label className="filter-label" htmlFor="np-growing" style={{ marginTop: 14 }}>Growing description (optional)</label>
+           <textarea id="np-growing" value={form.growing} onChange={(e) => setForm({ ...form, growing: e.target.value })} rows={2} maxLength={300} placeholder="Altitude, soil, process…" />
+ 
+-          <label className="filter-label" htmlFor="np-photo" style={{ marginTop: 14 }}>Product photo (optional)</label>
++          <label className="filter-label" htmlFor="np-photo" style={{ marginTop: 14 }}>Product photo {editingProduct ? "(leave blank to keep the current one)" : "(optional)"}</label>
+           <div className="admin-photo-upload-row">
+-            {formPhotoUrl && <img src={formPhotoUrl} alt="" className="admin-photo-preview" />}
++            {formPhotoUrl ? (
++              <img src={formPhotoUrl} alt="" className="admin-photo-preview" />
++            ) : editingProduct && editingProduct.photoUrl ? (
++              <img src={editingProduct.photoUrl} alt="" className="admin-photo-preview" />
++            ) : null}
+             <div>
+               <input id="np-photo" type="file" accept="image/*" onChange={handleNewProductPhoto} />
+-              <p className="hint" style={{ marginTop: 4 }}>Without one, the product shows its origin's landscape photo instead.</p>
++              {!editingProduct && <p className="hint" style={{ marginTop: 4 }}>Without one, the product shows its origin's landscape photo instead.</p>}
+               {photoUploadError && <p className="form-error">{photoUploadError}</p>}
+             </div>
+           </div>
+ 
+           {formError && <p className="form-error">{formError}</p>}
+-          <p className="hint" style={{ marginTop: 8 }}>Appears immediately on Shop, its own product page, and can be added to cart — but not on Home's featured tiers or Moments/Brew Guides suggestions, which stay curated.</p>
+-          <button className="btn-primary" type="submit" style={{ marginTop: 10 }}>Add product</button>
++          {!editingProduct && <p className="hint" style={{ marginTop: 8 }}>Appears immediately on Shop, its own product page, and can be added to cart — but not on Home's featured tiers or Moments/Brew Guides suggestions, which stay curated.</p>}
++          <button className="btn-primary" type="submit" style={{ marginTop: 10 }}>{editingProduct ? "Save changes" : "Add product"}</button>
++          {editingProduct && <button type="button" className="link-btn" onClick={cancelEditDetails}>Cancel</button>}
+         </form>
+       )}
+ 
+@@ -959,6 +1035,7 @@ export function AdminProducts() {
+                   <>
+                     <button className="link-btn" onClick={() => startEdit(p)}>Edit price</button>
+                     <button className="link-btn" onClick={() => startStockEdit(p)}>Edit stock</button>
++                    <button className="link-btn" onClick={() => startEditDetails(p)}>Edit details</button>
+                     <label className="link-btn admin-photo-label">
+                       {uploadingPhotoFor === p.id ? "Uploading…" : "Change photo"}
+                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleExistingPhotoChange(p.id, e)} disabled={uploadingPhotoFor === p.id} />
+diff --git a/src/context/index.jsx b/src/context/index.jsx
+index 3256a64..3bdf4af 100644
+--- a/src/context/index.jsx
++++ b/src/context/index.jsx
+@@ -611,6 +611,23 @@ export function AdminDataProvider({ children }) {
+     }
+   };
+ 
++  // General-purpose product edit -- unlike setPrice/setStock/setTier above (each narrow,
++  // single-field wrappers), this accepts an arbitrary partial patch, for the full "Edit details"
++  // form (name, country, tier, price, stock, tags, note, growing, photo all at once). The
++  // backend's PATCH /products/:id already genuinely supported this for every field; this was
++  // purely a missing frontend capability -- there was previously no way to fix a product's name,
++  // country, or tier at all once created, only price/stock/photo.
++  const updateProductDetails = async (id, patch) => {
++    try {
++      await api.updateProduct(token, id, patch);
++      refetchRealProducts();
++      logAction("Product details updated", id);
++      return { ok: true };
++    } catch (e) {
++      return { ok: false, error: e.message };
++    }
++  };
++
+   const getTier = (id) => {
+     const p = realProducts.find((p) => p.id === id);
+     return p ? p.tier : "everyday";
+@@ -851,7 +868,7 @@ export function AdminDataProvider({ children }) {
+   return (
+     <AdminCtx.Provider
+       value={{
+-        getPrice, setPrice,
++        getPrice, setPrice, updateProductDetails,
+         getTier, setTier,
+         realUsers, realUsersLoading, realUsersError, refetchRealUsers,
+         realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus, refundOrder,

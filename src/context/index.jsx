@@ -611,6 +611,23 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // General-purpose product edit -- unlike setPrice/setStock/setTier above (each narrow,
+  // single-field wrappers), this accepts an arbitrary partial patch, for the full "Edit details"
+  // form (name, country, tier, price, stock, tags, note, growing, photo all at once). The
+  // backend's PATCH /products/:id already genuinely supported this for every field; this was
+  // purely a missing frontend capability -- there was previously no way to fix a product's name,
+  // country, or tier at all once created, only price/stock/photo.
+  const updateProductDetails = async (id, patch) => {
+    try {
+      await api.updateProduct(token, id, patch);
+      refetchRealProducts();
+      logAction("Product details updated", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   const getTier = (id) => {
     const p = realProducts.find((p) => p.id === id);
     return p ? p.tier : "everyday";
@@ -851,7 +868,7 @@ export function AdminDataProvider({ children }) {
   return (
     <AdminCtx.Provider
       value={{
-        getPrice, setPrice,
+        getPrice, setPrice, updateProductDetails,
         getTier, setTier,
         realUsers, realUsersLoading, realUsersError, refetchRealUsers,
         realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus, refundOrder,

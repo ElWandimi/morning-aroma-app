@@ -365,4 +365,56 @@ test.describe("Admin — advanced coverage", () => {
       data: { photoUrl: product.photoUrl },
     });
   });
+
+  test("editing a product's name, country, and tier genuinely persists and reflects on the real Shop page", async ({ page }) => {
+    // Previously, once a product was created, only price, stock, and photo could ever be
+    // changed -- there was no way to fix a typo in the name, correct the country, or move a
+    // product between tiers without discontinuing it and starting over. A self-contained test
+    // product, not real catalog data -- created, edited, verified, then discontinued, same
+    // isolation principle as the green coffee lot test.
+    const originalName = `E2E Edit Test ${Date.now()}`;
+    const updatedName = `${originalName} (Updated)`;
+
+    await signInAsAdmin(page);
+    await page.getByRole("button", { name: "Products", exact: true }).click();
+    await page.getByRole("button", { name: "+ Add new product" }).click();
+    const addForm = page.locator(".admin-add-form");
+    await addForm.getByLabel("Name").fill(originalName);
+    await addForm.getByLabel("Country").selectOption({ label: "Kenya" });
+    await addForm.getByLabel("Tier").selectOption({ label: "Everyday" });
+    await addForm.getByLabel("Price (USD)").fill("15.00");
+    await addForm.getByLabel("Stock (units)").fill("50");
+    await addForm.getByText("floral", { exact: true }).click();
+    await addForm.getByText("Pour-Over", { exact: true }).click();
+    await addForm.getByRole("button", { name: "Add product", exact: true }).click();
+    await expect(page.getByText(`${originalName} added to the catalog`)).toBeVisible({ timeout: 15000 });
+
+    // Now the real point: editing name, country, and tier on that existing product.
+    await page.getByPlaceholder("Search by name, country, or tier…").fill(originalName);
+    const productRow = page.locator(".admin-row").filter({ hasText: originalName });
+    await productRow.getByRole("button", { name: "Edit details", exact: true }).click();
+    const editForm = page.locator(".admin-add-form");
+    await expect(editForm.getByText(`Editing ${originalName}`)).toBeVisible();
+    await editForm.getByLabel("Name").fill(updatedName);
+    await editForm.getByLabel("Country").selectOption({ label: "Ethiopia" });
+    await editForm.getByLabel("Tier").selectOption({ label: "Premium" });
+    await editForm.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByText(`${updatedName} updated`)).toBeVisible({ timeout: 15000 });
+
+    // The real proof: genuinely reachable, with the updated details, on the actual public Shop
+    // page -- not just changed in the admin list. .origin-row is the real card class, confirmed
+    // directly against Shop.jsx, not guessed.
+    await page.goto("/shop");
+    const shopCard = page.locator(".origin-row").filter({ hasText: updatedName });
+    await expect(shopCard).toBeVisible({ timeout: 15000 });
+    await expect(shopCard.getByText("Ethiopia").first()).toBeVisible();
+
+    // Cleanup.
+    await page.goto("/");
+    await openAdminDashboard(page);
+    await page.getByRole("button", { name: "Products", exact: true }).click();
+    await page.getByPlaceholder("Search by name, country, or tier…").fill(updatedName);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator(".admin-row").filter({ hasText: updatedName }).getByRole("button", { name: "Discontinue" }).click();
+  });
 });
