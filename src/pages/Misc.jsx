@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { useAuth, useRoute } from "../context";
+import { useAdmin, useAuth, useRoute } from "../context";
 import { COUNTRIES, FAQ_ITEMS, PROCESSING_METHODS, PRODUCTS } from "../data";
 import { fmtPrice, slugify } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
@@ -202,6 +202,10 @@ export function ContactPage() {
 
 export function SourceLibraryPage() {
   const { go } = useRoute();
+  // getPrice was never actually imported here at all -- a real, pre-existing bug that would
+  // have crashed this exact page with the original 9 products too, just never triggered because
+  // nobody had visited Source Library until now.
+  const { getPrice } = useAdmin();
   return (
     <div className="shop-page">
       <div className="shop-head">

@@ -86,13 +86,63 @@ export const PRODUCTS = [
     growing: "Grown at 1,700–2,200m in the Gedeo Zone near Yirgacheffe town. Many farms are shaded under native forest canopy, hand-picked, fully washed process.",
     brewGuide: "Pour-Over", momentMatch: "First Light", course: "Sensory & Cupping",
   },
+  {
+    id: "longberry-indonesia", name: "Longberry", country: "Indonesia", tier: "everyday", priceCents: 1800, stock: 55,
+    note: "Cedar, dark chocolate, a low earthy hum",
+    tags: { aroma: ["nutty", "chocolate"], body: "full", acidity: "low", roast: "medium-dark", moment: "Comfort", brew: ["French Press", "Moka Pot"] },
+    profile: { aroma: 6, body: 9, acidity: 3, sweetness: 5, finish: 8 },
+    growing: "Grown at 1,200–1,500m on volcanic andisol in the Lintong highlands near Lake Toba. Traditionally shade-grown under mixed forest canopy, hand-picked, and processed using Sumatra's distinctive wet-hulling (giling basah) method.",
+    brewGuide: "French Press", momentMatch: "Comfort", course: "Home Brewing",
+  },
+  {
+    id: "villa-sarch-costa-rica", name: "Villa Sarchí", country: "Costa Rica", tier: "premium", priceCents: 3100, stock: 28,
+    note: "Red apple, brown sugar, orange blossom",
+    tags: { aroma: ["fruity", "sweet"], body: "medium", acidity: "high", roast: "medium", moment: "First Light", brew: ["Pour-Over", "Aeropress"] },
+    profile: { aroma: 7, body: 5, acidity: 7, sweetness: 8, finish: 6 },
+    growing: "Grown at 1,200–1,700m on volcanic loam in Costa Rica's West Valley. Hand-picked from dwarf Bourbon trees and processed at a small, family-run micro-mill using the honey method.",
+    brewGuide: "Pour-Over", momentMatch: "First Light", course: "Sensory & Cupping",
+  },
+  {
+    id: "ngozi-burundi", name: "Ngozi", country: "Burundi", tier: "premium", priceCents: 2600, stock: 30,
+    note: "Red currant, plum, a winey finish",
+    tags: { aroma: ["fruity", "winey"], body: "medium", acidity: "high", roast: "medium", moment: "The Reset", brew: ["Pour-Over", "French Press"] },
+    profile: { aroma: 8, body: 5, acidity: 7, sweetness: 6, finish: 6 },
+    growing: "Grown at 1,700–2,000m on volcanic clay loam in Burundi's Ngozi province. Hand-picked by smallholder farmers, each with only a few hundred trees, and fully washed at a local washing station.",
+    brewGuide: "Pour-Over", momentMatch: "The Reset", course: "Sensory & Cupping",
+  },
+  {
+    id: "matari-yemen", name: "Matari", country: "Yemen", tier: "premium", priceCents: 4600, stock: 4,
+    note: "Dried fig, cinnamon, wild spice",
+    tags: { aroma: ["winey", "chocolate"], body: "full", acidity: "medium", roast: "medium-dark", moment: "Comfort", brew: ["French Press", "Moka Pot"] },
+    profile: { aroma: 9, body: 7, acidity: 5, sweetness: 6, finish: 8 },
+    growing: "Grown at 1,800–2,200m on ancient stone terraces in the Bani Matar district of the Haraz mountains. Rain-fed with no irrigation, hand-picked, and naturally dried on rooftops the traditional way.",
+    brewGuide: "French Press", momentMatch: "Comfort", course: "Sensory & Cupping",
+  },
+  {
+    id: "peaberry-tanzania", name: "Peaberry", country: "Tanzania", tier: "premium", priceCents: 2900, stock: 24,
+    note: "Blackcurrant, grapefruit, bright and clean",
+    tags: { aroma: ["fruity", "citrus"], body: "medium", acidity: "high", roast: "light", moment: "The Hustle", brew: ["Pour-Over", "Aeropress"] },
+    profile: { aroma: 7, body: 5, acidity: 8, sweetness: 6, finish: 6 },
+    growing: "Grown at 1,400–1,800m on volcanic soil along the southern slopes of Mount Kilimanjaro. Hand-picked and fully washed, then sorted by hand to separate the rounder peaberry beans from the standard flat-bean lots.",
+    brewGuide: "Pour-Over", momentMatch: "The Hustle", course: "Sensory & Cupping",
+  },
+  {
+    id: "chanchamayo-peru", name: "Chanchamayo", country: "Peru", tier: "everyday", priceCents: 1700, stock: 65,
+    note: "Caramel, toasted almond, gentle citrus",
+    tags: { aroma: ["nutty", "sweet"], body: "medium", acidity: "medium", roast: "medium", moment: "The Reset", brew: ["Pour-Over", "Drip"] },
+    profile: { aroma: 5, body: 5, acidity: 5, sweetness: 6, finish: 5 },
+    growing: "Grown at 1,300–1,700m in the Andean cloud forest of Peru's Chanchamayo valley. Certified organic, shade-grown under native trees, and hand-picked by smallholder cooperative members.",
+    brewGuide: "Pour-Over", momentMatch: "The Reset", course: "Home Brewing",
+  },
 ];
 
 // Green (unroasted) coffee — a genuinely separate, wholesale product line, sold by the kilogram
-// to other roasters and serious home-roasters rather than as retail bags. Mirrors the same 9
-// origins as the roasted catalog (same farms, same relationships), but every field here reflects
-// how green coffee actually gets bought and sold: bulk pricing per kg, a minimum order quantity,
-// an SCA-style cupping score, moisture content, and screen size/grade — none of which apply to a
+// to other roasters and serious home-roasters rather than as retail bags. Mirrors the original 9
+// origins as the roasted catalog (same farms, same relationships) -- not yet extended to the 6
+// newer origins added later, since a green-coffee wholesale relationship is a separate, real
+// business decision from adding a roasted retail product. Every field here reflects how green
+// coffee actually gets bought and sold: bulk pricing per kg, a minimum order quantity, an
+// SCA-style cupping score, moisture content, and screen size/grade — none of which apply to a
 // roasted retail bag. Kenya uses its real AA/AB grading convention rather than a screen size
 // number, since that's how Kenyan green coffee is actually graded.
 export const GREEN_BEANS = [
@@ -247,6 +297,12 @@ export const GROWING_PROFILES = {
   "caturra-colombia": { altitude: "1,500–1,800m", temp: "17–21°C", rainfall: "1,900mm/yr", soilType: "Andisol", pH: 5.4, shade: "40% canopy", pests: "Coffee leaf rust, resistant variety mix", nutrients: { n: 7, p: 6, k: 6 } },
   "catuai-honduras": { altitude: "1,200–1,500m", temp: "19–23°C", rainfall: "1,700mm/yr", soilType: "Clay loam", pH: 5.7, shade: "45% canopy", pests: "Coffee berry borer, cultural control", nutrients: { n: 5, p: 4, k: 5 } },
   "yirgacheffe-ethiopia": { altitude: "1,700–2,200m", temp: "15–20°C", rainfall: "1,800mm/yr", soilType: "Nitisol (volcanic)", pH: 5.8, shade: "85% canopy", pests: "Coffee berry disease, closely monitored", nutrients: { n: 7, p: 5, k: 6 } },
+  "longberry-indonesia": { altitude: "1,200–1,500m", temp: "20–24°C", rainfall: "2,800mm/yr", soilType: "Volcanic andisol", pH: 5.5, shade: "70% canopy", pests: "Coffee berry borer, common in this humid climate", nutrients: { n: 6, p: 5, k: 6 } },
+  "villa-sarch-costa-rica": { altitude: "1,200–1,700m", temp: "18–22°C", rainfall: "2,000mm/yr", soilType: "Volcanic loam", pH: 5.6, shade: "50% canopy", pests: "Coffee berry borer, IPM-managed", nutrients: { n: 6, p: 5, k: 6 } },
+  "ngozi-burundi": { altitude: "1,700–2,000m", temp: "17–21°C", rainfall: "1,300mm/yr", soilType: "Volcanic clay loam", pH: 5.9, shade: "25% canopy", pests: "Antestia bug, biological control", nutrients: { n: 6, p: 5, k: 5 } },
+  "matari-yemen": { altitude: "1,800–2,200m", temp: "15–22°C", rainfall: "500mm/yr", soilType: "Rocky mountain terrace soil", pH: 6.2, shade: "5% canopy", pests: "Coffee berry borer, rare in this arid climate", nutrients: { n: 4, p: 4, k: 5 } },
+  "peaberry-tanzania": { altitude: "1,400–1,800m", temp: "17–21°C", rainfall: "1,600mm/yr", soilType: "Volcanic soil (Kilimanjaro slopes)", pH: 5.6, shade: "40% canopy", pests: "Coffee berry disease, resistant varieties", nutrients: { n: 6, p: 5, k: 6 } },
+  "chanchamayo-peru": { altitude: "1,300–1,700m", temp: "18–22°C", rainfall: "2,200mm/yr", soilType: "Andean clay loam", pH: 5.7, shade: "65% canopy", pests: "Coffee leaf rust, organic-compliant control", nutrients: { n: 5, p: 5, k: 5 } },
 };
 
 export const COUNTRIES = [
@@ -318,10 +374,52 @@ export const COUNTRIES = [
     harvestStart: 10, harvestEnd: 12, auction: "Sold through the Ethiopia Commodity Exchange (ECX), which traces lots back to the washing station that processed them.",
     liveMessages: null,
   },
+  {
+    name: "Indonesia", flag: "🇮🇩", climate: "Tropical and near-equatorial, with high humidity and rainfall spread fairly evenly across the year.",
+    soil: "Volcanic andisol, common across Sumatra's active volcanic belt.",
+    regions: [{ name: "Lintong", note: "Near Lake Toba, classic wet-hulled lots" }, { name: "Gayo (Aceh)", note: "Higher altitude, brighter cup for the region" }],
+    harvestStart: 10, harvestEnd: 3, auction: "Sold through local collectors and exporters in Medan — mostly private treaty, no open auction floor.",
+    liveMessages: null,
+  },
+  {
+    name: "Costa Rica", flag: "🇨🇷", climate: "Volcanic highland tropics with a defined dry season that suits patio and raised-bed drying.",
+    soil: "Volcanic loam, refreshed by the country's active volcanoes.",
+    regions: [{ name: "Tarrazú", note: "The country's largest, most celebrated region" }, { name: "West Valley", note: "Home to the honey-process micro-mill boom" }],
+    harvestStart: 12, harvestEnd: 2, auction: "Sold through small, farmer-owned micro-mills — by law, Costa Rica grows only Arabica.",
+    liveMessages: null,
+  },
+  {
+    name: "Burundi", flag: "🇧🇮", climate: "Mild central African highland climate, similar terroir to neighboring Rwanda.",
+    soil: "Volcanic clay loam across the country's hilly interior.",
+    regions: [{ name: "Ngozi", note: "One of the country's main growing provinces" }, { name: "Kayanza", note: "Dense smallholder plots, often only a few hundred trees each" }],
+    harvestStart: 3, harvestEnd: 6, auction: "Sold through local washing stations and international exporters — no open auction floor.",
+    liveMessages: null,
+  },
+  {
+    name: "Yemen", flag: "🇾🇪", climate: "Arid mountain climate with minimal rainfall — among the only origins where coffee is grown almost entirely rain-fed.",
+    soil: "Rocky, mineral-rich terrace soil built up by hand over centuries.",
+    regions: [{ name: "Haraz", note: "Historic mountain range, home to Matari-grade coffee" }, { name: "Bani Matar", note: "Terraced slopes, some of the oldest coffee cultivation on earth" }],
+    harvestStart: 9, harvestEnd: 12, auction: "Sold through small local traders — yields are low enough that most lots move by direct relationship, not open market.",
+    liveMessages: null,
+  },
+  {
+    name: "Tanzania", flag: "🇹🇿", climate: "Equatorial highlands moderated by the slopes of Mount Kilimanjaro and Mount Meru.",
+    soil: "Volcanic soil, replenished by Kilimanjaro's own geology.",
+    regions: [{ name: "Kilimanjaro", note: "The country's best-known growing region" }, { name: "Mbeya", note: "Newer, southern highland farms" }],
+    harvestStart: 7, harvestEnd: 12, auction: "Sold weekly through the Moshi Coffee Auction, mirroring Kenya's own auction system.",
+    liveMessages: null,
+  },
+  {
+    name: "Peru", flag: "🇵🇪", climate: "Andean cloud forest with moderate, consistent rainfall across remote mountain valleys.",
+    soil: "Andean clay loam, rich from centuries of forest cover.",
+    regions: [{ name: "Chanchamayo", note: "One of Peru's oldest coffee-growing valleys" }, { name: "Cajamarca", note: "Northern highlands, a major organic-certified region" }],
+    harvestStart: 4, harvestEnd: 9, auction: "Sold largely through smallholder cooperatives — Peru is one of the world's largest producers of certified organic coffee.",
+    liveMessages: null,
+  },
 ];
 
 export const COUNTRY_JOURNEY_PHOTO = {
-  Panama: "https://images.unsplash.com/photo-1757688341742-ce7978cdb186?auto=format&fit=crop&w=1600&q=68",
+  Panama: "https://images.unsplash.com/photo-1604401442263-e570cbcc68cf?auto=format&fit=crop&w=1600&q=68",
   Brazil: "https://images.unsplash.com/photo-1652020079010-038498f4b852?auto=format&fit=crop&w=1600&q=68",
   Kenya: "https://images.unsplash.com/photo-1753652735948-47b47c1d5713?auto=format&fit=crop&w=1600&q=68",
   "El Salvador": "https://images.unsplash.com/photo-1753837787691-84a06d715d24?auto=format&fit=crop&w=1600&q=68",
@@ -330,6 +428,14 @@ export const COUNTRY_JOURNEY_PHOTO = {
   Colombia: "https://images.unsplash.com/photo-1457414254764-c87b209f5249?auto=format&fit=crop&w=1600&q=68",
   Honduras: "https://images.unsplash.com/photo-1761271046396-97d231b59dd7?auto=format&fit=crop&w=1600&q=68",
   Ethiopia: "https://images.unsplash.com/photo-1572888195250-3037a59d3578?auto=format&fit=crop&w=1600&q=68",
+  // Verified real Unsplash photos, not fabricated IDs -- each confirmed via direct search/fetch
+  // before use, matching the geography named.
+  Indonesia: "https://images.unsplash.com/photo-1591284915748-bc48608e894d?auto=format&fit=crop&w=1600&q=68",
+  "Costa Rica": "https://images.unsplash.com/photo-1611223156134-07ade11dfe6a?auto=format&fit=crop&w=1600&q=68",
+  Burundi: "https://images.unsplash.com/photo-1672575659057-a2061f9a576b?auto=format&fit=crop&w=1600&q=68",
+  Yemen: "https://images.unsplash.com/photo-1766303210004-1a383983b2b9?auto=format&fit=crop&w=1600&q=68",
+  Tanzania: "https://images.unsplash.com/photo-1525537341348-a20ce9e89b72?auto=format&fit=crop&w=1600&q=68",
+  Peru: "https://images.unsplash.com/photo-1616791438538-fa5d3e9e96ed?auto=format&fit=crop&w=1600&q=68",
 };
 
 export const COUNTRY_HISTORY = {
@@ -351,6 +457,18 @@ export const COUNTRY_HISTORY = {
     "Long overshadowed by its neighbors, Honduras quietly became Central America's largest coffee producer in the 21st century. Family-run smallholder farms across Copán and Marcala have increasingly turned toward quality and traceability, earning recognition their coffee has deserved for decades.",
   Ethiopia:
     "Ethiopia is coffee's birthplace, and it shows — wild Arabica still grows in its highland forests, more genetically diverse here than anywhere else on earth. Most smallholders tend heirloom trees passed down through generations rather than a single named varietal, and the Ethiopia Commodity Exchange was built specifically to trace every lot back to the washing station that processed it.",
+  Indonesia:
+    "Dutch colonists first planted coffee here in the late 1600s, and again in the 1880s after leaf rust wiped out the original trees — this time turning to hardier Robusta alongside what Arabica survived at altitude. Sumatra's smallholders eventually developed wet-hulling, a processing method found almost nowhere else, giving the region's coffee its signature low-acid, syrupy body.",
+  "Costa Rica":
+    "Coffee arrived in Costa Rica in the late 1700s and quickly became the country's first major export, funding much of San José's early infrastructure. A 1989 law banning the cultivation of Robusta cemented the country's identity around quality Arabica alone, and decades later its small, family-run micro-mills helped pioneer the honey-processing techniques now used across Central America.",
+  Burundi:
+    "Belgian colonial administrators introduced coffee to Burundi in the 1930s, and it remains grown almost entirely by smallholders — many with just a few hundred trees each, tending them alongside subsistence crops. Political instability has repeatedly disrupted the industry, but Burundi's washed lots, grown on terrain much like neighboring Rwanda's, have earned real recognition among specialty roasters willing to seek them out.",
+  Yemen:
+    "Yemen is where coffee cultivation and trade genuinely began — the word \"mocha\" itself comes from Al-Makha, the Yemeni port from which coffee first reached the wider world in the 15th and 16th centuries. Farmers still hand-terrace the dry mountainsides of Haraz much as they did then, growing coffee with almost no irrigation and drying it naturally on rooftops — a slow, low-yield tradition that makes genuine Yemeni coffee among the rarest in the world.",
+  Tanzania:
+    "German missionaries and colonial administrators planted the first coffee near Kilimanjaro in the 1890s, and the mountain's volcanic slopes remain the country's most celebrated growing ground. Tanzania is also where \"peaberry\" earned its reputation as a distinct, sought-after grade — a natural mutation where each cherry produces one round bean instead of two, hand-sorted out and sold separately for its concentrated sweetness.",
+  Peru:
+    "Coffee reached Peru's remote Andean valleys in the early 1800s but stayed a minor crop for over a century, grown by smallholders far from any port or export hub. That same remoteness became an advantage — Peru's farms, largely untouched by industrial-scale agriculture, now make it one of the world's largest producers of certified organic coffee, grown across cooperatives in valleys like Chanchamayo, one of the country's oldest growing regions.",
 };
 
 export const GROWING_FACTORS = [
@@ -437,7 +555,7 @@ export const LEGENDARY_MOMENTS = [
   {
     year: "c. 1555", title: "The World's First Coffeehouse Opens",
     story: "Two merchants, Hakem of Aleppo and Şems of Damascus, open Kiva Han in Istanbul. For the first time on record, coffee isn't just brewed at home — it becomes something people gather for.",
-    photo: "https://images.unsplash.com/photo-1757688341742-ce7978cdb186?auto=format&fit=crop&w=900&q=65",
+    photo: "https://images.unsplash.com/photo-1690983323458-ec4a54fc9552?auto=format&fit=crop&w=900&q=65",
   },
   {
     year: "1616", title: "A Plant Smuggled Out of Yemen",
@@ -472,7 +590,7 @@ export const LEGENDARY_MOMENTS = [
   {
     year: "2015", title: "Coffee in Zero Gravity",
     story: "Aboard the International Space Station, astronauts sip the first true espresso ever brewed off Earth — proof this ritual really does go anywhere we do.",
-    photo: "https://images.unsplash.com/photo-1757688341742-ce7978cdb186?auto=format&fit=crop&w=900&q=65",
+    photo: "https://images.unsplash.com/photo-1690983323458-ec4a54fc9552?auto=format&fit=crop&w=900&q=65",
   },
 ];
 
@@ -760,7 +878,7 @@ export const MARQUEE_IMAGES = [
   "https://images.unsplash.com/photo-1753837787691-84a06d715d24?auto=format&fit=crop&w=500&q=60",
   "https://images.unsplash.com/photo-1753652735948-47b47c1d5713?auto=format&fit=crop&w=500&q=60",
   "https://images.unsplash.com/photo-1761271046396-97d231b59dd7?auto=format&fit=crop&w=500&q=60",
-  "https://images.unsplash.com/photo-1757688341742-ce7978cdb186?auto=format&fit=crop&w=500&q=60",
+  "https://images.unsplash.com/photo-1604401442263-e570cbcc68cf?auto=format&fit=crop&w=500&q=60",
   "https://images.unsplash.com/photo-1639527924446-3edc522ae4b0?auto=format&fit=crop&w=500&q=60",
   "https://images.unsplash.com/photo-1461988091159-192b6df7054f?auto=format&fit=crop&w=500&q=60",
   // coffee beans, close up
