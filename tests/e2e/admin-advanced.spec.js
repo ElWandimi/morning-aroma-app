@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Same real admin credentials pattern as admin.spec.js -- these tests genuinely sign in against
 // the real, deployed backend, so they need a real super_admin account. Skipped entirely (not
@@ -15,7 +19,13 @@ const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
 // Running them all in parallel workers genuinely risked tripping that same limiter for real,
 // since every worker shares this one machine's real IP -- serial execution is the honest fix,
 // not raising the production limit just to make local test runs faster.
-test.describe.configure({ mode: "serial" });
+// The default per-test timeout (30s) was silently capping every test below what the retry logic
+// inside signIn/openAdminDashboard/registerCustomer actually needs (up to 3 attempts at 25s
+// each, a 75s worst case) -- Playwright was force-closing the whole test mid-retry once 30s
+// elapsed, regardless of whether a retry was still genuinely in progress. 120s gives real
+// headroom above that worst case, for every test in this file, not just the ones that happened
+// to hit it first.
+test.describe.configure({ mode: "serial", timeout: 120000 });
 
 test.beforeEach(async ({ page }) => {
   // Real IP-based currency/geo detection fires on every real page load (src/context/index.jsx's
@@ -28,15 +38,16 @@ test.beforeEach(async ({ page }) => {
   await page.route("https://ipapi.co/**", (route) => route.abort());
 });
 
-// Retries once on failure -- confirmed via a real trace (not assumed) that every actual
-// /auth/login request this suite's tests ever made got a real 200 back; the app and backend are
-// proven correct. What's occasionally flaky is this specific step itself, in tests that chain
-// several sign-in/sign-out cycles back to back (admin -> staff -> admin again) -- the click on
-// submit intermittently doesn't result in any request firing at all, with no error of its own. A
-// single retry is the standard, accepted hardening for this in long E2E flows, rather than
-// chasing an elusive root cause in something this hard to observe further.
+// Retries up to 3 times on failure -- confirmed via real traces (not assumed) that every actual
+// auth request this suite's tests ever made got a real 200 back; the app and backend are proven
+// correct. What's occasionally flaky is these specific steps themselves, in tests that chain
+// several sign-in/sign-out/registration cycles back to back -- the click on submit intermittently
+// doesn't result in a request completing in time, with no error of its own. Genuine, if
+// occasional, backend latency has shown up across login, registration, and session-restore alike,
+// not just one specific action -- so this uses a longer timeout (25s) and more attempts (3) than
+// the first pass at this, rather than assuming any one specific action was uniquely the problem.
 async function signIn(page, email, password) {
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     await page.goto("/");
     // Conditional, not unconditional -- this can genuinely run more than once within the same
     // test, and the consent banner only ever appears once per session. Trying to click it a
@@ -51,27 +62,22 @@ async function signIn(page, email, password) {
     await dialog.getByLabel("Email").fill(email);
     await dialog.getByLabel("Password").fill(password);
     await dialog.locator('button[type="submit"]').click();
-    const signedIn = await dialog.waitFor({ state: "hidden", timeout: 15000 }).then(() => true).catch(() => false);
+    const signedIn = await dialog.waitFor({ state: "hidden", timeout: 25000 }).then(() => true).catch(() => false);
     if (signedIn) return;
-    if (attempt === 2) throw new Error(`signIn: the dialog never closed for ${email}, even after a retry.`);
+    if (attempt === 3) throw new Error(`signIn: the dialog never closed for ${email}, even after 2 retries.`);
   }
 }
 
-// Waits for the Admin button and clicks it, retrying via one fresh reload if it doesn't appear
-// in time -- used both right after a sign-in and for later mid-test navigation back to the
-// dashboard (e.g. after visiting a public page to confirm something reflects there). Confirmed
-// via a real trace that the underlying backend calls (login, the /auth/me session-restore call
-// a reload triggers) always succeeded when they fired -- this occasionally slow render, not a
-// bare click() with no retry, is what needed hardening.
+// Same reasoning and same 3-attempt/25s pattern as signIn above.
 async function openAdminDashboard(page) {
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     const adminButton = page.getByRole("button", { name: "Admin" });
-    const appeared = await adminButton.waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false);
+    const appeared = await adminButton.waitFor({ state: "visible", timeout: 25000 }).then(() => true).catch(() => false);
     if (appeared) {
       await adminButton.click();
       return;
     }
-    if (attempt === 2) throw new Error("openAdminDashboard: the Admin button never appeared, even after a reload retry.");
+    if (attempt === 3) throw new Error("openAdminDashboard: the Admin button never appeared, even after 2 reload retries.");
     await page.reload();
   }
 }
@@ -81,9 +87,18 @@ async function signInAsAdmin(page) {
   await openAdminDashboard(page);
 }
 
+// A longer single timeout (25s), not a resubmission-based retry like signIn/openAdminDashboard
+// above -- registration isn't idempotent the way logging in twice with the same credentials is.
+// If this succeeded server-side but was just slow to confirm on screen, blindly resubmitting the
+// same form on a retry would hit a genuine "an account with that email already exists" conflict,
+// not recover from anything. A longer wait is the correct fix for occasional backend latency
+// here; a real failure after 25s is worth surfacing directly, not retried into a different bug.
 async function registerCustomer(page, email, password, name) {
   await page.goto("/");
-  await page.getByRole("dialog", { name: "Local storage preferences" }).getByRole("button", { name: "Accept" }).click();
+  const consentBanner = page.getByRole("dialog", { name: "Local storage preferences" });
+  if (await consentBanner.isVisible().catch(() => false)) {
+    await consentBanner.getByRole("button", { name: "Accept" }).click();
+  }
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
   await dialog.getByRole("button", { name: "Create account", exact: true }).click();
@@ -91,7 +106,7 @@ async function registerCustomer(page, email, password, name) {
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByLabel("Password").fill(password);
   await dialog.locator('button[type="submit"]').click();
-  await expect(dialog).toBeHidden({ timeout: 15000 });
+  await expect(dialog).toBeHidden({ timeout: 25000 });
   await page.getByRole("button", { name: "Sign out" }).click();
 }
 
@@ -305,5 +320,49 @@ test.describe("Admin — advanced coverage", () => {
     page.once("dialog", (dialog) => dialog.accept());
     await page.setInputFiles('input[type="file"][accept="application/json"]', path);
     await expect(page.getByText("Backup restored")).toBeVisible({ timeout: 15000 });
+  });
+
+  test("uploading a real product photo genuinely goes through Cloudinary, not just a local preview", async ({ page }) => {
+    // Fetches the real, current catalog directly (GET /products needs no auth) to pick a real
+    // existing product and capture its real, current photo first -- this test modifies a real
+    // product's photo, not test-only data it creates and can freely discard, so the original
+    // value needs to be genuinely restorable afterward, not just left changed.
+    const BACKEND_URL = "https://upbeat-rebirth-production.up.railway.app";
+    const before = await page.request.get(`${BACKEND_URL}/products`).then((r) => r.json());
+    const product = before.products[0];
+
+    await signInAsAdmin(page);
+    await page.getByRole("button", { name: "Products", exact: true }).click();
+    await page.getByPlaceholder("Search by name, country, or tier…").fill(product.name);
+    const productRow = page.locator(".admin-row").filter({ hasText: product.name });
+
+    // A real image file already committed to the repo (public/og-image.jpg), not a fabricated
+    // test fixture -- setInputFiles works directly on the hidden input, same effect as a real
+    // file-picker selection, even though it's visually hidden behind the "Change photo" label.
+    // An absolute path built from this file's own location -- a relative path here was found to
+    // silently fail (e.target.files[0] ended up empty in the real onChange handler, which exits
+    // immediately with no toast and no network request at all when that happens, matching every
+    // symptom seen when this was first tried), so this removes any ambiguity about what a
+    // relative path actually resolves against.
+    const testImagePath = path.join(__dirname, "..", "..", "public", "og-image.jpg");
+    await productRow.locator('input[type="file"]').setInputFiles(testImagePath);
+    await expect(page.getByText("Photo updated")).toBeVisible({ timeout: 15000 });
+
+    // The real proof: not just that a toast appeared, but that the actually-stored URL is now a
+    // genuine, permanent Cloudinary-hosted one -- confirming the full real pipeline (client-side
+    // resize -> backend -> Cloudinary -> a real, public URL), not a client-only preview that
+    // never actually left the browser.
+    const after = await page.request.get(`${BACKEND_URL}/products`).then((r) => r.json());
+    const updatedProduct = after.products.find((p) => p.id === product.id);
+    expect(updatedProduct.photoUrl).toMatch(/^https:\/\/res\.cloudinary\.com\//);
+
+    // Restores the real product's original photo -- this test intentionally touches real,
+    // existing catalog data, so it must leave that data exactly as it found it, not just move on
+    // once the assertion above passes.
+    const token = await page.evaluate(() => JSON.parse(localStorage.getItem("ma_auth_token") || "null"));
+    await page.request.patch(`${BACKEND_URL}/products/${product.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { photoUrl: product.photoUrl },
+    });
   });
 });
