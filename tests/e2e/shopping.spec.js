@@ -33,6 +33,12 @@ test.describe("Cart and checkout", () => {
   });
 
   test("guest checkout is gated behind sign-in, reaches the real Paystack payment step", async ({ page }) => {
+    // Real, sufficiently long timeout for the whole test, not Playwright's 30s default -- this
+    // is a multi-step flow (registration, then several real page transitions through checkout),
+    // and the same class of occasional backend latency already hardened against elsewhere in
+    // this suite can affect any one of those steps.
+    test.setTimeout(60000);
+
     await page.goto("/");
     await page.getByRole("link", { name: "Shop" }).click();
     await page.getByRole("button", { name: "Add to cart" }).first().click();
@@ -40,20 +46,23 @@ test.describe("Cart and checkout", () => {
 
     // Not signed in yet — should land on the sign-in step, cart preserved.
     await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
-    await page.getByRole("button", { name: "Sign in / Create account" }).click();
+    // Sign-in and sign-up are two fully separate modals now, not one combined "Sign in / Create
+    // account" button.
+    await page.getByRole("button", { name: "Create account", exact: true }).click();
 
-    // Use the email-code preview mode rather than email & password -- that mode is now backed by
-    // the real deployed backend (see ROADMAP.md), which this test environment has no guarantee of
-    // being configured to reach, and there's no pre-seeded account to sign into anymore now that
-    // auth is real. The preview mode needs neither: it's self-contained in the browser, and this
-    // test's actual purpose is just to be signed in for the checkout flow below, not to test
-    // admin-specific behavior.
-    await page.getByRole("button", { name: "Email code (preview)" }).click();
-    await page.getByPlaceholder("you@example.com").first().fill(`e2e-test-${Date.now()}@example.com`);
-    await page.getByRole("button", { name: "Send me a code" }).click();
-    const code = await page.locator(".otp-demo-code strong").innerText();
-    await page.getByLabel("6-digit code").fill(code);
-    await page.getByRole("button", { name: "Verify & sign in" }).click();
+    // Real password registration -- a self-contained, real request needing no email access at
+    // all, unlike OTP (which genuinely emails a real code now that auth is fully real; there's no
+    // on-screen demo code to read anymore). The same proven pattern used successfully elsewhere
+    // in this suite. A longer single timeout, not a retry -- registration isn't idempotent the
+    // way signing in twice with the same credentials is, so blindly resubmitting the same form
+    // risks a genuine "already exists" conflict if the first attempt actually succeeded
+    // server-side but was just slow to confirm on screen.
+    const dialog = page.getByRole("dialog", { name: "Create your Morning Aroma account" });
+    await dialog.getByLabel("Name").fill("Test Customer");
+    await dialog.getByLabel("Email").fill(`e2e-test-${Date.now()}@example.com`);
+    await dialog.getByLabel("Password").fill("correcthorsebattery123");
+    await dialog.locator('button[type="submit"]').click();
+    await expect(dialog).toBeHidden({ timeout: 25000 });
 
     await page.getByRole("button", { name: "Continue to shipping →" }).click();
     await page.getByLabel("Full name").fill("Test Customer");
@@ -70,8 +79,8 @@ test.describe("Cart and checkout", () => {
     // environment has no guarantee of that), real test-mode payment credentials, and would be
     // testing Paystack's UI stability rather than this app's own code -- a third-party UI change
     // having nothing to do with this app could break that test for reasons outside this app's
-    // control. This is the same reasoning already applied to why this test uses the OTP preview
-    // mode above rather than the real backend-connected sign-in path.
+    // control. This is the same reasoning already applied to why this test uses real password
+    // registration above rather than a flow needing genuine email access.
     await expect(page.getByRole("heading", { name: "Payment" })).toBeVisible();
     await expect(page.getByText("Pay securely with Paystack")).toBeVisible();
     const payButton = page.getByRole("button", { name: "Pay with Paystack" });

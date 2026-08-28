@@ -1,0 +1,401 @@
+diff --git a/src/App.jsx b/src/App.jsx
+index 554dd7d..fbea762 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -1,6 +1,6 @@
+ import React, { useState, useEffect, useRef, createContext, useContext, lazy, Suspense } from "react";
+ const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
+-import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, LoginModal, Nav, NotFoundPage, SearchModal, TranslateSuggestBanner, WishlistDrawer } from "./components";
++import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, TranslateSuggestBanner, WishlistDrawer } from "./components";
+ import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
+ import { BREW_GUIDES, COUNTRIES, COURSES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META, PRODUCTS } from "./data";
+ import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
+@@ -70,7 +70,11 @@ function getPageMeta(route) {
+ }
+ 
+ export function AppShell() {
+-  const [loginOpen, setLoginOpen] = useState(false);
++  // null | "signin" | "signup" -- sign-in and sign-up are two fully separate modals now, not one
++  // modal with an internal tab toggle; this single piece of state just tracks which one (if
++  // either) is currently open, so switching between them from inside either modal is a one-line
++  // state change rather than needing two booleans kept in sync.
++  const [authView, setAuthView] = useState(null);
+   const [searchOpen, setSearchOpen] = useState(false);
+   const { route } = useRoute();
+   const { settings } = useAdmin();
+@@ -95,7 +99,7 @@ export function AppShell() {
+       <a href="#main-content" className="skip-link">Skip to content</a>
+       <AnnouncementBar />
+       <TranslateSuggestBanner />
+-      <Nav onOpenLogin={() => setLoginOpen(true)} onOpenSearch={() => setSearchOpen(true)} />
++      <Nav onOpenLogin={() => setAuthView("signin")} onOpenSearch={() => setSearchOpen(true)} />
+       <div key={routeKey} id="main-content" className="page-fade">
+         {route.page === "home" && <HomePage />}
+         {route.page === "shop" && <ShopPage />}
+@@ -137,7 +141,8 @@ export function AppShell() {
+       <Footer />
+       <FeedbackBean />
+       <CustomerCareWidget />
+-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
++      <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
++      <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
+       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+       <CartDrawer />
+       <WishlistDrawer />
+diff --git a/src/admin/index.jsx b/src/admin/index.jsx
+index 0c7d253..23eeebf 100644
+--- a/src/admin/index.jsx
++++ b/src/admin/index.jsx
+@@ -1,5 +1,5 @@
+ import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+-import { LoginModal, ShareButtons } from "../components";
++import { SignInModal, SignUpModal, ShareButtons } from "../components";
+ import { useAdmin, useAuth, useRoute, useToast } from "../context";
+ import { ADMIN_SECTIONS, COUNTRIES, COURSES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
+ import { exportToCSV, fmtPrice, resizeImageFile, storage } from "../utils/helpers";
+@@ -1870,7 +1870,7 @@ export function AdminDashboard() {
+   const { go } = useRoute();
+   const { quotations, serviceInquiries, greenOrders, feedbackList, liveChats, settings, realOrders } = useAdmin();
+   const [section, setSection] = useState("Overview");
+-  const [loginOpen, setLoginOpen] = useState(false);
++  const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
+ 
+   // Pending-item counts shown as a small badge next to each sidebar section — only for sections
+   // that track something genuinely actionable (a "New" status, an unreviewed item), not just any
+@@ -1909,8 +1909,9 @@ export function AdminDashboard() {
+         <span className="bean-shape" style={{ width: 36, height: 46, margin: "0 auto 16px" }} />
+         <h2>Admin access only</h2>
+         <p>This dashboard is restricted to the Morning Aroma team. Sign in with an admin account to continue.</p>
+-        <button className="btn-primary" onClick={() => setLoginOpen(true)}>Sign in</button>
+-        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
++        <button className="btn-primary" onClick={() => setAuthView("signin")}>Sign in</button>
++        <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
++        <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
+       </div>
+     );
+   }
+diff --git a/src/components/index.jsx b/src/components/index.jsx
+index e7d718f..0edf415 100644
+--- a/src/components/index.jsx
++++ b/src/components/index.jsx
+@@ -146,16 +146,14 @@ function GoogleSignInButton({ active, onCredential }) {
+   return <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }} />;
+ }
+ 
+-export function LoginModal({ open, onClose }) {
+-  const { login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
++export function SignInModal({ open, onClose, onSwitchToSignUp }) {
++  const { login, requestOtpLogin, verifyOtpLogin, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
+   const [email, setEmail] = useState("");
+   const [password, setPassword] = useState("");
+-  const [name, setName] = useState("");
+   // Password mode is real now (backed by the actual deployed backend — see ROADMAP.md) and is
+   // genuinely the most reliable path, so it's the default again. OTP is still demo-only pending
+   // real email delivery to send the code.
+   const [mode, setMode] = useState("password"); // password | otp
+-  const [authIntent, setAuthIntent] = useState("signin"); // signin | signup — only meaningful in password mode
+   const [submitting, setSubmitting] = useState(false);
+   const [twoFAStep, setTwoFAStep] = useState(false);
+   // Separate from the OTP-simulation state below (enteredCode etc.) -- this is a real code from an
+@@ -377,7 +375,7 @@ export function LoginModal({ open, onClose }) {
+                 onSubmit={async (e) => {
+                   e.preventDefault();
+                   setSubmitting(true);
+-                  const result = authIntent === "signup" ? await register(email, password, name) : await login(email, password);
++                  const result = await login(email, password);
+                   setSubmitting(false);
+                   if (result.ok && result.requiresTwoFactor) {
+                     setTwoFAStep(true);
+@@ -386,19 +384,6 @@ export function LoginModal({ open, onClose }) {
+                   }
+                 }}
+               >
+-                <div className="mode-toggle" style={{ marginBottom: 18 }}>
+-                  <button type="button" className={authIntent === "signin" ? "active" : ""} onClick={() => { setAuthIntent("signin"); setError(""); }}>Sign in</button>
+-                  <button type="button" className={authIntent === "signup" ? "active" : ""} onClick={() => { setAuthIntent("signup"); setError(""); }}>Create account</button>
+-                </div>
+-                {authIntent === "signup" && (
+-                  <>
+-                    <label htmlFor="login-name">Name</label>
+-                    <div className="login-input-group">
+-                      <span className="login-input-icon" aria-hidden="true">🙂</span>
+-                      <input id="login-name" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="Your name" autoComplete="name" maxLength={100} required />
+-                    </div>
+-                  </>
+-                )}
+                 <label htmlFor="login-email-pw">Email</label>
+                 <div className="login-input-group">
+                   <span className="login-input-icon" aria-hidden="true">✉️</span>
+@@ -412,23 +397,17 @@ export function LoginModal({ open, onClose }) {
+                     value={password}
+                     onChange={(e) => setPassword(e.target.value)}
+                     type="password"
+-                    placeholder={authIntent === "signup" ? "At least 8 characters" : "••••••••"}
+-                    autoComplete={authIntent === "signup" ? "new-password" : "current-password"}
+-                    minLength={authIntent === "signup" ? 8 : undefined}
++                    placeholder="••••••••"
++                    autoComplete="current-password"
+                     maxLength={128}
+                     required
+                   />
+                 </div>
+                 {error && <p className="form-error">{error}</p>}
+                 <button type="submit" className="btn-primary full" disabled={submitting}>
+-                  {submitting ? "Please wait…" : authIntent === "signup" ? "Create account" : "Sign in"}
++                  {submitting ? "Please wait…" : "Sign in"}
+                 </button>
+-                {authIntent === "signin" && (
+-                  <button type="button" className="link-btn" style={{ marginTop: 8, marginLeft: 0, display: "block" }} onClick={startResetFlow}>Forgot password?</button>
+-                )}
+-                {authIntent === "signup" && (
+-                  <p className="hint">First account on a fresh deployment becomes admin automatically — see ROADMAP.md.</p>
+-                )}
++                <button type="button" className="link-btn" style={{ marginTop: 8, marginLeft: 0, display: "block" }} onClick={startResetFlow}>Forgot password?</button>
+               </form>
+             ) : (
+               <div>
+@@ -476,6 +455,155 @@ export function LoginModal({ open, onClose }) {
+               }}
+             />
+             {error && <p className="form-error" style={{ marginTop: 8 }}>{error}</p>}
++            <p className="login-switch-line">New here? <button type="button" className="link-btn" onClick={onSwitchToSignUp}>Create an account</button></p>
++          </>
++        )}
++        </div>
++      </div>
++    </div>
++  );
++}
++
++export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
++  const { register, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
++  const [email, setEmail] = useState("");
++  const [password, setPassword] = useState("");
++  const [name, setName] = useState("");
++  const [submitting, setSubmitting] = useState(false);
++  // A brand-new registration can still land a 2FA prompt in one real, if unusual, case: signing
++  // up with an email that already has an account (the backend then just signs the existing user
++  // in instead of erroring) -- so this step needs to exist here too, not just in SignInModal.
++  const [twoFAStep, setTwoFAStep] = useState(false);
++  const [twoFACode, setTwoFACode] = useState("");
++  const [twoFASubmitting, setTwoFASubmitting] = useState(false);
++  const [twoFAError, setTwoFAError] = useState("");
++
++  const modalRef = useRef(null);
++  useEscapeKey(open, onClose);
++  useFocusTrap(modalRef, open);
++
++  if (!open) return null;
++
++  const submitTwoFACode = async () => {
++    setTwoFASubmitting(true);
++    setTwoFAError("");
++    const result = await verifyTwoFactorLogin(twoFACode);
++    setTwoFASubmitting(false);
++    if (result.ok) {
++      onClose();
++      setTwoFAStep(false);
++      setTwoFACode("");
++    } else {
++      setTwoFAError(result.error || "Incorrect code.");
++    }
++  };
++
++  const cancelTwoFAStep = () => {
++    cancelTwoFactorLogin();
++    setTwoFAStep(false);
++    setTwoFACode("");
++    setTwoFAError("");
++    setPassword("");
++  };
++
++  return (
++    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Create your Morning Aroma account" onClick={twoFAStep ? cancelTwoFAStep : onClose}>
++      <div className="login-card" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
++        <div className="login-photo-panel">
++          <p className="handwritten login-quote">"Every cup begins as a story —"</p>
++        </div>
++        <div className="login-form-panel">
++        <button className="modal-close" onClick={twoFAStep ? cancelTwoFAStep : onClose} aria-label="Close">×</button>
++
++        {twoFAStep ? (
++          <>
++            <p className="eyebrow">two-factor authentication</p>
++            <h3 className="modal-title">Verify it's you</h3>
++            <p className="hint" style={{ marginTop: 0 }}>
++              That email already has an account with two-factor authentication on — enter the 6-digit code from your authenticator app, or a backup code, to sign in instead.
++            </p>
++            <label htmlFor="signup-twofa-code">Code</label>
++            <input
++              id="signup-twofa-code"
++              value={twoFACode}
++              onChange={(e) => { setTwoFACode(e.target.value); setTwoFAError(""); }}
++              placeholder="000000"
++              inputMode="text"
++              autoComplete="one-time-code"
++              maxLength={11}
++              autoFocus
++            />
++            {twoFAError && <p className="form-error">{twoFAError}</p>}
++            <button className="btn-primary full" onClick={submitTwoFACode} disabled={!twoFACode.trim() || twoFASubmitting}>
++              {twoFASubmitting ? "Verifying…" : "Verify & sign in"}
++            </button>
++            <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelTwoFAStep}>← Use a different account</button>
++          </>
++        ) : (
++          <>
++            <Steam className="login-steam" />
++            <p className="eyebrow login-eyebrow">New here?</p>
++            <h3 className="modal-title">Start your aroma journey</h3>
++
++            <form
++              onSubmit={async (e) => {
++                e.preventDefault();
++                setSubmitting(true);
++                const result = await register(email, password, name);
++                setSubmitting(false);
++                if (result.ok && result.requiresTwoFactor) {
++                  setTwoFAStep(true);
++                } else if (result.ok) {
++                  onClose();
++                }
++              }}
++            >
++              <label htmlFor="signup-name">Name</label>
++              <div className="login-input-group">
++                <span className="login-input-icon" aria-hidden="true">🙂</span>
++                <input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="Your name" autoComplete="name" maxLength={100} required />
++              </div>
++              <label htmlFor="signup-email">Email</label>
++              <div className="login-input-group">
++                <span className="login-input-icon" aria-hidden="true">✉️</span>
++                <input id="signup-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" autoComplete="username" maxLength={254} required />
++              </div>
++              <label htmlFor="signup-password">Password</label>
++              <div className="login-input-group">
++                <span className="login-input-icon" aria-hidden="true">🔒</span>
++                <input
++                  id="signup-password"
++                  value={password}
++                  onChange={(e) => setPassword(e.target.value)}
++                  type="password"
++                  placeholder="At least 8 characters"
++                  autoComplete="new-password"
++                  minLength={8}
++                  maxLength={128}
++                  required
++                />
++              </div>
++              {error && <p className="form-error">{error}</p>}
++              <button type="submit" className="btn-primary full" disabled={submitting}>
++                {submitting ? "Please wait…" : "Create account"}
++              </button>
++              <p className="hint">First account on a fresh deployment becomes admin automatically — see ROADMAP.md.</p>
++            </form>
++
++            <div className="divider"><span>or</span></div>
++            <GoogleSignInButton
++              active={open}
++              onCredential={async (idToken) => {
++                const result = await loginWithGoogle(idToken);
++                if (result.ok && result.requiresTwoFactor) {
++                  setTwoFAStep(true);
++                } else if (result.ok) {
++                  onClose();
++                }
++              }}
++            />
++            {error && <p className="form-error" style={{ marginTop: 8 }}>{error}</p>}
++            <p className="login-switch-line">Already have an account? <button type="button" className="link-btn" onClick={onSwitchToSignIn}>Sign in</button></p>
+           </>
+         )}
+         </div>
+diff --git a/src/pages/Checkout.jsx b/src/pages/Checkout.jsx
+index 875086f..2122135 100644
+--- a/src/pages/Checkout.jsx
++++ b/src/pages/Checkout.jsx
+@@ -1,5 +1,5 @@
+ import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+-import { Glass, LoginModal } from "../components";
++import { Glass, SignInModal, SignUpModal } from "../components";
+ import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute } from "../context";
+ import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO } from "../data";
+ import { getProductPhotoUrl } from "../utils/helpers";
+@@ -33,7 +33,7 @@ export function CheckoutPage() {
+   const { createOrder, verifyPayment } = useOrders();
+   const { getPrice, getAllProducts } = useAdmin();
+   const { format, rates, ratesLoading } = useCurrency();
+-  const [loginOpen, setLoginOpen] = useState(false);
++  const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
+   // A signed-in customer still starts at Review (0) to see their bag before continuing. A
+   // signed-out guest skips straight to Sign-in (1) -- there's nothing for them to do at Review
+   // that isn't also available once they're back from signing in, and this is what the cart
+@@ -180,9 +180,13 @@ export function CheckoutPage() {
+             <p className="eyebrow">almost there</p>
+             <h2>Sign in to continue</h2>
+             <p className="quiz-copy">Your bag stays exactly as it is — sign in or create an account and we'll pick up right here.</p>
+-            <button className="btn-primary" onClick={() => setLoginOpen(true)}>Sign in / Create account</button>
++            <div className="checkout-auth-buttons">
++              <button className="btn-primary" onClick={() => setAuthView("signin")}>Sign in</button>
++              <button className="btn-outline" onClick={() => setAuthView("signup")}>Create account</button>
++            </div>
+           </Glass>
+-          <LoginModal open={loginOpen} onClose={() => { setLoginOpen(false); }} />
++          <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
++          <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
+           {user && (
+             <div className="course-link-row" style={{ marginTop: 20 }}>
+               <span>Signed in as {user.name} ✓</span>
+diff --git a/src/pages/Journey.jsx b/src/pages/Journey.jsx
+index e2ce523..c480c59 100644
+--- a/src/pages/Journey.jsx
++++ b/src/pages/Journey.jsx
+@@ -1,5 +1,5 @@
+ import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+-import { LoginModal, RadarChart } from "../components";
++import { SignInModal, SignUpModal, RadarChart } from "../components";
+ import { useAdmin, useAuth, useCart, useJournal, useOrders, useRoute, useToast } from "../context";
+ 
+ // Must match CANCELLATION_WINDOW_MINUTES in server/src/routes/orders.js exactly -- this only
+@@ -167,7 +167,7 @@ export function JourneyPage() {
+   const { addToast } = useToast();
+   const { getAllProducts } = useAdmin();
+   const allProducts = getAllProducts();
+-  const [loginOpen, setLoginOpen] = useState(false);
++  const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
+   const [selectedProduct, setSelectedProduct] = useState(allProducts[0].id);
+   const [rating, setRating] = useState(5);
+   const [note, setNote] = useState("");
+@@ -178,8 +178,9 @@ export function JourneyPage() {
+         <span className="bean-shape" style={{ width: 36, height: 46, margin: "0 auto 16px" }} />
+         <h2>Your Aroma Journey is waiting</h2>
+         <p>Sign in to log the coffees you've tasted, see your flavor fingerprint, and get recommendations from your barista.</p>
+-        <button className="btn-primary" onClick={() => setLoginOpen(true)}>Sign in</button>
+-        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
++        <button className="btn-primary" onClick={() => setAuthView("signin")}>Sign in</button>
++        <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
++        <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
+       </div>
+     );
+   }
+diff --git a/src/styles/theme.js b/src/styles/theme.js
+index a37e28c..4361092 100644
+--- a/src/styles/theme.js
++++ b/src/styles/theme.js
+@@ -203,6 +203,7 @@ a { color: inherit; text-decoration: none; }
+ .modal-title { font-size: 1.6rem; margin-bottom: 16px; }
+ .login-steam { display: block; margin: 0 auto 4px; opacity: 0.8; }
+ .login-eyebrow { text-align: left; }
++.login-switch-line { text-align: center; margin-top: 16px; font-size: 0.9rem; color: var(--almond-text); }
+ .mode-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+ .mode-toggle button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border-radius: 999px; border: 1px solid var(--gold); background: var(--cream); cursor: pointer; font-size: 0.8rem; font-weight: 700; color: var(--chestnut); transition: background .15s ease, box-shadow .15s ease, transform .15s ease; }
+ .mode-toggle button:hover { background: var(--steam); }
+@@ -518,6 +519,8 @@ a { color: inherit; text-decoration: none; }
+ .checkout-item { display: flex; gap: 14px; border-bottom: 1px solid var(--gold); padding: 14px 0; }
+ .checkout-summary { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 20px; position: sticky; top: 90px; }
+ .checkout-auth { max-width: 480px; margin: 0 auto; text-align: center; }
++.checkout-auth-buttons { display: flex; gap: 12px; justify-content: center; }
++.checkout-auth-buttons .btn-primary, .checkout-auth-buttons .btn-outline { flex: 1; }
+ .checkout-form { max-width: 480px; margin: 0 auto; background: white; border: 1px solid var(--gold); border-radius: 16px; padding: 26px; }
+ .checkout-form label { display: block; font-size: 0.8rem; font-weight: 700; margin: 12px 0 4px; color: var(--chestnut); }
+ .checkout-form input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; box-sizing: border-box; }

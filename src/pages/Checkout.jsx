@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { Glass, LoginModal } from "../components";
+import { Glass, SignInModal, SignUpModal } from "../components";
 import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute } from "../context";
 import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { getProductPhotoUrl } from "../utils/helpers";
@@ -33,7 +33,7 @@ export function CheckoutPage() {
   const { createOrder, verifyPayment } = useOrders();
   const { getPrice, getAllProducts } = useAdmin();
   const { format, rates, ratesLoading } = useCurrency();
-  const [loginOpen, setLoginOpen] = useState(false);
+  const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
   // A signed-in customer still starts at Review (0) to see their bag before continuing. A
   // signed-out guest skips straight to Sign-in (1) -- there's nothing for them to do at Review
   // that isn't also available once they're back from signing in, and this is what the cart
@@ -180,9 +180,13 @@ export function CheckoutPage() {
             <p className="eyebrow">almost there</p>
             <h2>Sign in to continue</h2>
             <p className="quiz-copy">Your bag stays exactly as it is — sign in or create an account and we'll pick up right here.</p>
-            <button className="btn-primary" onClick={() => setLoginOpen(true)}>Sign in / Create account</button>
+            <div className="checkout-auth-buttons">
+              <button className="btn-primary" onClick={() => setAuthView("signin")}>Sign in</button>
+              <button className="btn-outline" onClick={() => setAuthView("signup")}>Create account</button>
+            </div>
           </Glass>
-          <LoginModal open={loginOpen} onClose={() => { setLoginOpen(false); }} />
+          <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
+          <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
           {user && (
             <div className="course-link-row" style={{ marginTop: 20 }}>
               <span>Signed in as {user.name} ✓</span>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { LoginModal, RadarChart } from "../components";
+import { SignInModal, SignUpModal, RadarChart } from "../components";
 import { useAdmin, useAuth, useCart, useJournal, useOrders, useRoute, useToast } from "../context";
 
 // Must match CANCELLATION_WINDOW_MINUTES in server/src/routes/orders.js exactly -- this only
@@ -167,7 +167,7 @@ export function JourneyPage() {
   const { addToast } = useToast();
   const { getAllProducts } = useAdmin();
   const allProducts = getAllProducts();
-  const [loginOpen, setLoginOpen] = useState(false);
+  const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
   const [selectedProduct, setSelectedProduct] = useState(allProducts[0].id);
   const [rating, setRating] = useState(5);
   const [note, setNote] = useState("");
@@ -178,8 +178,9 @@ export function JourneyPage() {
         <span className="bean-shape" style={{ width: 36, height: 46, margin: "0 auto 16px" }} />
         <h2>Your Aroma Journey is waiting</h2>
         <p>Sign in to log the coffees you've tasted, see your flavor fingerprint, and get recommendations from your barista.</p>
-        <button className="btn-primary" onClick={() => setLoginOpen(true)}>Sign in</button>
-        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+        <button className="btn-primary" onClick={() => setAuthView("signin")}>Sign in</button>
+        <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
+        <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
       </div>
     );
   }

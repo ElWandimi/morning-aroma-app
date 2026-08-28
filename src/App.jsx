@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext, lazy, Suspense } from "react";
 const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
-import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, LoginModal, Nav, NotFoundPage, SearchModal, TranslateSuggestBanner, WishlistDrawer } from "./components";
+import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, TranslateSuggestBanner, WishlistDrawer } from "./components";
 import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
 import { BREW_GUIDES, COUNTRIES, COURSES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META, PRODUCTS } from "./data";
 import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
@@ -70,7 +70,11 @@ function getPageMeta(route) {
 }
 
 export function AppShell() {
-  const [loginOpen, setLoginOpen] = useState(false);
+  // null | "signin" | "signup" -- sign-in and sign-up are two fully separate modals now, not one
+  // modal with an internal tab toggle; this single piece of state just tracks which one (if
+  // either) is currently open, so switching between them from inside either modal is a one-line
+  // state change rather than needing two booleans kept in sync.
+  const [authView, setAuthView] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const { route } = useRoute();
   const { settings } = useAdmin();
@@ -95,7 +99,7 @@ export function AppShell() {
       <a href="#main-content" className="skip-link">Skip to content</a>
       <AnnouncementBar />
       <TranslateSuggestBanner />
-      <Nav onOpenLogin={() => setLoginOpen(true)} onOpenSearch={() => setSearchOpen(true)} />
+      <Nav onOpenLogin={() => setAuthView("signin")} onOpenSearch={() => setSearchOpen(true)} />
       <div key={routeKey} id="main-content" className="page-fade">
         {route.page === "home" && <HomePage />}
         {route.page === "shop" && <ShopPage />}
@@ -137,7 +141,8 @@ export function AppShell() {
       <Footer />
       <FeedbackBean />
       <CustomerCareWidget />
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
+      <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <CartDrawer />
       <WishlistDrawer />

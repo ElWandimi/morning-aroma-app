@@ -146,16 +146,14 @@ function GoogleSignInButton({ active, onCredential }) {
   return <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }} />;
 }
 
-export function LoginModal({ open, onClose }) {
-  const { login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
+export function SignInModal({ open, onClose, onSwitchToSignUp }) {
+  const { login, requestOtpLogin, verifyOtpLogin, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   // Password mode is real now (backed by the actual deployed backend — see ROADMAP.md) and is
   // genuinely the most reliable path, so it's the default again. OTP is still demo-only pending
   // real email delivery to send the code.
   const [mode, setMode] = useState("password"); // password | otp
-  const [authIntent, setAuthIntent] = useState("signin"); // signin | signup — only meaningful in password mode
   const [submitting, setSubmitting] = useState(false);
   const [twoFAStep, setTwoFAStep] = useState(false);
   // Separate from the OTP-simulation state below (enteredCode etc.) -- this is a real code from an
@@ -377,7 +375,7 @@ export function LoginModal({ open, onClose }) {
                 onSubmit={async (e) => {
                   e.preventDefault();
                   setSubmitting(true);
-                  const result = authIntent === "signup" ? await register(email, password, name) : await login(email, password);
+                  const result = await login(email, password);
                   setSubmitting(false);
                   if (result.ok && result.requiresTwoFactor) {
                     setTwoFAStep(true);
@@ -386,19 +384,6 @@ export function LoginModal({ open, onClose }) {
                   }
                 }}
               >
-                <div className="mode-toggle" style={{ marginBottom: 18 }}>
-                  <button type="button" className={authIntent === "signin" ? "active" : ""} onClick={() => { setAuthIntent("signin"); setError(""); }}>Sign in</button>
-                  <button type="button" className={authIntent === "signup" ? "active" : ""} onClick={() => { setAuthIntent("signup"); setError(""); }}>Create account</button>
-                </div>
-                {authIntent === "signup" && (
-                  <>
-                    <label htmlFor="login-name">Name</label>
-                    <div className="login-input-group">
-                      <span className="login-input-icon" aria-hidden="true">🙂</span>
-                      <input id="login-name" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="Your name" autoComplete="name" maxLength={100} required />
-                    </div>
-                  </>
-                )}
                 <label htmlFor="login-email-pw">Email</label>
                 <div className="login-input-group">
                   <span className="login-input-icon" aria-hidden="true">✉️</span>
@@ -412,23 +397,17 @@ export function LoginModal({ open, onClose }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     type="password"
-                    placeholder={authIntent === "signup" ? "At least 8 characters" : "••••••••"}
-                    autoComplete={authIntent === "signup" ? "new-password" : "current-password"}
-                    minLength={authIntent === "signup" ? 8 : undefined}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
                     maxLength={128}
                     required
                   />
                 </div>
                 {error && <p className="form-error">{error}</p>}
                 <button type="submit" className="btn-primary full" disabled={submitting}>
-                  {submitting ? "Please wait…" : authIntent === "signup" ? "Create account" : "Sign in"}
+                  {submitting ? "Please wait…" : "Sign in"}
                 </button>
-                {authIntent === "signin" && (
-                  <button type="button" className="link-btn" style={{ marginTop: 8, marginLeft: 0, display: "block" }} onClick={startResetFlow}>Forgot password?</button>
-                )}
-                {authIntent === "signup" && (
-                  <p className="hint">First account on a fresh deployment becomes admin automatically — see ROADMAP.md.</p>
-                )}
+                <button type="button" className="link-btn" style={{ marginTop: 8, marginLeft: 0, display: "block" }} onClick={startResetFlow}>Forgot password?</button>
               </form>
             ) : (
               <div>
@@ -476,6 +455,155 @@ export function LoginModal({ open, onClose }) {
               }}
             />
             {error && <p className="form-error" style={{ marginTop: 8 }}>{error}</p>}
+            <p className="login-switch-line">New here? <button type="button" className="link-btn" onClick={onSwitchToSignUp}>Create an account</button></p>
+          </>
+        )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
+  const { register, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  // A brand-new registration can still land a 2FA prompt in one real, if unusual, case: signing
+  // up with an email that already has an account (the backend then just signs the existing user
+  // in instead of erroring) -- so this step needs to exist here too, not just in SignInModal.
+  const [twoFAStep, setTwoFAStep] = useState(false);
+  const [twoFACode, setTwoFACode] = useState("");
+  const [twoFASubmitting, setTwoFASubmitting] = useState(false);
+  const [twoFAError, setTwoFAError] = useState("");
+
+  const modalRef = useRef(null);
+  useEscapeKey(open, onClose);
+  useFocusTrap(modalRef, open);
+
+  if (!open) return null;
+
+  const submitTwoFACode = async () => {
+    setTwoFASubmitting(true);
+    setTwoFAError("");
+    const result = await verifyTwoFactorLogin(twoFACode);
+    setTwoFASubmitting(false);
+    if (result.ok) {
+      onClose();
+      setTwoFAStep(false);
+      setTwoFACode("");
+    } else {
+      setTwoFAError(result.error || "Incorrect code.");
+    }
+  };
+
+  const cancelTwoFAStep = () => {
+    cancelTwoFactorLogin();
+    setTwoFAStep(false);
+    setTwoFACode("");
+    setTwoFAError("");
+    setPassword("");
+  };
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Create your Morning Aroma account" onClick={twoFAStep ? cancelTwoFAStep : onClose}>
+      <div className="login-card" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+        <div className="login-photo-panel">
+          <p className="handwritten login-quote">"Every cup begins as a story —"</p>
+        </div>
+        <div className="login-form-panel">
+        <button className="modal-close" onClick={twoFAStep ? cancelTwoFAStep : onClose} aria-label="Close">×</button>
+
+        {twoFAStep ? (
+          <>
+            <p className="eyebrow">two-factor authentication</p>
+            <h3 className="modal-title">Verify it's you</h3>
+            <p className="hint" style={{ marginTop: 0 }}>
+              That email already has an account with two-factor authentication on — enter the 6-digit code from your authenticator app, or a backup code, to sign in instead.
+            </p>
+            <label htmlFor="signup-twofa-code">Code</label>
+            <input
+              id="signup-twofa-code"
+              value={twoFACode}
+              onChange={(e) => { setTwoFACode(e.target.value); setTwoFAError(""); }}
+              placeholder="000000"
+              inputMode="text"
+              autoComplete="one-time-code"
+              maxLength={11}
+              autoFocus
+            />
+            {twoFAError && <p className="form-error">{twoFAError}</p>}
+            <button className="btn-primary full" onClick={submitTwoFACode} disabled={!twoFACode.trim() || twoFASubmitting}>
+              {twoFASubmitting ? "Verifying…" : "Verify & sign in"}
+            </button>
+            <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelTwoFAStep}>← Use a different account</button>
+          </>
+        ) : (
+          <>
+            <Steam className="login-steam" />
+            <p className="eyebrow login-eyebrow">New here?</p>
+            <h3 className="modal-title">Start your aroma journey</h3>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setSubmitting(true);
+                const result = await register(email, password, name);
+                setSubmitting(false);
+                if (result.ok && result.requiresTwoFactor) {
+                  setTwoFAStep(true);
+                } else if (result.ok) {
+                  onClose();
+                }
+              }}
+            >
+              <label htmlFor="signup-name">Name</label>
+              <div className="login-input-group">
+                <span className="login-input-icon" aria-hidden="true">🙂</span>
+                <input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="Your name" autoComplete="name" maxLength={100} required />
+              </div>
+              <label htmlFor="signup-email">Email</label>
+              <div className="login-input-group">
+                <span className="login-input-icon" aria-hidden="true">✉️</span>
+                <input id="signup-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" autoComplete="username" maxLength={254} required />
+              </div>
+              <label htmlFor="signup-password">Password</label>
+              <div className="login-input-group">
+                <span className="login-input-icon" aria-hidden="true">🔒</span>
+                <input
+                  id="signup-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type="password"
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                />
+              </div>
+              {error && <p className="form-error">{error}</p>}
+              <button type="submit" className="btn-primary full" disabled={submitting}>
+                {submitting ? "Please wait…" : "Create account"}
+              </button>
+              <p className="hint">First account on a fresh deployment becomes admin automatically — see ROADMAP.md.</p>
+            </form>
+
+            <div className="divider"><span>or</span></div>
+            <GoogleSignInButton
+              active={open}
+              onCredential={async (idToken) => {
+                const result = await loginWithGoogle(idToken);
+                if (result.ok && result.requiresTwoFactor) {
+                  setTwoFAStep(true);
+                } else if (result.ok) {
+                  onClose();
+                }
+              }}
+            />
+            {error && <p className="form-error" style={{ marginTop: 8 }}>{error}</p>}
+            <p className="login-switch-line">Already have an account? <button type="button" className="link-btn" onClick={onSwitchToSignIn}>Sign in</button></p>
           </>
         )}
         </div>

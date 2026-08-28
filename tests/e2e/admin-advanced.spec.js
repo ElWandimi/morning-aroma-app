@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const authFile = path.join(__dirname, ".auth", "admin.json");
 
 // Same real admin credentials pattern as admin.spec.js -- these tests genuinely sign in against
 // the real, deployed backend, so they need a real super_admin account. Skipped entirely (not
@@ -100,8 +101,12 @@ async function registerCustomer(page, email, password, name) {
     await consentBanner.getByRole("button", { name: "Accept" }).click();
   }
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
-  await dialog.getByRole("button", { name: "Create account", exact: true }).click();
+  // Sign-in and sign-up are two fully separate modals now, not one modal with an internal tab
+  // toggle -- "Create an account" (note "an", the real link text) closes the sign-in dialog and
+  // opens a distinct one.
+  const signInDialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
+  await signInDialog.getByRole("button", { name: "Create an account", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Create your Morning Aroma account" });
   await dialog.getByLabel("Name").fill(name);
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByLabel("Password").fill(password);
@@ -113,15 +118,24 @@ async function registerCustomer(page, email, password, name) {
 test.describe("Admin — advanced coverage", () => {
   test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "Set PLAYWRIGHT_ADMIN_EMAIL and PLAYWRIGHT_ADMIN_PASSWORD to run these against the real backend.");
 
-  test("staff permissions are genuinely enforced, not just hidden from the sidebar", async ({ page }) => {
-    // A real, uniquely-named customer this test creates and promotes itself, not an edit to a
-    // real existing account -- same isolation principle as the product CRUD test's own uniquely-
-    // named test product.
-    const staffEmail = `e2e-staff-${Date.now()}@example.com`;
-    const staffPassword = "correcthorsebattery123";
-    await registerCustomer(page, staffEmail, staffPassword, "E2E Staff Test");
+  test.describe("staff permissions", () => {
+    // Deliberately NOT using the shared admin session here -- this test's very first real step is
+    // registering a brand-new customer, which needs to start genuinely signed out (an
+    // already-authenticated admin session would mean the nav shows "Admin"/"Sign out" instead of
+    // "Sign in", breaking registerCustomer's first click entirely). This test keeps doing real,
+    // live sign-ins throughout, exactly as before -- it doesn't benefit from the shared session
+    // the way the other tests below do, since account-switching is the actual point of it.
+    test.use({ storageState: { cookies: [], origins: [] } });
 
-    await signInAsAdmin(page);
+    test("staff permissions are genuinely enforced, not just hidden from the sidebar", async ({ page }) => {
+      // A real, uniquely-named customer this test creates and promotes itself, not an edit to a
+      // real existing account -- same isolation principle as the product CRUD test's own uniquely-
+      // named test product.
+      const staffEmail = `e2e-staff-${Date.now()}@example.com`;
+      const staffPassword = "correcthorsebattery123";
+      await registerCustomer(page, staffEmail, staffPassword, "E2E Staff Test");
+
+      await signInAsAdmin(page);
     await page.getByRole("button", { name: "Customers", exact: true }).click();
     // Searches rather than assuming the freshly-registered account is on the first page -- the
     // customer list can genuinely be paginated once a deployment has enough real users.
@@ -180,12 +194,21 @@ test.describe("Admin — advanced coverage", () => {
     await page.getByRole("button", { name: "Customers", exact: true }).click();
     await page.getByPlaceholder("Search by name, email, or role…").fill(staffEmail);
     await page.locator(".admin-row").filter({ hasText: staffEmail }).getByRole("button", { name: "Revoke staff" }).click();
+    });
   });
 
-  test("adding a green coffee lot and editing its stock genuinely reflects on the real public Green Coffee page", async ({ page }) => {
+  test.describe("other admin coverage", () => {
+    // Reuses the one real admin sign-in already done by tests/e2e/admin-auth.setup.js, instead of
+    // every test here independently signing in fresh -- the real, working fix for the rate-limiting
+    // directly confirmed via Railway's own logs, not another guess at more retries. Unlike the
+    // staff permissions test above, none of these need to start signed out.
+    test.use({ storageState: authFile });
+
+    test("adding a green coffee lot and editing its stock genuinely reflects on the real public Green Coffee page", async ({ page }) => {
     const lotName = `E2E Green Lot ${Date.now()}`;
 
-    await signInAsAdmin(page);
+    await page.goto("/");
+    await openAdminDashboard(page);
     await page.getByRole("button", { name: "Inventory", exact: true }).click();
     await page.getByRole("button", { name: "+ Add green lot" }).click();
     const greenForm = page.locator(".admin-add-form");
@@ -233,7 +256,8 @@ test.describe("Admin — advanced coverage", () => {
   });
 
   test("downloading a real order invoice PDF", async ({ page }) => {
-    await signInAsAdmin(page);
+    await page.goto("/");
+    await openAdminDashboard(page);
     await page.getByRole("button", { name: "Invoices", exact: true }).click();
 
     // Skips cleanly rather than failing if there's genuinely no order yet to download an
@@ -258,13 +282,14 @@ test.describe("Admin — advanced coverage", () => {
     // Quotations are still genuinely in-memory, client-side-only state (see ROADMAP.md) -- not
     // persisted to a real database yet, unlike products/orders/users elsewhere in this suite.
     // That means it only exists for the lifetime of one continuous page session: a fresh
-    // page.goto() (which signInAsAdmin's helper normally does) would fully reload the app and
-    // wipe it before ever reaching the bell. Deliberately signs in via the SAME already-open
-    // page instead, without any navigation in between, so the quotation actually survives to be
-    // checked.
+    // page.goto() (which openAdminDashboard's own reload-retry could otherwise trigger) would
+    // fully reload the app and wipe it before ever reaching the bell. Submits the quotation
+    // first, on this same already-open page, before ever navigating into the dashboard.
     const contactName = `E2E Notification Test ${Date.now()}`;
     const contactEmail = `e2e-notif-${Date.now()}@example.com`;
 
+    // Already signed in as admin from the start, via the shared session -- no separate sign-in
+    // step needed here anymore.
     await page.goto("/");
     await page.getByRole("dialog", { name: "Local storage preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByLabel("Name").fill(contactName);
@@ -274,12 +299,6 @@ test.describe("Admin — advanced coverage", () => {
     await page.getByRole("button", { name: "Send request", exact: true }).click();
     await expect(page.getByText("Thank you")).toBeVisible();
 
-    // Signs in without navigating away first, on purpose -- see the comment above.
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
-    await dialog.getByLabel("Email").fill(ADMIN_EMAIL);
-    await dialog.getByLabel("Password").fill(ADMIN_PASSWORD);
-    await dialog.locator('button[type="submit"]').click();
     await openAdminDashboard(page);
 
     // The bell aggregates every section's own pending count -- a fresh quotation (status "New")
@@ -299,7 +318,8 @@ test.describe("Admin — advanced coverage", () => {
   });
 
   test("settings backup and restore round-trips real in-memory admin data", async ({ page }) => {
-    await signInAsAdmin(page);
+    await page.goto("/");
+    await openAdminDashboard(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
 
     // Downloads a real backup file and confirms it's genuinely valid, structured JSON -- not
@@ -331,7 +351,8 @@ test.describe("Admin — advanced coverage", () => {
     const before = await page.request.get(`${BACKEND_URL}/products`).then((r) => r.json());
     const product = before.products[0];
 
-    await signInAsAdmin(page);
+    await page.goto("/");
+    await openAdminDashboard(page);
     await page.getByRole("button", { name: "Products", exact: true }).click();
     await page.getByPlaceholder("Search by name, country, or tier…").fill(product.name);
     const productRow = page.locator(".admin-row").filter({ hasText: product.name });
@@ -375,7 +396,8 @@ test.describe("Admin — advanced coverage", () => {
     const originalName = `E2E Edit Test ${Date.now()}`;
     const updatedName = `${originalName} (Updated)`;
 
-    await signInAsAdmin(page);
+    await page.goto("/");
+    await openAdminDashboard(page);
     await page.getByRole("button", { name: "Products", exact: true }).click();
     await page.getByRole("button", { name: "+ Add new product" }).click();
     const addForm = page.locator(".admin-add-form");
@@ -416,5 +438,6 @@ test.describe("Admin — advanced coverage", () => {
     await page.getByPlaceholder("Search by name, country, or tier…").fill(updatedName);
     page.once("dialog", (dialog) => dialog.accept());
     await page.locator(".admin-row").filter({ hasText: updatedName }).getByRole("button", { name: "Discontinue" }).click();
+    });
   });
 });

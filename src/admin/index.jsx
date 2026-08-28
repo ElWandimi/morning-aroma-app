@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { LoginModal, ShareButtons } from "../components";
+import { SignInModal, SignUpModal, ShareButtons } from "../components";
 import { useAdmin, useAuth, useRoute, useToast } from "../context";
 import { ADMIN_SECTIONS, COUNTRIES, COURSES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
 import { exportToCSV, fmtPrice, resizeImageFile, storage } from "../utils/helpers";
@@ -1870,7 +1870,7 @@ export function AdminDashboard() {
   const { go } = useRoute();
   const { quotations, serviceInquiries, greenOrders, feedbackList, liveChats, settings, realOrders } = useAdmin();
   const [section, setSection] = useState("Overview");
-  const [loginOpen, setLoginOpen] = useState(false);
+  const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
 
   // Pending-item counts shown as a small badge next to each sidebar section — only for sections
   // that track something genuinely actionable (a "New" status, an unreviewed item), not just any
@@ -1909,8 +1909,9 @@ export function AdminDashboard() {
         <span className="bean-shape" style={{ width: 36, height: 46, margin: "0 auto 16px" }} />
         <h2>Admin access only</h2>
         <p>This dashboard is restricted to the Morning Aroma team. Sign in with an admin account to continue.</p>
-        <button className="btn-primary" onClick={() => setLoginOpen(true)}>Sign in</button>
-        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+        <button className="btn-primary" onClick={() => setAuthView("signin")}>Sign in</button>
+        <SignInModal open={authView === "signin"} onClose={() => setAuthView(null)} onSwitchToSignUp={() => setAuthView("signup")} />
+        <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
       </div>
     );
   }

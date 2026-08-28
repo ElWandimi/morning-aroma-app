@@ -203,6 +203,7 @@ a { color: inherit; text-decoration: none; }
 .modal-title { font-size: 1.6rem; margin-bottom: 16px; }
 .login-steam { display: block; margin: 0 auto 4px; opacity: 0.8; }
 .login-eyebrow { text-align: left; }
+.login-switch-line { text-align: center; margin-top: 16px; font-size: 0.9rem; color: var(--almond-text); }
 .mode-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
 .mode-toggle button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border-radius: 999px; border: 1px solid var(--gold); background: var(--cream); cursor: pointer; font-size: 0.8rem; font-weight: 700; color: var(--chestnut); transition: background .15s ease, box-shadow .15s ease, transform .15s ease; }
 .mode-toggle button:hover { background: var(--steam); }
@@ -518,6 +519,8 @@ a { color: inherit; text-decoration: none; }
 .checkout-item { display: flex; gap: 14px; border-bottom: 1px solid var(--gold); padding: 14px 0; }
 .checkout-summary { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 20px; position: sticky; top: 90px; }
 .checkout-auth { max-width: 480px; margin: 0 auto; text-align: center; }
+.checkout-auth-buttons { display: flex; gap: 12px; justify-content: center; }
+.checkout-auth-buttons .btn-primary, .checkout-auth-buttons .btn-outline { flex: 1; }
 .checkout-form { max-width: 480px; margin: 0 auto; background: white; border: 1px solid var(--gold); border-radius: 16px; padding: 26px; }
 .checkout-form label { display: block; font-size: 0.8rem; font-weight: 700; margin: 12px 0 4px; color: var(--chestnut); }
 .checkout-form input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; box-sizing: border-box; }
