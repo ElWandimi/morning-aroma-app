@@ -5,6 +5,62 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const authFile = path.join(__dirname, ".auth", "admin.json");
+const BACKEND_URL = "https://upbeat-rebirth-production.up.railway.app";
+
+// Reads the real admin token directly out of the saved session file the setup project already
+// created (see admin-auth.setup.js) -- avoids yet another real /auth/login request just to get
+// a token for these direct API calls, which would partly undo the whole reason that shared
+// session exists (real rate-limiting, confirmed via Railway's own logs -- see ROADMAP.md).
+// Playwright's storageState format nests localStorage under each real origin it captured; the
+// app's own storage.set() JSON.stringifies before writing, so this needs one JSON.parse to
+// unwrap back to the raw token string.
+function getAdminToken() {
+  const state = JSON.parse(readFileSync(authFile, "utf8"));
+  const origin = state.origins.find((o) => o.localStorage.some((item) => item.name === "ma_auth_token"));
+  const item = origin.localStorage.find((item) => item.name === "ma_auth_token");
+  return JSON.parse(item.value);
+}
+
+// Marks a freshly-registered account's email as verified via a direct, admin-authenticated API
+// call, instead of trying to read the real verification code from a real inbox -- which
+// Playwright genuinely can't do against the real, live backend (no mock exists outside the
+// backend's own unit tests). The pendingToken the UI holds only ever lives in React state, never
+// exposed anywhere Playwright could read it from outside the app, so this looks the account up
+// by the email it was just registered with instead, via the same admin capability real support
+// staff would use for a customer having real email trouble.
+// Retries both real network calls up to 3 times -- a real, transient ECONNRESET has been seen
+// here, the same class of occasional network flakiness already hardened against elsewhere in
+// this suite (see signIn/openAdminDashboard's own history), not a code bug worth chasing further.
+async function adminVerifyUserEmail(page, email) {
+  const adminToken = getAdminToken();
+
+  let newUser;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const usersRes = await page.request.get(`${BACKEND_URL}/users`, { headers: { Authorization: `Bearer ${adminToken}` } });
+      const usersBody = await usersRes.json();
+      newUser = usersBody.users.find((u) => u.email === email);
+      break;
+    } catch (err) {
+      if (attempt === 3) throw err;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  if (!newUser) throw new Error(`adminVerifyUserEmail: no user found with email ${email} -- did registration actually succeed?`);
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await page.request.patch(`${BACKEND_URL}/users/${newUser.id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        data: { emailVerified: true },
+      });
+      return newUser.id;
+    } catch (err) {
+      if (attempt === 3) throw err;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+}
 
 // Same real admin credentials pattern as admin.spec.js -- these tests genuinely sign in against
 // the real, deployed backend, so they need a real super_admin account. Skipped entirely (not
@@ -88,13 +144,17 @@ async function signInAsAdmin(page) {
   await openAdminDashboard(page);
 }
 
-// A longer single timeout (25s), not a resubmission-based retry like signIn/openAdminDashboard
-// above -- registration isn't idempotent the way logging in twice with the same credentials is.
-// If this succeeded server-side but was just slow to confirm on screen, blindly resubmitting the
-// same form on a retry would hit a genuine "an account with that email already exists" conflict,
-// not recover from anything. A longer wait is the correct fix for occasional backend latency
-// here; a real failure after 25s is worth surfacing directly, not retried into a different bug.
+// Registers through the real sign-up form, admin-verifies the account via a direct API call
+// (see adminVerifyUserEmail above -- Playwright can't read a real code from a real inbox against
+// the live backend), then signs in fresh through the real UI, which now succeeds immediately
+// since the account is verified.
 async function registerCustomer(page, email, password, name) {
+  // Splits a single "name" string into first/last so every existing call site (just one, today)
+  // doesn't need updating for the new two-field form -- "E2E Staff Test" becomes "E2E" / "Staff
+  // Test", which is fine; nothing in this suite actually asserts on the exact split.
+  const [firstName, ...rest] = name.split(" ");
+  const lastName = rest.join(" ") || "Test";
+
   await page.goto("/");
   const consentBanner = page.getByRole("dialog", { name: "Local storage preferences" });
   if (await consentBanner.isVisible().catch(() => false)) {
@@ -107,11 +167,27 @@ async function registerCustomer(page, email, password, name) {
   const signInDialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
   await signInDialog.getByRole("button", { name: "Create an account", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create your Morning Aroma account" });
-  await dialog.getByLabel("Name").fill(name);
+  await dialog.getByLabel("First name").fill(firstName);
+  await dialog.getByLabel("Last name").fill(lastName);
   await dialog.getByLabel("Email").fill(email);
-  await dialog.getByLabel("Password").fill(password);
+  // Scoped and exact -- "Password" alone would also match "Confirm password" as a substring.
+  await dialog.getByLabel("Password", { exact: true }).fill(password);
+  await dialog.getByLabel("Confirm password").fill(password);
   await dialog.locator('button[type="submit"]').click();
-  await expect(dialog).toBeHidden({ timeout: 25000 });
+
+  // Real email verification now blocks sign-in until confirmed (see ROADMAP.md) -- confirms the
+  // real "check your inbox" step genuinely appeared, then admin-verifies the account directly
+  // via the API rather than trying to read a real code from a real inbox, which Playwright
+  // can't do against the real, live backend. 25s, not 15s -- /register now does genuinely more
+  // real database work (insert the user, clear any old code, insert a new one) than it used to,
+  // and this was seen timing out at 15s in real runs.
+  await expect(dialog.getByRole("heading", { name: "Check your inbox" })).toBeVisible({ timeout: 25000 });
+  await adminVerifyUserEmail(page, email);
+
+  // The UI has no way to know verification happened elsewhere -- starts over with a fresh sign-in
+  // through the real form instead, which now succeeds immediately since the account is verified.
+  await dialog.getByRole("button", { name: "Start over with a different email", exact: false }).click();
+  await signIn(page, email, password);
   await page.getByRole("button", { name: "Sign out" }).click();
 }
 
@@ -347,7 +423,6 @@ test.describe("Admin — advanced coverage", () => {
     // existing product and capture its real, current photo first -- this test modifies a real
     // product's photo, not test-only data it creates and can freely discard, so the original
     // value needs to be genuinely restorable afterward, not just left changed.
-    const BACKEND_URL = "https://upbeat-rebirth-production.up.railway.app";
     const before = await page.request.get(`${BACKEND_URL}/products`).then((r) => r.json());
     const product = before.products[0];
 

@@ -18,6 +18,13 @@ const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
 // the test suite request auth the same modest number of times a real, single user actually would.
 setup("authenticate as admin once for the whole suite", async ({ page }) => {
   setup.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "Set PLAYWRIGHT_ADMIN_EMAIL and PLAYWRIGHT_ADMIN_PASSWORD to run admin-gated tests.");
+  // The default per-test timeout (30s) was silently capping this below what its own retry logic
+  // actually needs (up to 3 attempts at a 25s sign-in wait each, plus pauses between -- as much
+  // as ~84s worst case). This is the one file that was missed when every other file in this
+  // suite got this same fix -- and because everything else depends on this step succeeding
+  // first, its failure here cascades into every other test never running at all, not just this
+  // one failing on its own.
+  setup.setTimeout(120000);
 
   // Retries up to 3 times, with a real pause between attempts -- same reasoning as the rest of
   // this suite's hardening: genuine backend latency (or, now directly confirmed, a real rate

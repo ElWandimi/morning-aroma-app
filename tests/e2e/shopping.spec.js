@@ -1,8 +1,71 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const authFile = path.join(__dirname, ".auth", "admin.json");
+const BACKEND_URL = "https://upbeat-rebirth-production.up.railway.app";
+// This file didn't need real admin credentials before -- it does now, only because completing a
+// real registration requires admin-verifying the new account via a direct API call (Playwright
+// can't read a real verification code from a real inbox against the live backend). Guarded the
+// same way every other admin-dependent test in this suite already is, rather than crashing when
+// these aren't set.
+const ADMIN_EMAIL = process.env.PLAYWRIGHT_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
+
+// Reads the real admin token directly out of the saved session file the setup project already
+// created (see admin-auth.setup.js) -- avoids yet another real /auth/login request just to get
+// a token for these direct API calls, which would partly undo the whole reason that shared
+// session exists (real rate-limiting, confirmed via Railway's own logs -- see ROADMAP.md).
+function getAdminToken() {
+  const state = JSON.parse(readFileSync(authFile, "utf8"));
+  const origin = state.origins.find((o) => o.localStorage.some((item) => item.name === "ma_auth_token"));
+  const item = origin.localStorage.find((item) => item.name === "ma_auth_token");
+  return JSON.parse(item.value);
+}
+
+// Marks a freshly-registered account's email as verified via a direct, admin-authenticated API
+// call, instead of trying to read the real verification code from a real inbox -- which
+// Playwright genuinely can't do against the real, live backend.
+// Retries both real network calls up to 3 times -- a real, transient ECONNRESET has been seen
+// here, the same class of occasional network flakiness already hardened against elsewhere in
+// this suite (see signIn/openAdminDashboard's own history), not a code bug worth chasing further.
+async function adminVerifyUserEmail(page, email) {
+  const adminToken = getAdminToken();
+
+  let newUser;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const usersRes = await page.request.get(`${BACKEND_URL}/users`, { headers: { Authorization: `Bearer ${adminToken}` } });
+      const usersBody = await usersRes.json();
+      newUser = usersBody.users.find((u) => u.email === email);
+      break;
+    } catch (err) {
+      if (attempt === 3) throw err;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  if (!newUser) throw new Error(`adminVerifyUserEmail: no user found with email ${email} -- did registration actually succeed?`);
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await page.request.patch(`${BACKEND_URL}/users/${newUser.id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        data: { emailVerified: true },
+      });
+      return newUser.id;
+    } catch (err) {
+      if (attempt === 3) throw err;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+}
 
 test.describe("Aroma Quiz", () => {
   test("answering all 4 questions produces a matched variety", async ({ page }) => {
     await page.goto("/");
+    await page.getByRole("dialog", { name: "Local storage preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByRole("button", { name: "Take the Aroma Quiz" }).click();
     await expect(page.getByText("question 1 of 4")).toBeVisible();
 
@@ -21,6 +84,7 @@ test.describe("Aroma Quiz", () => {
 test.describe("Cart and checkout", () => {
   test("adding an item opens the cart drawer with the right contents", async ({ page }) => {
     await page.goto("/");
+    await page.getByRole("dialog", { name: "Local storage preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByRole("link", { name: "Shop" }).click();
     await expect(page.getByRole("heading", { name: "Shop All Coffee" })).toBeVisible();
 
@@ -33,6 +97,7 @@ test.describe("Cart and checkout", () => {
   });
 
   test("guest checkout is gated behind sign-in, reaches the real Paystack payment step", async ({ page }) => {
+    test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "Set PLAYWRIGHT_ADMIN_EMAIL and PLAYWRIGHT_ADMIN_PASSWORD -- completing registration now requires admin-verifying the new account.");
     // Real, sufficiently long timeout for the whole test, not Playwright's 30s default -- this
     // is a multi-step flow (registration, then several real page transitions through checkout),
     // and the same class of occasional backend latency already hardened against elsewhere in
@@ -40,6 +105,7 @@ test.describe("Cart and checkout", () => {
     test.setTimeout(60000);
 
     await page.goto("/");
+    await page.getByRole("dialog", { name: "Local storage preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByRole("link", { name: "Shop" }).click();
     await page.getByRole("button", { name: "Add to cart" }).first().click();
     await page.getByRole("button", { name: "Checkout" }).click();
@@ -52,17 +118,35 @@ test.describe("Cart and checkout", () => {
 
     // Real password registration -- a self-contained, real request needing no email access at
     // all, unlike OTP (which genuinely emails a real code now that auth is fully real; there's no
-    // on-screen demo code to read anymore). The same proven pattern used successfully elsewhere
-    // in this suite. A longer single timeout, not a retry -- registration isn't idempotent the
-    // way signing in twice with the same credentials is, so blindly resubmitting the same form
-    // risks a genuine "already exists" conflict if the first attempt actually succeeded
-    // server-side but was just slow to confirm on screen.
+    // on-screen demo code to read anymore). Real email verification now blocks sign-in until
+    // confirmed too (see ROADMAP.md), so this admin-verifies the new account directly via the
+    // API afterward -- Playwright can't read a real verification code from a real inbox against
+    // the live backend -- rather than trying to read one.
+    const testEmail = `e2e-test-${Date.now()}@example.com`;
     const dialog = page.getByRole("dialog", { name: "Create your Morning Aroma account" });
-    await dialog.getByLabel("Name").fill("Test Customer");
-    await dialog.getByLabel("Email").fill(`e2e-test-${Date.now()}@example.com`);
-    await dialog.getByLabel("Password").fill("correcthorsebattery123");
+    await dialog.getByLabel("First name").fill("Test");
+    await dialog.getByLabel("Last name").fill("Customer");
+    await dialog.getByLabel("Email").fill(testEmail);
+    // Scoped and exact -- "Password" alone would also match "Confirm password" as a substring.
+    await dialog.getByLabel("Password", { exact: true }).fill("correcthorsebattery123");
+    await dialog.getByLabel("Confirm password").fill("correcthorsebattery123");
     await dialog.locator('button[type="submit"]').click();
-    await expect(dialog).toBeHidden({ timeout: 25000 });
+    // 25s, not 15s -- /register now does genuinely more real database work (insert the user,
+    // clear any old code, insert a new one) than it used to, and this was seen timing out at
+    // 15s in real runs.
+    await expect(dialog.getByRole("heading", { name: "Check your inbox" })).toBeVisible({ timeout: 25000 });
+    await adminVerifyUserEmail(page, testEmail);
+    // Cancelling the verify step returns to the sign-up form itself (still pre-filled -- real,
+    // intended UX for fixing a mistyped email), not the sign-in modal, so resubmitting it here
+    // would hit a real "account already exists" conflict rather than signing in. Switches to the
+    // real sign-in modal via its own existing link instead.
+    await dialog.getByRole("button", { name: "Start over with a different email", exact: false }).click();
+    await dialog.getByRole("button", { name: "Sign in", exact: true }).click();
+    const signInDialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
+    await signInDialog.getByLabel("Email").fill(testEmail);
+    await signInDialog.getByLabel("Password").fill("correcthorsebattery123");
+    await signInDialog.locator('button[type="submit"]').click();
+    await expect(signInDialog).toBeHidden({ timeout: 25000 });
 
     await page.getByRole("button", { name: "Continue to shipping →" }).click();
     await page.getByLabel("Full name").fill("Test Customer");
