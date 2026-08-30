@@ -147,7 +147,7 @@ function GoogleSignInButton({ active, onCredential }) {
 }
 
 export function SignInModal({ open, onClose, onSwitchToSignUp }) {
-  const { login, requestOtpLogin, verifyOtpLogin, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
+  const { login, requestOtpLogin, verifyOtpLogin, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin, verifyEmailCode, resendEmailVerificationCode, cancelEmailVerification } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   // Password mode is real now (backed by the actual deployed backend — see ROADMAP.md) and is
@@ -162,6 +162,16 @@ export function SignInModal({ open, onClose, onSwitchToSignUp }) {
   const [twoFACode, setTwoFACode] = useState("");
   const [twoFASubmitting, setTwoFASubmitting] = useState(false);
   const [twoFAError, setTwoFAError] = useState("");
+
+  // Real email verification -- a password sign-in on an account that was created via password
+  // registration but never finished verifying its email lands here instead of a real session,
+  // same shape as the 2FA step above.
+  const [verifyStep, setVerifyStep] = useState(false);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verifySubmitting, setVerifySubmitting] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+  const [resendVerifySubmitting, setResendVerifySubmitting] = useState(false);
+  const [resendVerifyMessage, setResendVerifyMessage] = useState("");
 
   // Forgot-password flow: null (not active) -> true (real request sent, entering the code)
   const [resetStep, setResetStep] = useState(null);
@@ -248,6 +258,41 @@ export function SignInModal({ open, onClose, onSwitchToSignUp }) {
     setPassword("");
   };
 
+  const submitVerifyCode = async () => {
+    setVerifySubmitting(true);
+    setVerifyError("");
+    const result = await verifyEmailCode(verifyCode);
+    setVerifySubmitting(false);
+    if (result.ok && result.requiresTwoFactor) {
+      setVerifyStep(false);
+      setVerifyCode("");
+      setTwoFAStep(true);
+    } else if (result.ok) {
+      onClose();
+      setVerifyStep(false);
+      setVerifyCode("");
+    } else {
+      setVerifyError(result.error || "Incorrect code.");
+    }
+  };
+
+  const resendVerifyCode = async () => {
+    setResendVerifySubmitting(true);
+    setResendVerifyMessage("");
+    const result = await resendEmailVerificationCode();
+    setResendVerifySubmitting(false);
+    setResendVerifyMessage(result.ok ? "A new code has been sent." : (result.error || "Couldn't resend. Try again."));
+  };
+
+  const cancelVerifyStep = () => {
+    cancelEmailVerification();
+    setVerifyStep(false);
+    setVerifyCode("");
+    setVerifyError("");
+    setResendVerifyMessage("");
+    setPassword("");
+  };
+
   const startResetFlow = async () => {
     if (!email) {
       setError("Enter your email above first, then click \"Forgot password?\"");
@@ -296,13 +341,13 @@ export function SignInModal({ open, onClose, onSwitchToSignUp }) {
   };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Sign in to Morning Aroma" onClick={twoFAStep ? cancelTwoFAStep : resetStep ? cancelResetFlow : onClose}>
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Sign in to Morning Aroma" onClick={twoFAStep ? cancelTwoFAStep : verifyStep ? cancelVerifyStep : resetStep ? cancelResetFlow : onClose}>
       <div className="login-card" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="login-photo-panel">
           <p className="handwritten login-quote">"Every cup begins as a story —"</p>
         </div>
         <div className="login-form-panel">
-        <button className="modal-close" onClick={twoFAStep ? cancelTwoFAStep : resetStep ? cancelResetFlow : onClose} aria-label="Close">×</button>
+        <button className="modal-close" onClick={twoFAStep ? cancelTwoFAStep : verifyStep ? cancelVerifyStep : resetStep ? cancelResetFlow : onClose} aria-label="Close">×</button>
 
         {resetStep ? (
           <>
@@ -355,6 +400,34 @@ export function SignInModal({ open, onClose, onSwitchToSignUp }) {
             </button>
             <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelTwoFAStep}>← Use a different account</button>
           </>
+        ) : verifyStep ? (
+          <>
+            <p className="eyebrow">verify your email</p>
+            <h3 className="modal-title">Check your inbox</h3>
+            <p className="hint" style={{ marginTop: 0 }}>
+              That's the right password, but this account never finished verifying its email. We've sent a fresh 6-digit code to <strong>{email}</strong> — enter it below to sign in.
+            </p>
+            <label htmlFor="login-verify-code">6-digit code</label>
+            <input
+              id="login-verify-code"
+              value={verifyCode}
+              onChange={(e) => { setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setVerifyError(""); }}
+              placeholder="000000"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              autoFocus
+            />
+            {verifyError && <p className="form-error">{verifyError}</p>}
+            <button className="btn-primary full" onClick={submitVerifyCode} disabled={verifyCode.length !== 6 || verifySubmitting}>
+              {verifySubmitting ? "Verifying…" : "Verify & sign in"}
+            </button>
+            <button className="link-btn" style={{ marginTop: 10 }} onClick={resendVerifyCode} disabled={resendVerifySubmitting}>
+              {resendVerifySubmitting ? "Sending…" : "Resend code"}
+            </button>
+            {resendVerifyMessage && <p className="hint" style={{ marginTop: 4 }}>{resendVerifyMessage}</p>}
+            <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelVerifyStep}>← Use a different account</button>
+          </>
         ) : (
           <>
             <Steam className="login-steam" />
@@ -377,7 +450,9 @@ export function SignInModal({ open, onClose, onSwitchToSignUp }) {
                   setSubmitting(true);
                   const result = await login(email, password);
                   setSubmitting(false);
-                  if (result.ok && result.requiresTwoFactor) {
+                  if (result.ok && result.requiresEmailVerification) {
+                    setVerifyStep(true);
+                  } else if (result.ok && result.requiresTwoFactor) {
                     setTwoFAStep(true);
                   } else if (result.ok) {
                     onClose();
@@ -464,12 +539,35 @@ export function SignInModal({ open, onClose, onSwitchToSignUp }) {
   );
 }
 
+// Matches server/src/utils/password.js's isPasswordStrongEnough exactly -- the backend is the
+// real source of truth, this is purely for showing a clear, immediate message before ever
+// submitting, not a second, possibly-drifting definition of "strong enough."
+function isPasswordValid(pw) {
+  return typeof pw === "string" && pw.length >= 6 && /[A-Za-z]/.test(pw) && /[0-9]/.test(pw);
+}
+
+// Same simple shape server/src/routes/auth.js's isValidEmail already checks server-side --
+// deliberately loose (not a full RFC 5322 validator), just enough to catch an obviously
+// malformed address and say so clearly, before ever making a real request.
+function isEmailValid(email) {
+  return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
-  const { register, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin } = useAuth();
+  const { register, loginWithGoogle, error, setError, verifyTwoFactorLogin, cancelTwoFactorLogin, verifyEmailCode, resendEmailVerificationCode, cancelEmailVerification } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Real-time-ish validation state -- only starts showing once the person has actually left a
+  // field (touched), so a brand-new empty form doesn't greet them with a wall of red errors
+  // before they've typed anything.
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
+
   // A brand-new registration can still land a 2FA prompt in one real, if unusual, case: signing
   // up with an email that already has an account (the backend then just signs the existing user
   // in instead of erroring) -- so this step needs to exist here too, not just in SignInModal.
@@ -478,11 +576,24 @@ export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
   const [twoFASubmitting, setTwoFASubmitting] = useState(false);
   const [twoFAError, setTwoFAError] = useState("");
 
+  // Real email verification -- a password-based signup no longer signs in immediately; a real
+  // code is sent to the address just entered, and this step confirms it before completing.
+  const [verifyStep, setVerifyStep] = useState(false);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verifySubmitting, setVerifySubmitting] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+  const [resendSubmitting, setResendSubmitting] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
+
   const modalRef = useRef(null);
   useEscapeKey(open, onClose);
   useFocusTrap(modalRef, open);
 
   if (!open) return null;
+
+  const emailError = emailTouched && email && !isEmailValid(email) ? "Enter a valid email address (e.g. you@example.com)." : "";
+  const passwordError = passwordTouched && password && !isPasswordValid(password) ? "Password must be at least 6 characters, with at least one letter and one number." : "";
+  const confirmError = confirmTouched && confirmPassword && password !== confirmPassword ? "Passwords don't match." : "";
 
   const submitTwoFACode = async () => {
     setTwoFASubmitting(true);
@@ -506,14 +617,48 @@ export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
     setPassword("");
   };
 
+  const submitVerifyCode = async () => {
+    setVerifySubmitting(true);
+    setVerifyError("");
+    const result = await verifyEmailCode(verifyCode);
+    setVerifySubmitting(false);
+    if (result.ok && result.requiresTwoFactor) {
+      setVerifyStep(false);
+      setVerifyCode("");
+      setTwoFAStep(true);
+    } else if (result.ok) {
+      onClose();
+      setVerifyStep(false);
+      setVerifyCode("");
+    } else {
+      setVerifyError(result.error || "Incorrect code.");
+    }
+  };
+
+  const resendVerifyCode = async () => {
+    setResendSubmitting(true);
+    setResendMessage("");
+    const result = await resendEmailVerificationCode();
+    setResendSubmitting(false);
+    setResendMessage(result.ok ? "A new code has been sent." : (result.error || "Couldn't resend. Try again."));
+  };
+
+  const cancelVerifyStep = () => {
+    cancelEmailVerification();
+    setVerifyStep(false);
+    setVerifyCode("");
+    setVerifyError("");
+    setResendMessage("");
+  };
+
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Create your Morning Aroma account" onClick={twoFAStep ? cancelTwoFAStep : onClose}>
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Create your Morning Aroma account" onClick={twoFAStep ? cancelTwoFAStep : verifyStep ? cancelVerifyStep : onClose}>
       <div className="login-card" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="login-photo-panel">
           <p className="handwritten login-quote">"Every cup begins as a story —"</p>
         </div>
         <div className="login-form-panel">
-        <button className="modal-close" onClick={twoFAStep ? cancelTwoFAStep : onClose} aria-label="Close">×</button>
+        <button className="modal-close" onClick={twoFAStep ? cancelTwoFAStep : verifyStep ? cancelVerifyStep : onClose} aria-label="Close">×</button>
 
         {twoFAStep ? (
           <>
@@ -539,6 +684,34 @@ export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
             </button>
             <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelTwoFAStep}>← Use a different account</button>
           </>
+        ) : verifyStep ? (
+          <>
+            <p className="eyebrow">verify your email</p>
+            <h3 className="modal-title">Check your inbox</h3>
+            <p className="hint" style={{ marginTop: 0 }}>
+              We've sent a 6-digit code to <strong>{email}</strong>. Enter it below to finish creating your account.
+            </p>
+            <label htmlFor="signup-verify-code">6-digit code</label>
+            <input
+              id="signup-verify-code"
+              value={verifyCode}
+              onChange={(e) => { setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setVerifyError(""); }}
+              placeholder="000000"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              autoFocus
+            />
+            {verifyError && <p className="form-error">{verifyError}</p>}
+            <button className="btn-primary full" onClick={submitVerifyCode} disabled={verifyCode.length !== 6 || verifySubmitting}>
+              {verifySubmitting ? "Verifying…" : "Verify & continue"}
+            </button>
+            <button className="link-btn" style={{ marginTop: 10 }} onClick={resendVerifyCode} disabled={resendSubmitting}>
+              {resendSubmitting ? "Sending…" : "Resend code"}
+            </button>
+            {resendMessage && <p className="hint" style={{ marginTop: 4 }}>{resendMessage}</p>}
+            <button className="link-btn" style={{ marginTop: 10, display: "block" }} onClick={cancelVerifyStep}>← Start over with a different email</button>
+          </>
         ) : (
           <>
             <Steam className="login-steam" />
@@ -548,26 +721,44 @@ export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                setEmailTouched(true);
+                setPasswordTouched(true);
+                setConfirmTouched(true);
+                if (!isEmailValid(email) || !isPasswordValid(password) || password !== confirmPassword) return;
                 setSubmitting(true);
-                const result = await register(email, password, name);
+                const result = await register(email, password, `${firstName.trim()} ${lastName.trim()}`.trim());
                 setSubmitting(false);
-                if (result.ok && result.requiresTwoFactor) {
+                if (result.ok && result.requiresEmailVerification) {
+                  setVerifyStep(true);
+                } else if (result.ok && result.requiresTwoFactor) {
                   setTwoFAStep(true);
                 } else if (result.ok) {
                   onClose();
                 }
               }}
             >
-              <label htmlFor="signup-name">Name</label>
-              <div className="login-input-group">
-                <span className="login-input-icon" aria-hidden="true">🙂</span>
-                <input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="Your name" autoComplete="name" maxLength={100} required />
+              <div className="login-name-row">
+                <div>
+                  <label htmlFor="signup-first-name">First name</label>
+                  <div className="login-input-group">
+                    <span className="login-input-icon" aria-hidden="true">🙂</span>
+                    <input id="signup-first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} type="text" placeholder="First name" autoComplete="given-name" maxLength={50} required />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="signup-last-name">Last name</label>
+                  <div className="login-input-group">
+                    <span className="login-input-icon" aria-hidden="true">🙂</span>
+                    <input id="signup-last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} type="text" placeholder="Last name" autoComplete="family-name" maxLength={50} required />
+                  </div>
+                </div>
               </div>
               <label htmlFor="signup-email">Email</label>
               <div className="login-input-group">
                 <span className="login-input-icon" aria-hidden="true">✉️</span>
-                <input id="signup-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" autoComplete="username" maxLength={254} required />
+                <input id="signup-email" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => setEmailTouched(true)} type="email" placeholder="you@example.com" autoComplete="username" maxLength={254} required />
               </div>
+              {emailError && <p className="form-error">{emailError}</p>}
               <label htmlFor="signup-password">Password</label>
               <div className="login-input-group">
                 <span className="login-input-icon" aria-hidden="true">🔒</span>
@@ -575,14 +766,32 @@ export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
                   id="signup-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => setPasswordTouched(true)}
                   type="password"
-                  placeholder="At least 8 characters"
+                  placeholder="At least 6 characters, a letter and a number"
                   autoComplete="new-password"
-                  minLength={8}
+                  minLength={6}
                   maxLength={128}
                   required
                 />
               </div>
+              {passwordError && <p className="form-error">{passwordError}</p>}
+              <label htmlFor="signup-confirm-password">Confirm password</label>
+              <div className="login-input-group">
+                <span className="login-input-icon" aria-hidden="true">🔒</span>
+                <input
+                  id="signup-confirm-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onBlur={() => setConfirmTouched(true)}
+                  type="password"
+                  placeholder="Type your password again"
+                  autoComplete="new-password"
+                  maxLength={128}
+                  required
+                />
+              </div>
+              {confirmError && <p className="form-error">{confirmError}</p>}
               {error && <p className="form-error">{error}</p>}
               <button type="submit" className="btn-primary full" disabled={submitting}>
                 {submitting ? "Please wait…" : "Create account"}

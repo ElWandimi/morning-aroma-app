@@ -47,6 +47,9 @@ export function AuthProvider({ children }) {
   // (that was the old demo shape), since nothing about who this account belongs to should be
   // trusted or displayed until the second factor actually checks out.
   const [pendingTwoFactorToken, setPendingTwoFactorToken] = useState(null);
+  // Same pattern as pendingTwoFactorToken, for the email verification step registration (and,
+  // less commonly, a later /login on a still-unverified account) can now require.
+  const [pendingEmailVerificationToken, setPendingEmailVerificationToken] = useState(null);
 
   // On mount, try to restore a real session from a previously-saved token -- without this, a real
   // registered/logged-in user would be signed out every time they refresh the page, which is a
@@ -68,15 +71,17 @@ export function AuthProvider({ children }) {
     if (getStorageConsent() === "accepted") storage.set("ma_auth_token", newToken);
   };
 
-  // Real registration against the actual backend. Returns { ok, error? } rather than throwing, so
-  // the login modal can show a message inline without needing its own try/catch.
+  // Real registration against the actual backend. No longer signs the person in directly -- a
+  // password-based signup now requires verifying a real code sent to the email first (see
+  // ROADMAP.md), so this stashes the pending token for verifyEmailCode to use, the same pattern
+  // login() already uses for 2FA below. Returns { ok, error? } rather than throwing, so the
+  // sign-up modal can show a message inline without needing its own try/catch.
   const register = async (email, password, name) => {
     try {
-      const { user: realUser, token: realToken } = await api.register(email, password, name);
+      const body = await api.register(email, password, name);
+      setPendingEmailVerificationToken(pluck(body, "pendingToken"));
       setError("");
-      setUser(realUser);
-      persistToken(realToken);
-      return { ok: true };
+      return { ok: true, requiresEmailVerification: true };
     } catch (e) {
       setError(e.message);
       return { ok: false, error: e.message };
@@ -90,6 +95,14 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       const body = await api.login(email, password);
+      if (body.requiresEmailVerification) {
+        // The right password, but this account was created via password registration and never
+        // finished verifying its email -- same pending-token shape as 2FA below, just a
+        // different step. A fresh code was already sent server-side by this same call.
+        setPendingEmailVerificationToken(pluck(body, "pendingToken"));
+        setError("");
+        return { ok: true, requiresEmailVerification: true };
+      }
       if (body.requiresTwoFactor) {
         setPendingTwoFactorToken(pluck(body, "pendingToken"));
         setError("");
@@ -104,6 +117,49 @@ export function AuthProvider({ children }) {
       return { ok: false };
     }
   };
+
+  // The verification step registration (or an unverified account's later /login) now requires:
+  // a real 6-digit code from the email just sent. Only actually signs the person in (real user +
+  // real persisted token) once this succeeds -- register()/login() alone never do for an
+  // unverified account. Handles the account already turning out to have 2FA on too (a real,
+  // if unusual, edge case: registering with an email that already has a 2FA-protected account
+  // just signs that existing user in instead of erroring), matching verifyTwoFactorLogin's own
+  // shape rather than assuming it can't happen.
+  const verifyEmailCode = async (code) => {
+    if (!pendingEmailVerificationToken) {
+      return { ok: false, error: "That verification session has expired. Please sign in again." };
+    }
+    try {
+      const body = await api.verifyEmailCode(pendingEmailVerificationToken, code);
+      if (body.requiresTwoFactor) {
+        setPendingEmailVerificationToken(null);
+        setPendingTwoFactorToken(pluck(body, "pendingToken"));
+        setError("");
+        return { ok: true, requiresTwoFactor: true };
+      }
+      setUser(pluck(body, "user"));
+      persistToken(pluck(body, "token"));
+      setPendingEmailVerificationToken(null);
+      setError("");
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  const resendEmailVerificationCode = async () => {
+    if (!pendingEmailVerificationToken) {
+      return { ok: false, error: "That verification session has expired. Please sign in again." };
+    }
+    try {
+      await api.resendEmailVerificationCode(pendingEmailVerificationToken);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  const cancelEmailVerification = () => setPendingEmailVerificationToken(null);
 
   // The second step of a 2FA login: a live 6-digit code from the account's authenticator app, or
   // one of its remaining backup codes -- server/src/routes/auth.js's /2fa/verify-login accepts
@@ -259,6 +315,7 @@ export function AuthProvider({ children }) {
       value={{
         user, token, users, login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, logout, setRole, setPermissions, error, setError,
         pendingTwoFactorToken, verifyTwoFactorLogin, cancelTwoFactorLogin,
+        pendingEmailVerificationToken, verifyEmailCode, resendEmailVerificationCode, cancelEmailVerification,
         startTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, setNotificationsEnabled,
         exportUsers, restoreUsers, sessionLoading,
       }}

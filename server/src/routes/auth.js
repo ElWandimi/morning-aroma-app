@@ -4,11 +4,12 @@ const rateLimit = require("express-rate-limit");
 const { OAuth2Client } = require("google-auth-library");
 const { query } = require("../db");
 const { hashPassword, verifyPassword, isPasswordStrongEnough } = require("../utils/password");
-const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken } = require("../utils/tokens");
+const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken, signPendingEmailVerificationToken, verifyPendingEmailVerificationToken } = require("../utils/tokens");
 const { newSecret, totpQrCode, verifyTotp, generateBackupCodes, hashBackupCode } = require("../utils/twoFactor");
 const { generateLoginCode, hashLoginCode } = require("../utils/otp");
+const { generateVerificationCode, hashVerificationCode } = require("../utils/emailVerification");
 const { requireAuth } = require("../middleware/requireAuth");
-const { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail } = require("../utils/email");
+const { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendEmailVerificationCode } = require("../utils/email");
 
 const router = express.Router();
 
@@ -57,10 +58,25 @@ function publicUser(row) {
   };
 }
 
+// Shared between /register's initial send and /verify-email/resend -- generates a real code,
+// invalidates any earlier still-active one for this account first (same reasoning as
+// /otp/request: an old code staying valid alongside a new one would just be a weaker, forgotten
+// backup door), stores only its hash, and emails it.
+async function issueEmailVerificationCode(user) {
+  await query("DELETE FROM email_verification_codes WHERE user_id = $1 AND consumed = false", [user.id]);
+  const code = generateVerificationCode();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+  await query(
+    "INSERT INTO email_verification_codes (user_id, code_hash, expires_at) VALUES ($1, $2, $3)",
+    [user.id, hashVerificationCode(code), expiresAt]
+  );
+  sendEmailVerificationCode(user, code).catch((err) => console.error("Failed to send verification email:", err));
+}
+
 router.post("/register", async (req, res) => {
   const { email, password, name } = req.body || {};
   if (!isValidEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
-  if (!isPasswordStrongEnough(password)) return res.status(400).json({ error: "Password must be at least 8 characters." });
+  if (!isPasswordStrongEnough(password)) return res.status(400).json({ error: "Password must be at least 6 characters, with at least one letter and one number." });
   if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "Name is required." });
 
   const cleanEmail = email.trim().toLowerCase();
@@ -84,17 +100,102 @@ router.post("/register", async (req, res) => {
 
   const passwordHash = await hashPassword(password);
   const result = await query(
-    "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
+    "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, false) RETURNING *",
     [cleanEmail, name.trim(), passwordHash, role]
   );
   const user = result.rows[0];
-  // Fire-and-forget: registration succeeding must never depend on email sending succeeding.
-  // Right now this can't actually fail (it's a console.log, see utils/email.js), but writing it
-  // this way now means the moment a real provider is connected and this can genuinely fail
-  // (network issue, rate limit), a slow or broken email send still won't block or crash the
-  // response the user is actually waiting on.
-  sendWelcomeEmail(user).catch((err) => console.error("Failed to send welcome email:", err));
-  res.status(201).json({ user: publicUser(user), token: signAccessToken(user) });
+  // Real email verification -- a password-based registration is the one signup path where email
+  // ownership genuinely hasn't been proven yet (Google verifies it itself; OTP/email-code signup
+  // proves it by requiring a real code from that inbox before the account is even created). The
+  // welcome email is deliberately deferred to /verify-email succeeding, not sent here -- welcoming
+  // someone into an account they can't actually use yet would be premature and a confusing second
+  // email right on top of the verification code they need to act on first.
+  await issueEmailVerificationCode(user);
+  res.status(201).json({ requiresEmailVerification: true, pendingToken: signPendingEmailVerificationToken(user) });
+});
+
+router.post("/verify-email", async (req, res) => {
+  const { pendingToken, code } = req.body || {};
+  if (!pendingToken || typeof pendingToken !== "string") {
+    return res.status(400).json({ error: "Missing or invalid verification session. Please sign up or sign in again." });
+  }
+
+  let payload;
+  try {
+    payload = verifyPendingEmailVerificationToken(pendingToken);
+  } catch {
+    return res.status(401).json({ error: "That verification session has expired. Please sign in again to get a new code." });
+  }
+
+  const result = await query("SELECT * FROM users WHERE id = $1", [payload.sub]);
+  const user = result.rows[0];
+  if (!user) return res.status(401).json({ error: "That verification session is no longer valid. Please sign in again." });
+  if (user.email_verified) {
+    // Already verified by the time this arrived (e.g. two tabs, or a retried request) -- treat
+    // it as success rather than a confusing error, since the actual goal (a verified, signed-in
+    // account) is already true.
+    return res.json({ user: publicUser(user), token: signAccessToken(user) });
+  }
+  if (typeof code !== "string" || !code.trim()) {
+    return res.status(400).json({ error: "Enter the 6-digit code from your email." });
+  }
+
+  const codeResult = await query(
+    "SELECT * FROM email_verification_codes WHERE user_id = $1 AND consumed = false ORDER BY created_at DESC LIMIT 1",
+    [user.id]
+  );
+  const verificationCode = codeResult.rows[0];
+  if (!verificationCode) return res.status(400).json({ error: "No active code for this account. Request a new one." });
+  if (new Date(verificationCode.expires_at).getTime() < Date.now()) {
+    return res.status(400).json({ error: "That code has expired. Request a new one." });
+  }
+  // Same 3-attempt lockout as /otp/verify, enforced the same way.
+  if (verificationCode.attempts >= 3) {
+    return res.status(400).json({ error: "Too many wrong attempts. Request a new code." });
+  }
+
+  if (hashVerificationCode(code) !== verificationCode.code_hash) {
+    await query("UPDATE email_verification_codes SET attempts = attempts + 1 WHERE id = $1", [verificationCode.id]);
+    return res.status(400).json({ error: "Incorrect code." });
+  }
+
+  // Consumed the moment it's confirmed correct, same principle as /otp/verify.
+  await query("UPDATE email_verification_codes SET consumed = true WHERE id = $1", [verificationCode.id]);
+  const updatedResult = await query("UPDATE users SET email_verified = true WHERE id = $1 RETURNING *", [user.id]);
+  const verifiedUser = updatedResult.rows[0];
+
+  // The welcome email genuinely belongs here now -- this is the actual moment the account
+  // becomes usable, not registration itself.
+  sendWelcomeEmail(verifiedUser).catch((err) => console.error("Failed to send welcome email:", err));
+
+  if (verifiedUser.two_factor_enabled) {
+    // Extremely unlikely in practice (2FA can only be enabled from inside a real, signed-in
+    // session, which a never-verified account has never had) but handled correctly rather than
+    // assumed impossible, same principle as everywhere else in this file that checks this flag.
+    return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(verifiedUser) });
+  }
+
+  res.json({ user: publicUser(verifiedUser), token: signAccessToken(verifiedUser) });
+});
+
+router.post("/verify-email/resend", async (req, res) => {
+  const { pendingToken } = req.body || {};
+  if (!pendingToken || typeof pendingToken !== "string") {
+    return res.status(400).json({ error: "Missing or invalid verification session. Please sign in again." });
+  }
+
+  let payload;
+  try {
+    payload = verifyPendingEmailVerificationToken(pendingToken);
+  } catch {
+    return res.status(401).json({ error: "That verification session has expired. Please sign in again to get a new code." });
+  }
+
+  const result = await query("SELECT * FROM users WHERE id = $1", [payload.sub]);
+  const user = result.rows[0];
+  if (!user) return res.status(401).json({ error: "That verification session is no longer valid. Please sign in again." });
+  if (!user.email_verified) await issueEmailVerificationCode(user);
+  res.json({ message: "A new code has been sent." });
 });
 
 router.post("/login", async (req, res) => {
@@ -108,6 +209,16 @@ router.post("/login", async (req, res) => {
   const ok = await verifyPassword(password, user ? user.password_hash : DUMMY_HASH);
 
   if (!user || !ok) return res.status(401).json({ error: "Invalid email or password." });
+
+  if (!user.email_verified) {
+    // Correct password, but this account was created via password registration and never
+    // finished email verification -- same "right password, one more real step before a real
+    // session token" shape as the 2FA branch just below, reusing the exact same pending-token
+    // pattern. Genuinely possible: someone registers, closes the tab before entering the code,
+    // and comes back later through a normal sign-in instead.
+    await issueEmailVerificationCode(user);
+    return res.json({ requiresEmailVerification: true, pendingToken: signPendingEmailVerificationToken(user) });
+  }
 
   if (user.two_factor_enabled) {
     // Correct password alone isn't enough to sign in on an account with 2FA on. This is
@@ -184,7 +295,9 @@ router.post("/google", async (req, res) => {
     // later if they want email+password as a second way in.
     const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
     const inserted = await query(
-      "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
+      // email_verified: true -- Google already verified this email itself (checked above via
+      // payload.email_verified) before ever handing back a usable ID token.
+      "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, true) RETURNING *",
       [cleanEmail, displayName, randomPasswordHash, role]
     );
     user = inserted.rows[0];
@@ -273,7 +386,9 @@ router.post("/otp/verify", async (req, res) => {
     // "forgot password" is exactly how someone would set one later if they want it.
     const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
     const inserted = await query(
-      "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
+      // email_verified: true -- successfully entering the real code just sent to this inbox
+      // (checked above, before this account is even created) already proves ownership.
+      "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, true) RETURNING *",
       [cleanEmail, cleanEmail.split("@")[0], randomPasswordHash, role]
     );
     user = inserted.rows[0];
@@ -325,7 +440,7 @@ router.post("/password-reset/request", async (req, res) => {
 router.post("/password-reset/confirm", async (req, res) => {
   const { token, newPassword } = req.body || {};
   if (!token || typeof token !== "string") return res.status(400).json({ error: "Missing reset token." });
-  if (!isPasswordStrongEnough(newPassword)) return res.status(400).json({ error: "Password must be at least 8 characters." });
+  if (!isPasswordStrongEnough(newPassword)) return res.status(400).json({ error: "Password must be at least 6 characters, with at least one letter and one number." });
 
   const hash = hashResetToken(token);
   const result = await query(

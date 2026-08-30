@@ -33,16 +33,33 @@ async function query(text, params = []) {
   let values = params.map((v) => {
     if (v instanceof Date) return v.toISOString();
     if (Array.isArray(v)) return JSON.stringify(v);
+    // node:sqlite's binding, unlike pg's, doesn't accept a raw JS boolean -- SQLite has no native
+    // boolean type at all, storing 0/1 integers instead, and pg only gets away with passing a JS
+    // boolean straight through because the real Postgres driver does this coercion itself.
+    if (typeof v === "boolean") return v ? 1 : 0;
     return v;
   });
 
   if (/INSERT INTO users/i.test(sql) && /RETURNING \*/i.test(sql)) {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    sql = sql.replace(
-      "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4)",
-      "INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    );
+    // Handles both real shapes routes/auth.js actually sends now: the base 4 columns, and the
+    // newer 5-column form with a literal true/false email_verified value embedded directly in
+    // the SQL text (not a bound parameter, so it needs to be preserved as-is, not counted among
+    // `values`). node:sqlite's bundled SQLite (3.23+) accepts the literal TRUE/FALSE keywords
+    // directly, so this doesn't need translating to 1/0.
+    const emailVerifiedMatch = sql.match(/INSERT INTO users \(email, name, password_hash, role, email_verified\) VALUES \(\$1, \$2, \$3, \$4, (true|false)\)/);
+    if (emailVerifiedMatch) {
+      sql = sql.replace(
+        emailVerifiedMatch[0],
+        `INSERT INTO users (id, email, name, password_hash, role, email_verified, created_at) VALUES (?, ?, ?, ?, ?, ${emailVerifiedMatch[1]}, ?)`
+      );
+    } else {
+      sql = sql.replace(
+        "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+      );
+    }
     values = [id, ...values, createdAt];
   } else if (/INSERT INTO orders/i.test(sql) && /RETURNING \*/i.test(sql)) {
     const id = crypto.randomUUID();

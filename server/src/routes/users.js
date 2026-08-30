@@ -27,6 +27,7 @@ function publicUser(row) {
     permissions: row.permissions,
     twoFactorEnabled: row.two_factor_enabled,
     notificationsEnabled: row.notifications_enabled,
+    emailVerified: !!row.email_verified,
     createdAt: row.created_at,
   };
 }
@@ -38,7 +39,7 @@ router.get("/", requireAuth, requireAdmin, async (req, res) => {
 
 router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { role, permissions } = req.body || {};
+  const { role, permissions, emailVerified } = req.body || {};
 
   if (role !== undefined && !VALID_ROLES.includes(role)) {
     return res.status(400).json({ error: `Role must be one of: ${VALID_ROLES.join(", ")}` });
@@ -47,6 +48,9 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     if (!Array.isArray(permissions) || !permissions.every((p) => VALID_PERMISSIONS.includes(p))) {
       return res.status(400).json({ error: "Permissions must be an array of valid admin section names." });
     }
+  }
+  if (emailVerified !== undefined && typeof emailVerified !== "boolean") {
+    return res.status(400).json({ error: "emailVerified must be true or false." });
   }
 
   const targetResult = await query("SELECT * FROM users WHERE id = $1", [id]);
@@ -74,9 +78,11 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     ? []
     : (permissions !== undefined ? permissions : target.permissions);
 
+  const nextEmailVerified = emailVerified !== undefined ? emailVerified : target.email_verified;
+
   const result = await query(
-    "UPDATE users SET role = $1, permissions = $2 WHERE id = $3 RETURNING *",
-    [nextRole, nextPermissions, id]
+    "UPDATE users SET role = $1, permissions = $2, email_verified = $3 WHERE id = $4 RETURNING *",
+    [nextRole, nextPermissions, nextEmailVerified, id]
   );
   res.json({ user: publicUser(result.rows[0]) });
 });

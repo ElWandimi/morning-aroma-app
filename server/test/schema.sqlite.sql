@@ -15,6 +15,7 @@ CREATE TABLE users (
   notifications_enabled     INTEGER NOT NULL DEFAULT 1,
   reset_token_hash          TEXT,
   reset_token_expires       TEXT,
+  email_verified            INTEGER NOT NULL DEFAULT 0,
   created_at                TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -92,3 +93,15 @@ CREATE TABLE login_codes (
 );
 
 CREATE INDEX login_codes_email_idx ON login_codes (email);
+
+CREATE TABLE email_verification_codes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     TEXT NOT NULL,
+  code_hash   TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  consumed    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX email_verification_codes_user_id_idx ON email_verification_codes (user_id);

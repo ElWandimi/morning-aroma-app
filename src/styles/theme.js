@@ -204,6 +204,8 @@ a { color: inherit; text-decoration: none; }
 .login-steam { display: block; margin: 0 auto 4px; opacity: 0.8; }
 .login-eyebrow { text-align: left; }
 .login-switch-line { text-align: center; margin-top: 16px; font-size: 0.9rem; color: var(--almond-text); }
+.login-name-row { display: flex; gap: 12px; }
+.login-name-row > div { flex: 1; }
 .mode-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
 .mode-toggle button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border-radius: 999px; border: 1px solid var(--gold); background: var(--cream); cursor: pointer; font-size: 0.8rem; font-weight: 700; color: var(--chestnut); transition: background .15s ease, box-shadow .15s ease, transform .15s ease; }
 .mode-toggle button:hover { background: var(--steam); }

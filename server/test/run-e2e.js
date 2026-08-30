@@ -50,20 +50,117 @@ async function main() {
       body: JSON.stringify(body),
     }).then(async (r) => ({ status: r.status, body: await r.json() }));
 
+  // Real, since resend.mock.js captures actual sent emails rather than short-circuiting -- lets
+  // this suite extract a real verification code the same way a real user reading their real inbox
+  // would, not a value pulled directly out of the database that a real signup flow would never
+  // have access to. Mirrors the exact pattern the OTP tests below already use.
+  function extractCode() {
+    const emails = resendMock.getSentEmails();
+    const match = emails[emails.length - 1].text.match(/\n(\d{6})\n/);
+    return match && match[1];
+  }
+
+  // Registers, then completes the real email verification step /auth/register now requires
+  // before a real session token exists -- used everywhere else in this suite that just needs a
+  // real, signed-in user to test something unrelated, so every other test doesn't have to
+  // reimplement this same two-step dance itself. Temporarily ensures RESEND_API_KEY is set for
+  // its own duration and restores whatever it was before -- this needs the mock to actually
+  // capture the code regardless of whichever of this file's several other set/delete windows
+  // happen to be active at the moment it's called from elsewhere in the suite.
+  async function registerAndVerify(email, password, name) {
+    const previousKey = process.env.RESEND_API_KEY;
+    process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
+    resendMock.resetSentEmails();
+    const reg = await post("/auth/register", { email, password, name });
+    if (reg.status !== 201) {
+      if (previousKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousKey;
+      return reg;
+    }
+    const code = extractCode();
+    const result = await post("/auth/verify-email", { pendingToken: reg.body.pendingToken, code });
+    if (previousKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousKey;
+    return result;
+  }
+
   console.log("Register:");
-  let regLog = "";
-  const originalLogForReg = console.log;
-  console.log = (...args) => { regLog += args.join(" ") + "\n"; originalLogForReg(...args); };
-  const reg = await post("/auth/register", { email: "test@morningaroma.local", password: "correcthorsebattery", name: "Test User" });
-  console.log = originalLogForReg;
+  // Needs to actually go through the mocked provider so extractCode() below has a real, sent
+  // code to read -- this runs before any of this file's other RESEND_API_KEY set/delete windows,
+  // so without this, the mock would never get called at all (see utils/email.js's own early
+  // return when no key is configured) and there'd be nothing to extract.
+  process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
+  resendMock.resetSentEmails();
+  const reg = await post("/auth/register", { email: "test@morningaroma.local", password: "correcthorsebattery1", name: "Test User" });
   check("returns 201", reg.status === 201);
-  check("returns a user object with expected shape", reg.body.user && reg.body.user.email === "test@morningaroma.local");
-  check("the very first user on an empty database becomes super_admin", reg.body.user && reg.body.user.role === "super_admin");
-  check("returns a token", typeof reg.body.token === "string" && reg.body.token.length > 20);
-  check("never returns the password hash", !("password_hash" in (reg.body.user || {})) && !("passwordHash" in (reg.body.user || {})));
-  check("a welcome email fires on successful registration", regLog.includes("Welcome email to test@morningaroma.local"));
-  check("welcome email addresses the user by their actual registered name", regLog.includes("Hi Test User,"));
-  const token = reg.body.token;
+  check("requires email verification, not an immediate real session", reg.body.requiresEmailVerification === true && typeof reg.body.pendingToken === "string");
+  check("does not return a user or a real session token yet", !reg.body.user && !reg.body.token);
+  const testCode = extractCode();
+  check("a real verification code email was actually sent through the provider", !!testCode);
+
+  console.log("\nPOST /auth/verify-email with the wrong code:");
+  const wrongVerify = await post("/auth/verify-email", { pendingToken: reg.body.pendingToken, code: "000000" });
+  check("returns 400", wrongVerify.status === 400);
+
+  console.log("\nPOST /auth/verify-email with the real, correct code:");
+  resendMock.resetSentEmails();
+  const verify = await post("/auth/verify-email", { pendingToken: reg.body.pendingToken, code: testCode });
+  check("returns 200", verify.status === 200);
+  check("returns a user object with expected shape", verify.body.user && verify.body.user.email === "test@morningaroma.local");
+  check("the very first user on an empty database becomes super_admin", verify.body.user && verify.body.user.role === "super_admin");
+  check("returns a real token", typeof verify.body.token === "string" && verify.body.token.length > 20);
+  check("never returns the password hash", !("password_hash" in (verify.body.user || {})) && !("passwordHash" in (verify.body.user || {})));
+  const welcomeEmails = resendMock.getSentEmails();
+  check("the welcome email fires on successful verification, not at registration time", welcomeEmails.length === 1 && welcomeEmails[0].subject === "Welcome to Morning Aroma — where quality meets its scent.");
+  check("welcome email addresses the user by their actual registered name", welcomeEmails[0] && welcomeEmails[0].text.includes("Hi Test User,"));
+  const token = verify.body.token;
+
+  console.log("\nPOST /auth/verify-email again on an already-verified account, with the same, already-consumed code:");
+  const reusedVerify = await post("/auth/verify-email", { pendingToken: reg.body.pendingToken, code: testCode });
+  // Deliberately succeeds, not a 400 -- once an account is genuinely verified, this endpoint
+  // treats a repeat call as harmless rather than a confusing error (the real, intended scenario:
+  // two tabs both submitting the same valid code around the same time, where the second shouldn't
+  // fail just because the first already won the race). This grants nothing an already-verified
+  // account couldn't already get via a normal /auth/login anyway.
+  check("returns 200 -- already verified, treated as success rather than an error", reusedVerify.status === 200 && reusedVerify.body.token);
+
+  console.log("\nPOST /auth/login with the right password, before ever verifying a separate new account:");
+  resendMock.resetSentEmails();
+  const unverifiedReg = await post("/auth/register", { email: "neververified@morningaroma.local", password: "correcthorsebattery1", name: "Never Verified" });
+  const unverifiedLogin = await post("/auth/login", { email: "neververified@morningaroma.local", password: "correcthorsebattery1" });
+  check("still requires email verification, not a real session, even with the exact right password", unverifiedLogin.body.requiresEmailVerification === true && typeof unverifiedLogin.body.pendingToken === "string");
+  check("a fresh code was sent for this real sign-in attempt too, not just at the original registration", resendMock.getSentEmails().length >= 1);
+  const unverifiedCode = extractCode();
+  const unverifiedVerify = await post("/auth/verify-email", { pendingToken: unverifiedLogin.body.pendingToken, code: unverifiedCode });
+  check("verifying from the login-triggered code completes sign-in correctly", unverifiedVerify.status === 200 && unverifiedVerify.body.token);
+
+  console.log("\nPOST /auth/verify-email/resend, then verify with the newly-resent code:");
+  resendMock.resetSentEmails();
+  const resendReg = await post("/auth/register", { email: "resend-test@morningaroma.local", password: "correcthorsebattery1", name: "Resend Test" });
+  const resendReq = await post("/auth/verify-email/resend", { pendingToken: resendReg.body.pendingToken });
+  check("returns 200", resendReq.status === 200);
+  const resentCode = extractCode();
+  const resentVerify = await post("/auth/verify-email", { pendingToken: resendReg.body.pendingToken, code: resentCode });
+  check("the newly-resent code genuinely works", resentVerify.status === 200 && resentVerify.body.token);
+
+  console.log("\nLocked out after 3 wrong attempts, even against the real correct code:");
+  resendMock.resetSentEmails();
+  const lockoutReg = await post("/auth/register", { email: "verify-lockout@morningaroma.local", password: "correcthorsebattery1", name: "Lockout Test" });
+  const lockoutCode = extractCode();
+  await post("/auth/verify-email", { pendingToken: lockoutReg.body.pendingToken, code: "111111" });
+  await post("/auth/verify-email", { pendingToken: lockoutReg.body.pendingToken, code: "222222" });
+  const lockoutThird = await post("/auth/verify-email", { pendingToken: lockoutReg.body.pendingToken, code: "333333" });
+  check("returns 400 -- locked out after 3 wrong attempts", lockoutThird.status === 400);
+  const lockoutStillLocked = await post("/auth/verify-email", { pendingToken: lockoutReg.body.pendingToken, code: lockoutCode });
+  check("the real, correct code no longer works either, once locked out", lockoutStillLocked.status === 400);
+
+  console.log("\nAn expired code is rejected, even if it's otherwise correct (backdated directly in the DB, the same way the OTP and order-cancellation-window tests do):");
+  resendMock.resetSentEmails();
+  const expiryReg = await post("/auth/register", { email: "verify-expiry@morningaroma.local", password: "correcthorsebattery1", name: "Expiry Test" });
+  const expiryCode = extractCode();
+  const expiryUserId = require("jsonwebtoken").decode(expiryReg.body.pendingToken).sub;
+  const codeExpiredAt = new Date(Date.now() - 16 * 60 * 1000);
+  await query("UPDATE email_verification_codes SET expires_at = $1 WHERE user_id = $2", [codeExpiredAt, expiryUserId]);
+  const expiryVerify = await post("/auth/verify-email", { pendingToken: expiryReg.body.pendingToken, code: expiryCode });
+  check("returns 400 -- a real, correct code is still rejected once genuinely expired", expiryVerify.status === 400);
 
   console.log("\nSeed test products (real order tests below need real products to check prices against):");
   // Using the real POST /products endpoint, not a direct DB insert -- the same slugify(name-
@@ -77,8 +174,8 @@ async function main() {
   check("id matches what the rest of this suite expects", seedGeisha.body.product && seedGeisha.body.product.id === "geisha-panama");
 
   console.log("\nSecond registration (bootstrap should not apply again):");
-  const reg2 = await post("/auth/register", { email: "second@morningaroma.local", password: "correcthorsebattery", name: "Second User" });
-  check("returns 201", reg2.status === 201);
+  const reg2 = await registerAndVerify("second@morningaroma.local", "correcthorsebattery1", "Second User");
+  check("returns 200 once verified", reg2.status === 200);
   check("the second user is a normal customer, not admin", reg2.body.user && reg2.body.user.role === "customer");
   const customerId = reg2.body.user.id;
   const customerToken = reg2.body.token;
@@ -94,7 +191,11 @@ async function main() {
   console.log("\nGET /users as the real admin:");
   const usersAsAdmin = await get("/users", token);
   check("returns 200", usersAsAdmin.status === 200);
-  check("returns both real registered users", Array.isArray(usersAsAdmin.body.users) && usersAsAdmin.body.users.length === 2);
+  // 6, not 2 -- the email verification tests above genuinely register 4 more real accounts
+  // (test, neververified, resend-test, verify-lockout, verify-expiry) before this point, plus
+  // second@ just above. GET /users is unfiltered by email_verified, so even the lockout/expiry
+  // accounts that never completed verification still show up here as real rows.
+  check("returns every real registered user so far", Array.isArray(usersAsAdmin.body.users) && usersAsAdmin.body.users.length === 6);
   check("never returns a password hash", usersAsAdmin.body.users.every((u) => !("password_hash" in u) && !("passwordHash" in u)));
 
   console.log("\nPATCH /users/:id as a non-admin customer:");
@@ -120,8 +221,20 @@ async function main() {
   check("returns 200", demote.status === 200);
   check("permissions cleared on demotion", Array.isArray(demote.body.user.permissions) && demote.body.user.permissions.length === 0);
 
+  console.log("\nPATCH /users/:id — an admin can manually verify an account's email (a real support capability, e.g. for the account that got permanently locked out above):");
+  const lockoutUserId = require("jsonwebtoken").decode(lockoutReg.body.pendingToken).sub;
+  const manualVerifyAsCustomer = await patch(`/users/${lockoutUserId}`, { emailVerified: true }, customerToken);
+  check("returns 403 for a non-admin -- this is genuinely admin-only", manualVerifyAsCustomer.status === 403);
+  const manualVerifyBadValue = await patch(`/users/${lockoutUserId}`, { emailVerified: "yes" }, token);
+  check("returns 400 for a non-boolean value", manualVerifyBadValue.status === 400);
+  const manualVerify = await patch(`/users/${lockoutUserId}`, { emailVerified: true }, token);
+  check("returns 200", manualVerify.status === 200);
+  check("the account genuinely reflects verified now", manualVerify.body.user && manualVerify.body.user.emailVerified === true);
+  const lockoutNowSignsIn = await post("/auth/login", { email: "verify-lockout@morningaroma.local", password: "correcthorsebattery1" });
+  check("that real, previously-permanently-locked-out account can now genuinely sign in normally -- not just a cosmetic flag flip", lockoutNowSignsIn.status === 200 && typeof lockoutNowSignsIn.body.token === "string");
+
   console.log("\nPATCH /users/:id — refuse to demote the last remaining admin:");
-  const adminId = reg.body.user.id;
+  const adminId = verify.body.user.id;
   const demoteLastAdmin = await patch(`/users/${adminId}`, { role: "customer" }, token);
   check("returns 400, not 200 -- would lock everyone out of the admin dashboard", demoteLastAdmin.status === 400);
 
@@ -657,7 +770,7 @@ async function main() {
   check("the discontinued lot no longer appears in the public list", !greenAfterDelete.body.greenBeans.some((g) => g.id === testGreenBeanId));
 
   console.log("\nDuplicate registration:");
-  const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword", name: "Someone Else" });
+  const dup = await post("/auth/register", { email: "test@morningaroma.local", password: "differentpassword1", name: "Someone Else" });
   check("returns 409", dup.status === 409);
 
   console.log("\nWeak password rejected:");
@@ -665,11 +778,11 @@ async function main() {
   check("returns 400", weak.status === 400);
 
   console.log("\nInvalid email rejected:");
-  const badEmail = await post("/auth/register", { email: "not-an-email", password: "correcthorsebattery", name: "Bad" });
+  const badEmail = await post("/auth/register", { email: "not-an-email", password: "correcthorsebattery1", name: "Bad" });
   check("returns 400", badEmail.status === 400);
 
   console.log("\nLogin with correct credentials:");
-  const login = await post("/auth/login", { email: "test@morningaroma.local", password: "correcthorsebattery" });
+  const login = await post("/auth/login", { email: "test@morningaroma.local", password: "correcthorsebattery1" });
   check("returns 200", login.status === 200);
   check("returns a token", typeof login.body.token === "string");
 
@@ -721,7 +834,7 @@ async function main() {
   const confirmed = await post("/auth/password-reset/confirm", { token: resetToken, newPassword: "brandnewpassword123" });
   check("confirm returns 200", confirmed.status === 200);
 
-  const oldPwLogin = await post("/auth/login", { email: "test@morningaroma.local", password: "correcthorsebattery" });
+  const oldPwLogin = await post("/auth/login", { email: "test@morningaroma.local", password: "correcthorsebattery1" });
   check("old password no longer works after reset", oldPwLogin.status === 401);
 
   const newPwLogin = await post("/auth/login", { email: "test@morningaroma.local", password: "brandnewpassword123" });
@@ -734,13 +847,22 @@ async function main() {
   process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
   resendMock.resetSentEmails();
 
-  const regForEmail = await post("/auth/register", { email: "emailtest@morningaroma.local", password: "correcthorsebattery", name: "Email Test" });
+  const regForEmail = await post("/auth/register", { email: "emailtest@morningaroma.local", password: "correcthorsebattery1", name: "Email Test" });
   check("registration still succeeds with a real provider configured", regForEmail.status === 201);
   const sentAfterRegister = resendMock.getSentEmails();
-  check("a welcome email genuinely went through resend.emails.send(), not just the dev-mode log", sentAfterRegister.length === 1);
+  check("a real verification code email genuinely went through resend.emails.send(), not just the dev-mode log", sentAfterRegister.length === 1);
   check("sent to the right address", sentAfterRegister[0] && sentAfterRegister[0].to === "emailtest@morningaroma.local");
-  check("real subject line, not a placeholder", sentAfterRegister[0] && sentAfterRegister[0].subject === "Welcome to Morning Aroma — where quality meets its scent.");
+  check("real subject line, not a placeholder", sentAfterRegister[0] && /is your Morning Aroma verification code$/.test(sentAfterRegister[0].subject));
   check("does not link to a domain the project owner doesn't own", sentAfterRegister[0] && !sentAfterRegister[0].text.includes("morningaroma.com"));
+
+  console.log("\nThe welcome email fires once that account is actually verified, not before:");
+  const emailTestCode = extractCode();
+  resendMock.resetSentEmails();
+  await post("/auth/verify-email", { pendingToken: regForEmail.body.pendingToken, code: emailTestCode });
+  const sentAfterVerify = resendMock.getSentEmails();
+  check("a real welcome email genuinely went through resend.emails.send()", sentAfterVerify.length === 1);
+  check("sent to the right address", sentAfterVerify[0] && sentAfterVerify[0].to === "emailtest@morningaroma.local");
+  check("real subject line, not a placeholder", sentAfterVerify[0] && sentAfterVerify[0].subject === "Welcome to Morning Aroma — where quality meets its scent.");
 
   resendMock.resetSentEmails();
   await post("/auth/password-reset/request", { email: "emailtest@morningaroma.local" });
@@ -750,15 +872,15 @@ async function main() {
 
   console.log("\nRegistration still succeeds even if the email provider itself fails:");
   resendMock.setNextError("Simulated Resend outage");
-  const regDuringOutage = await post("/auth/register", { email: "duringoutage@morningaroma.local", password: "correcthorsebattery", name: "Outage Test" });
-  check("registration is fire-and-forget with respect to email -- a provider failure must never block or fail the actual signup", regDuringOutage.status === 201);
+  const regDuringOutage = await post("/auth/register", { email: "duringoutage@morningaroma.local", password: "correcthorsebattery1", name: "Outage Test" });
+  check("registration is fire-and-forget with respect to email -- a provider failure must never block or fail account creation itself", regDuringOutage.status === 201);
   resendMock.clearError();
   delete process.env.RESEND_API_KEY;
 
-  console.log("\nTwo-factor authentication -- register a fresh account to test against:");
+  console.log("\nTwo-factor authentication -- register a fresh, verified account to test against:");
   const otplib = require("otplib");
-  const twoFaReg = await post("/auth/register", { email: "twofa@morningaroma.local", password: "correcthorsebattery", name: "Two Factor Test" });
-  check("returns 201", twoFaReg.status === 201);
+  const twoFaReg = await registerAndVerify("twofa@morningaroma.local", "correcthorsebattery1", "Two Factor Test");
+  check("returns 200 once verified", twoFaReg.status === 200);
   const twoFaToken = twoFaReg.body.token;
 
   console.log("\nPOST /auth/2fa/verify-setup before ever calling /auth/2fa/setup:");
@@ -794,7 +916,7 @@ async function main() {
   check("returns 400, refuses to overwrite an already-enabled account's secret", setupAgain.status === 400);
 
   console.log("\nPOST /auth/login with the right password, now that 2FA is on:");
-  const twoFaLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  const twoFaLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery1" });
   check("returns 200", twoFaLogin.status === 200);
   check("does NOT return a real access token", twoFaLogin.body.token === undefined);
   check("signals a second step is required", twoFaLogin.body.requiresTwoFactor === true);
@@ -826,7 +948,7 @@ async function main() {
   check("returns 200", meWithRealToken.status === 200);
 
   console.log("\nSigning in again to test a backup code (each pending token is single-use per login attempt):");
-  const secondLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  const secondLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery1" });
   const pendingToken2 = secondLogin.body.pendingToken;
 
   console.log("\nPOST /auth/2fa/verify-login using a real backup code instead of a live TOTP code:");
@@ -836,7 +958,7 @@ async function main() {
   check("still returns a real, usable token", typeof verifyLoginBackup.body.token === "string");
 
   console.log("\nReusing that exact same backup code a second time:");
-  const thirdLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  const thirdLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery1" });
   const verifyLoginBackupReplay = await post("/auth/2fa/verify-login", { pendingToken: thirdLogin.body.pendingToken, code: backupCodes[0] });
   check("returns 401 -- an already-used backup code can never be replayed", verifyLoginBackupReplay.status === 401);
 
@@ -845,16 +967,16 @@ async function main() {
   check("returns 401", disableWrongPassword.status === 401);
 
   console.log("\nPOST /auth/2fa/disable with the real password:");
-  const disable = await post("/auth/2fa/disable", { password: "correcthorsebattery" }, twoFaRealToken);
+  const disable = await post("/auth/2fa/disable", { password: "correcthorsebattery1" }, twoFaRealToken);
   check("returns 200", disable.status === 200);
   check("confirms disabled", disable.body.enabled === false);
 
   console.log("\nPOST /auth/login again, now that 2FA is off:");
-  const loginAfterDisable = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery" });
+  const loginAfterDisable = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery1" });
   check("returns a real token directly again, no second step", typeof loginAfterDisable.body.token === "string" && loginAfterDisable.body.requiresTwoFactor === undefined);
 
-  console.log("\nGoogle sign-in -- register a real email+password account first, to prove Google resolves to it:");
-  const googleReg = await post("/auth/register", { email: "linked@morningaroma.local", password: "correcthorsebattery", name: "Linked Account" });
+  console.log("\nGoogle sign-in -- register a real, verified email+password account first, to prove Google resolves to it:");
+  const googleReg = await registerAndVerify("linked@morningaroma.local", "correcthorsebattery1", "Linked Account");
   const linkedUserId = googleReg.body.user.id;
 
   console.log("\nPOST /auth/google with no idToken at all:");
@@ -897,7 +1019,7 @@ async function main() {
   check("returns 200", meViaGoogle.status === 200);
 
   console.log("\nSetting up a fresh account with real 2FA on, to test it against Google sign-in (not reusing the earlier 2FA account -- it gets disabled again by the end of that test block):");
-  const googleTwoFaReg = await post("/auth/register", { email: "google-twofa@morningaroma.local", password: "correcthorsebattery", name: "Google Two Factor Test" });
+  const googleTwoFaReg = await registerAndVerify("google-twofa@morningaroma.local", "correcthorsebattery1", "Google Two Factor Test");
   const googleTwoFaSetup = await post("/auth/2fa/setup", {}, googleTwoFaReg.body.token);
   const googleTwoFaRealCode = await otplib.generate({ secret: googleTwoFaSetup.body.secret });
   await post("/auth/2fa/verify-setup", { code: googleTwoFaRealCode }, googleTwoFaReg.body.token);
@@ -970,7 +1092,7 @@ async function main() {
   check("returns 400 -- a real, correct code is still rejected once genuinely expired", otpExpired.status === 400);
 
   console.log("\nAn account with real 2FA on still gets gated behind it when signing in via OTP:");
-  const otpTwoFaReg = await post("/auth/register", { email: "otp-twofa@morningaroma.local", password: "correcthorsebattery", name: "OTP Two Factor Test" });
+  const otpTwoFaReg = await registerAndVerify("otp-twofa@morningaroma.local", "correcthorsebattery1", "OTP Two Factor Test");
   const otpTwoFaSetup = await post("/auth/2fa/setup", {}, otpTwoFaReg.body.token);
   const otpTwoFaRealCode = await otplib.generate({ secret: otpTwoFaSetup.body.secret });
   await post("/auth/2fa/verify-setup", { code: otpTwoFaRealCode }, otpTwoFaReg.body.token);
@@ -984,9 +1106,9 @@ async function main() {
   delete process.env.RESEND_API_KEY;
 
   console.log("\nStaff permissions -- previously cosmetic only (every route rejected any non-super_admin regardless of what was granted). Setting up a staff account with real, granted permissions:");
-  const staffCandidate = await post("/auth/register", { email: "staff-inventory@morningaroma.local", password: "correcthorsebattery", name: "Staff Inventory Test" });
+  const staffCandidate = await registerAndVerify("staff-inventory@morningaroma.local", "correcthorsebattery1", "Staff Inventory Test");
   const staffToken = staffCandidate.body.token;
-  await patch(`/users/${staffCandidate.body.user.id}`, { role: "staff", permissions: ["Inventory"] }, reg.body.token);
+  await patch(`/users/${staffCandidate.body.user.id}`, { role: "staff", permissions: ["Inventory"] }, token);
 
   console.log("\nA staff member granted \"Inventory\" can now genuinely create a green bean lot, not just see the panel and get rejected on every action:");
   const staffGreenBean = await post("/green-beans", {
@@ -1000,8 +1122,8 @@ async function main() {
   check("returns 403 -- \"Inventory\" doesn't imply \"Settings\" too", staffSettingsAttempt.status === 403);
 
   console.log("\nGranting a second staff member \"Customers\" specifically, to confirm the one real security boundary that must NOT have moved:");
-  const staffCustomersCandidate = await post("/auth/register", { email: "staff-customers@morningaroma.local", password: "correcthorsebattery", name: "Staff Customers Test" });
-  await patch(`/users/${staffCustomersCandidate.body.user.id}`, { role: "staff", permissions: ["Customers"] }, reg.body.token);
+  const staffCustomersCandidate = await registerAndVerify("staff-customers@morningaroma.local", "correcthorsebattery1", "Staff Customers Test");
+  await patch(`/users/${staffCustomersCandidate.body.user.id}`, { role: "staff", permissions: ["Customers"] }, token);
   const staffCustomersToken = staffCustomersCandidate.body.token;
 
   const staffViewUsers = await get("/users", staffCustomersToken);

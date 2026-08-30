@@ -88,6 +88,20 @@ made.`;
   await sendEmail("Login code email", email, subject, body);
 }
 
+async function sendEmailVerificationCode(user, code) {
+  const subject = `${code} is your Morning Aroma verification code`;
+  const body = `Hi ${user.name},
+
+Thanks for creating a Morning Aroma account. Enter this code to verify your email and finish
+signing in:
+
+${code}
+
+This code expires in 15 minutes and can only be used once. If you didn't create this account, you
+can safely ignore this email.`;
+  await sendEmail("Email verification code", user.email, subject, body);
+}
+
 // Sent to every super_admin the moment a customer cancels a paid order (see
 // routes/orders.js's POST /:id/cancel) -- a real refund is now owed, and this is the only signal
 // an admin gets that one is needed, since refunds are deliberately a manual, admin-triggered
@@ -111,4 +125,4 @@ customer once a refund is initiated -- initiating it promptly is what's in your 
   await sendEmail("Refund needed notification", adminEmail, subject, body);
 }
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendRefundNeededEmail };
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendEmailVerificationCode, sendRefundNeededEmail };

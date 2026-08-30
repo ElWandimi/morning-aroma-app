@@ -10,11 +10,12 @@ async function verifyPassword(plain, hash) {
   return bcrypt.compare(plain, hash);
 }
 
-// Same minimum this project's frontend already enforces on signup forms elsewhere — kept here so
-// the backend is the actual source of truth for validation, not just a passthrough that trusts
-// whatever the client sends.
+// Requires at least one letter and one number, minimum 6 characters -- the actual source of truth
+// for validation, not just a passthrough that trusts whatever the client sends. The frontend
+// enforces the same rule and shows the same message, but this is what actually decides.
 function isPasswordStrongEnough(plain) {
-  return typeof plain === "string" && plain.length >= 8;
+  if (typeof plain !== "string" || plain.length < 6) return false;
+  return /[A-Za-z]/.test(plain) && /[0-9]/.test(plain);
 }
 
 module.exports = { hashPassword, verifyPassword, isPasswordStrongEnough };

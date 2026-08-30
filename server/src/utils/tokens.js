@@ -46,6 +46,26 @@ function verifyPendingTwoFactorToken(token) {
   return payload;
 }
 
+// Same shape and reasoning as signPendingTwoFactorToken/verifyPendingTwoFactorToken above, for
+// email verification instead -- proves "this request already supplied the right password (or
+// completed Google/OTP)" without yet being a real, usable session token. Same 5-minute lifetime
+// and same "wrong type is rejected outright" guard.
+function signPendingEmailVerificationToken(user) {
+  return jwt.sign(
+    { sub: user.id, type: "email_verification_pending" },
+    requireSecret(),
+    { expiresIn: "5m" }
+  );
+}
+
+function verifyPendingEmailVerificationToken(token) {
+  const payload = jwt.verify(token, requireSecret());
+  if (payload.type !== "email_verification_pending") {
+    throw new Error("Not a valid email verification session token.");
+  }
+  return payload;
+}
+
 function verifyAccessToken(token) {
   return jwt.verify(token, requireSecret());
 }
@@ -64,4 +84,4 @@ function hashResetToken(raw) {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
-module.exports = { signAccessToken, verifyAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken };
+module.exports = { signAccessToken, verifyAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken, signPendingEmailVerificationToken, verifyPendingEmailVerificationToken };

@@ -56,6 +56,12 @@ export const api = {
     request("/auth/2fa/verify-login", { method: "POST", body: JSON.stringify({ pendingToken, code }) }),
   disableTwoFactor: (token, password) =>
     request("/auth/2fa/disable", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) }),
+  // Same reasoning as verifyTwoFactorLogin above -- deliberately no Authorization header, the
+  // pending token in the body is what authorizes this specific call.
+  verifyEmailCode: (pendingToken, code) =>
+    request("/auth/verify-email", { method: "POST", body: JSON.stringify({ pendingToken, code }) }),
+  resendEmailVerificationCode: (pendingToken) =>
+    request("/auth/verify-email/resend", { method: "POST", body: JSON.stringify({ pendingToken }) }),
   // idToken is what Google's own Sign-In button hands back client-side (see components/index.jsx's
   // GoogleSignInButton) -- a JWT Google itself already signed, not anything this app generates.
   loginWithGoogle: (idToken) =>
