@@ -90,19 +90,38 @@ async function query(text, params = []) {
   } else if (/INSERT INTO subscription_plans/i.test(sql) && /RETURNING \*/i.test(sql)) {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
+    // The real column name here is either product_id or course_id (routes/subscriptions.js
+    // builds this dynamically depending on what's being subscribed to) -- matched with a regex
+    // rather than two separate exact-string branches, since both shapes need identical handling
+    // otherwise.
     sql = sql.replace(
-      "INSERT INTO subscription_plans (product_id, interval, amount_kes_cents, paystack_plan_code) VALUES ($1, $2, $3, $4)",
-      "INSERT INTO subscription_plans (id, product_id, interval, amount_kes_cents, paystack_plan_code, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+      /INSERT INTO subscription_plans \((product_id|course_id), interval, amount_kes_cents, paystack_plan_code\) VALUES \(\$1, \$2, \$3, \$4\)/,
+      "INSERT INTO subscription_plans (id, $1, interval, amount_kes_cents, paystack_plan_code, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     );
     values = [id, ...values, createdAt];
   } else if (/INSERT INTO subscriptions/i.test(sql) && /RETURNING \*/i.test(sql)) {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     sql = sql.replace(/\s+/g, " ").replace(
-      "INSERT INTO subscriptions (user_id, product_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
-      "INSERT INTO subscriptions (id, user_id, product_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO subscriptions (user_id, product_id, course_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+      "INSERT INTO subscriptions (id, user_id, product_id, course_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     values = [id, ...values, createdAt];
+  } else if (/INSERT INTO courses/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO courses (id, name, category, blurb, instructor, lessons, monthly_price_cents) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      "INSERT INTO courses (id, name, category, blurb, instructor, lessons, monthly_price_cents, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    values = [...values, createdAt, createdAt];
+  } else if (/INSERT INTO academy_lifetime_access/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = crypto.randomUUID();
+    const purchasedAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO academy_lifetime_access (user_id, paystack_reference, amount_usd_cents, amount_kes_cents) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO academy_lifetime_access (id, user_id, paystack_reference, amount_usd_cents, amount_kes_cents, purchased_at) VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    values = [id, ...values, purchasedAt];
   } else {
     // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
     // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are

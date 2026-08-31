@@ -7,6 +7,7 @@ const productsRoutes = require("./routes/products");
 const greenBeansRoutes = require("./routes/greenBeans");
 const settingsRoutes = require("./routes/settings");
 const subscriptionsRoutes = require("./routes/subscriptions");
+const coursesRoutes = require("./routes/courses");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -57,6 +58,7 @@ app.use("/products", productsRoutes);
 app.use("/green-beans", greenBeansRoutes);
 app.use("/settings", settingsRoutes);
 app.use("/subscriptions", subscriptionsRoutes);
+app.use("/courses", coursesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

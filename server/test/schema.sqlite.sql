@@ -45,28 +45,47 @@ CREATE TABLE products (
   updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE courses (
+  id                    TEXT PRIMARY KEY,
+  name                  TEXT NOT NULL,
+  category              TEXT NOT NULL,
+  blurb                 TEXT NOT NULL,
+  instructor            TEXT NOT NULL,
+  lessons               INTEGER NOT NULL,
+  monthly_price_cents   INTEGER NOT NULL,
+  removed               INTEGER NOT NULL DEFAULT 0,
+  created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_courses_removed ON courses (removed);
+
 CREATE TABLE subscription_plans (
   id                   TEXT PRIMARY KEY,
-  product_id           TEXT NOT NULL REFERENCES products(id),
+  product_id           TEXT REFERENCES products(id),
+  course_id            TEXT REFERENCES courses(id),
   interval             TEXT NOT NULL,
   amount_kes_cents     INTEGER NOT NULL,
   paystack_plan_code   TEXT NOT NULL,
-  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (product_id, interval, amount_kes_cents)
+  created_at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE UNIQUE INDEX idx_subscription_plans_product_target ON subscription_plans (product_id, interval, amount_kes_cents) WHERE product_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_subscription_plans_course_target ON subscription_plans (course_id, interval, amount_kes_cents) WHERE course_id IS NOT NULL;
 
 CREATE TABLE subscriptions (
   id                          TEXT PRIMARY KEY,
   user_id                     TEXT NOT NULL REFERENCES users(id),
-  product_id                  TEXT NOT NULL REFERENCES products(id),
+  product_id                  TEXT REFERENCES products(id),
+  course_id                   TEXT REFERENCES courses(id),
   quantity                    INTEGER NOT NULL DEFAULT 1,
   interval                    TEXT NOT NULL,
   amount_usd_cents            INTEGER NOT NULL,
   amount_kes_cents            INTEGER NOT NULL,
   status                      TEXT NOT NULL DEFAULT 'active',
-  shipping_name               TEXT NOT NULL,
-  shipping_address            TEXT NOT NULL,
-  shipping_city               TEXT NOT NULL,
+  shipping_name               TEXT,
+  shipping_address            TEXT,
+  shipping_city               TEXT,
   paystack_customer_code      TEXT NOT NULL,
   paystack_subscription_code  TEXT NOT NULL,
   paystack_email_token        TEXT NOT NULL,
@@ -77,6 +96,15 @@ CREATE TABLE subscriptions (
 
 CREATE INDEX idx_subscriptions_user_id ON subscriptions (user_id);
 CREATE INDEX idx_subscriptions_status ON subscriptions (status);
+
+CREATE TABLE academy_lifetime_access (
+  id                  TEXT PRIMARY KEY,
+  user_id             TEXT NOT NULL REFERENCES users(id) UNIQUE,
+  paystack_reference  TEXT NOT NULL UNIQUE,
+  amount_usd_cents    INTEGER NOT NULL,
+  amount_kes_cents    INTEGER NOT NULL,
+  purchased_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE green_beans (
   id                  TEXT PRIMARY KEY,

@@ -12,7 +12,7 @@ const router = express.Router();
 const VALID_KEYS = new Set([
   "tagline", "announcementEnabled", "announcementText", "contactEmail", "whatsappNumber",
   "phoneNumber", "businessName", "businessAddress", "taxId", "taxRatePercent", "invoiceNotes",
-  "instagramHandle", "facebookUrl", "notificationTypes",
+  "instagramHandle", "facebookUrl", "notificationTypes", "academyLifetimePriceCents",
 ]);
 
 // Mirrors DEFAULT_SETTINGS in src/data/index.js -- duplicated here (the backend can't import
@@ -36,6 +36,10 @@ const FALLBACK_SETTINGS = {
   instagramHandle: "",
   facebookUrl: "",
   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
+  // A real, reasonable starting value -- roughly what a year of two or three individual courses
+  // would cost combined, making lifetime access a genuine value proposition rather than an
+  // arbitrary placeholder. Admin-editable from here on, same as every other setting.
+  academyLifetimePriceCents: 24900,
 };
 
 // Public -- the announcement banner and structured data (business name, contact info) are shown

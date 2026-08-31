@@ -55,9 +55,10 @@ async function handleSubscriptionRenewalCharge(chargeData) {
     return;
   }
 
-  // A customer could have more than one active subscription (e.g. two different coffees) --
-  // customer_code alone doesn't uniquely identify which one this renewal belongs to, so this
-  // narrows further by the real charge amount, which is genuinely specific to one subscription.
+  // A customer could have more than one active subscription (e.g. two different coffees, or a
+  // coffee and a course) -- customer_code alone doesn't uniquely identify which one this renewal
+  // belongs to, so this narrows further by the real charge amount, which is genuinely specific to
+  // one subscription.
   const candidates = await query(
     "SELECT * FROM subscriptions WHERE paystack_customer_code = $1 AND status != 'cancelled'",
     [customerCode]
@@ -70,6 +71,20 @@ async function handleSubscriptionRenewalCharge(chargeData) {
     return;
   }
   const subscription = matches[0];
+
+  if (subscription.course_id) {
+    // A course renewal grants nothing new to create -- the subscription's own status='active' row
+    // is what gates access (see routes/courses.js and the frontend's access check), so a
+    // successful renewal charge just needs its next_payment_date kept current. Naturally
+    // idempotent on its own: reprocessing the same event just sets the same value again, unlike a
+    // product renewal, which would otherwise create a second real order.
+    await query("UPDATE subscriptions SET next_payment_date = $1, updated_at = now() WHERE id = $2", [
+      chargeData.paid_at ? new Date(chargeData.paid_at) : null,
+      subscription.id,
+    ]);
+    console.log(`Paystack webhook: subscription renewal charge ${reference} confirmed continued access for course subscription ${subscription.id}.`);
+    return;
+  }
 
   const productResult = await query("SELECT * FROM products WHERE id = $1", [subscription.product_id]);
   const product = productResult.rows[0];

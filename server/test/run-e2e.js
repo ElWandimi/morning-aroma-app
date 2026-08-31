@@ -642,7 +642,7 @@ async function main() {
   check("returns 200", subAdminList.status === 200);
   check("includes real subscriptions from more than one customer", subAdminList.body.subscriptions.length >= 2);
   const subAdminEntry = subAdminList.body.subscriptions.find((s) => s.id === subId);
-  check("includes the real customer's email and name, and the real product's name, joined in -- not just raw IDs", subAdminEntry && subAdminEntry.userEmail === "second@morningaroma.local" && !!subAdminEntry.productName);
+  check("includes the real customer's email and name, and the real product's name, joined in -- not just raw IDs", subAdminEntry && subAdminEntry.userEmail === "second@morningaroma.local" && subAdminEntry.targetType === "product" && !!subAdminEntry.targetName);
 
   console.log("\nWebhook — a real subscription renewal charge creates a brand-new order, since one doesn't already exist the way it would for an ordinary checkout:");
   const renewalReference = `sub_renewal_${Date.now()}`;
@@ -690,6 +690,119 @@ async function main() {
   const secondCustomerSubs = await get("/subscriptions/mine", secondSubReg.body.token);
   const secondCustomerSub = secondCustomerSubs.body.subscriptions.find((s) => s.id);
   check("that customer's own subscription now shows cancelled", secondCustomerSub && secondCustomerSub.status === "cancelled");
+
+  console.log("\nReal Academy courses -- moved out of static frontend data into the database:");
+  console.log("POST /courses as a non-admin:");
+  const courseAsCustomer = await post("/courses", { name: "Test Course", category: "Test", blurb: "A real test course.", instructor: "Test Instructor", lessons: 3, monthlyPriceCents: 999 }, customerToken);
+  check("returns 403", courseAsCustomer.status === 403);
+
+  console.log("\nPOST /courses as the real admin:");
+  const courseCreate = await post("/courses", { name: "Test Course", category: "Test", blurb: "A real test course.", instructor: "Test Instructor", lessons: 3, monthlyPriceCents: 999 }, token);
+  check("returns 201", courseCreate.status === 201);
+  check("the real annual price is derived at 20% off 12 months, not stored separately", courseCreate.body.course && courseCreate.body.course.annualPriceCents === Math.round(999 * 12 * 0.8));
+  const testCourseId = courseCreate.body.course.id;
+
+  console.log("\nGET /courses -- public, no auth needed:");
+  const coursesNoAuth = await get("/courses");
+  check("returns 200 without any token", coursesNoAuth.status === 200);
+  check("includes the real course just created", coursesNoAuth.body.courses.some((c) => c.id === testCourseId));
+
+  console.log("\nPATCH /courses/:id -- real admin price editing, the actual point of this migration:");
+  const coursePriceEdit = await patch(`/courses/${testCourseId}`, { monthlyPriceCents: 1499 }, token);
+  check("returns 200", coursePriceEdit.status === 200);
+  check("the real price genuinely changed", coursePriceEdit.body.course && coursePriceEdit.body.course.monthlyPriceCents === 1499);
+  check("the derived annual price updated to match", coursePriceEdit.body.course && coursePriceEdit.body.course.annualPriceCents === Math.round(1499 * 12 * 0.8));
+
+  console.log("\nDELETE /courses/:id -- soft delete, matching how products handle discontinuing:");
+  const courseDeleteRes = await fetch(base + `/courses/${testCourseId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  const courseDelete = { status: courseDeleteRes.status, body: await courseDeleteRes.json() };
+  check("returns 200", courseDelete.status === 200);
+  const coursesAfterDelete = await get("/courses");
+  check("no longer appears in the public list", !coursesAfterDelete.body.courses.some((c) => c.id === testCourseId));
+
+  console.log("\nA fresh course to actually subscribe to (the deleted one above is intentionally gone):");
+  const liveCourseCreate = await post("/courses", { name: "Espresso Basics", category: "Barista Skills", blurb: "Real espresso fundamentals.", instructor: "Test Instructor", lessons: 5, monthlyPriceCents: 1000 }, token);
+  const liveCourseId = liveCourseCreate.body.course.id;
+
+  console.log("\nPOST /subscriptions with both productId and courseId:");
+  const subBothTargets = await post("/subscriptions", { reference: "irrelevant", productId: "sl28-kenya", courseId: liveCourseId, interval: "monthly" }, customerToken);
+  check("returns 400 -- exactly one target, never both", subBothTargets.status === 400);
+
+  console.log("\nPOST /subscriptions with neither productId nor courseId:");
+  const subNoTarget = await post("/subscriptions", { reference: "irrelevant", interval: "monthly" }, customerToken);
+  check("returns 400", subNoTarget.status === 400);
+
+  console.log("\nPOST /subscriptions for a real course, monthly:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 130000, authorization: { authorization_code: "AUTH_course_monthly" } });
+  paystackMock.setNextPlanResponse({ plan_code: "PLN_test_course_monthly" });
+  paystackMock.setNextCustomerResponse({ customer_code: "CUS_test_course_sub" });
+  paystackMock.setNextSubscriptionResponse({ subscription_code: "SUB_test_course_001", email_token: "test_email_token_course_001", next_payment_date: "2026-10-01T00:00:00.000Z" });
+  const courseSubMonthly = await post("/subscriptions", { reference: "course-ref-monthly", courseId: liveCourseId, interval: "monthly" }, customerToken);
+  check("returns 201", courseSubMonthly.status === 201);
+  check("the real course price is used, no quantity multiplication (courses aren't shipped items)", courseSubMonthly.body.subscription && courseSubMonthly.body.subscription.amountUsdCents === 1000);
+  check("no shipping fields at all -- a course subscription has nothing to ship", courseSubMonthly.body.subscription && courseSubMonthly.body.subscription.shippingName === null && courseSubMonthly.body.subscription.shippingCity === null);
+  const courseSubId = courseSubMonthly.body.subscription.id;
+
+  console.log("\nPOST /subscriptions for the same course, annually -- the real 20% discount:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 1248000, authorization: { authorization_code: "AUTH_course_annual" } });
+  paystackMock.setNextPlanResponse({ plan_code: "PLN_test_course_annual" });
+  paystackMock.setNextCustomerResponse({ customer_code: "CUS_test_course_sub_2" });
+  paystackMock.setNextSubscriptionResponse({ subscription_code: "SUB_test_course_002", email_token: "test_email_token_course_002" });
+  const secondCourseSubReg = await registerAndVerify(`course-sub-${Date.now()}@example.com`, "correcthorsebattery1", "Course Subscriber");
+  const courseSubAnnual = await post("/subscriptions", { reference: "course-ref-annual", courseId: liveCourseId, interval: "annually" }, secondCourseSubReg.body.token);
+  check("returns 201", courseSubAnnual.status === 201);
+  // 1000 cents/month x 12 x 0.8 (20% off) = 9600 cents/year -- the real, applied discount, not
+  // just a number shown on the frontend that the actual charge might not match.
+  check("the real 20% annual discount is genuinely applied to what's actually charged", courseSubAnnual.body.subscription && courseSubAnnual.body.subscription.amountUsdCents === 9600);
+
+  console.log("\nWebhook -- a course renewal charge confirms continued access, but creates NO order (unlike a product renewal):");
+  const ordersBeforeCourseRenewal = await get("/orders/mine", customerToken);
+  const courseRenewalReference = `course_renewal_${Date.now()}`;
+  const courseRenewalPayload = JSON.stringify({
+    event: "charge.success",
+    data: { reference: courseRenewalReference, status: "success", amount: 130000, currency: "KES", paid_at: "2026-11-01T00:00:00.000Z", customer: { customer_code: "CUS_test_course_sub" }, plan: { plan_code: "PLN_test_course_monthly" } },
+  });
+  const courseRenewalWebhook = await postWebhook(courseRenewalPayload, signBody(courseRenewalPayload));
+  check("returns 200", courseRenewalWebhook.status === 200);
+  const ordersAfterCourseRenewal = await get("/orders/mine", customerToken);
+  check("genuinely created no new order -- a course renewal isn't a shipment", ordersAfterCourseRenewal.body.orders.length === ordersBeforeCourseRenewal.body.orders.length);
+
+  console.log("\nGET /subscriptions as admin -- includes both a product subscription and a course subscription correctly:");
+  const subsAdminWithCourse = await get("/subscriptions", token);
+  const courseEntry = subsAdminWithCourse.body.subscriptions.find((s) => s.id === courseSubId);
+  check("the course subscription is present with the right target type and name", courseEntry && courseEntry.targetType === "course" && courseEntry.targetName === "Espresso Basics");
+
+  console.log("\nReal one-time lifetime Academy access -- fundamentally not a subscription, no recurring charge at all:");
+  console.log("POST /subscriptions/lifetime with no reference:");
+  const lifetimeNoRef = await post("/subscriptions/lifetime", {}, customerToken);
+  check("returns 400", lifetimeNoRef.status === 400);
+
+  console.log("\nPOST /subscriptions/lifetime with the wrong amount paid:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 100 }); // nowhere near the real settings price
+  const lifetimeWrongAmount = await post("/subscriptions/lifetime", { reference: "lifetime-wrong-amount" }, customerToken);
+  check("returns 400 -- the amount paid doesn't match the real, current lifetime price", lifetimeWrongAmount.status === 400);
+
+  console.log("\nPOST /subscriptions/lifetime with the real, correct amount:");
+  // Default academyLifetimePriceCents is 24900 (see server/src/routes/settings.js) -- at the
+  // mock's fixed 130 KES/USD rate: 249 x 130 x 100 = 3,237,000 KES cents.
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 3237000 });
+  const lifetimePurchase = await post("/subscriptions/lifetime", { reference: "lifetime-correct-amount" }, customerToken);
+  check("returns 201", lifetimePurchase.status === 201);
+  check("confirms real lifetime access was granted", lifetimePurchase.body.hasLifetimeAccess === true);
+
+  console.log("\nGET /subscriptions/lifetime/mine:");
+  const lifetimeMine = await get("/subscriptions/lifetime/mine", customerToken);
+  check("returns 200", lifetimeMine.status === 200);
+  check("confirms real, persisted lifetime access", lifetimeMine.body.hasLifetimeAccess === true);
+
+  console.log("\nBuying lifetime access a second time:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 3237000 });
+  const lifetimeSecondPurchase = await post("/subscriptions/lifetime", { reference: "lifetime-second-attempt" }, customerToken);
+  check("returns 400 -- already has real lifetime access, can't buy it twice", lifetimeSecondPurchase.status === 400);
+
+  console.log("\nA different customer checking lifetime access before ever buying it:");
+  const lifetimeMineOther = await get("/subscriptions/lifetime/mine", secondCourseSubReg.body.token);
+  check("correctly reports no lifetime access for a customer who never purchased it", lifetimeMineOther.body.hasLifetimeAccess === false);
 
   console.log("\nGET /products — public, no auth needed:");
   const productsNoAuth = await get("/products");

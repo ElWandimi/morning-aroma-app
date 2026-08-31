@@ -1005,5 +1005,6 @@ export const DEFAULT_SETTINGS = {
   // default, but an admin who doesn't want to be interrupted by, say, live chat pings can turn
   // just that one off without losing the others.
   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
+  academyLifetimePriceCents: 24900,
 };
 

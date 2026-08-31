@@ -1,0 +1,592 @@
+diff --git a/server/src/app.js b/server/src/app.js
+index a20d3ad..895b4dd 100644
+--- a/server/src/app.js
++++ b/server/src/app.js
+@@ -7,6 +7,7 @@ const productsRoutes = require("./routes/products");
+ const greenBeansRoutes = require("./routes/greenBeans");
+ const settingsRoutes = require("./routes/settings");
+ const subscriptionsRoutes = require("./routes/subscriptions");
++const coursesRoutes = require("./routes/courses");
+ const webhooksRoutes = require("./routes/webhooks");
+ 
+ const app = express();
+@@ -57,6 +58,7 @@ app.use("/products", productsRoutes);
+ app.use("/green-beans", greenBeansRoutes);
+ app.use("/settings", settingsRoutes);
+ app.use("/subscriptions", subscriptionsRoutes);
++app.use("/courses", coursesRoutes);
+ 
+ app.use((req, res) => {
+   res.status(404).json({ error: "Not found" });
+diff --git a/server/src/routes/settings.js b/server/src/routes/settings.js
+index 989c634..f6aa393 100644
+--- a/server/src/routes/settings.js
++++ b/server/src/routes/settings.js
+@@ -12,7 +12,7 @@ const router = express.Router();
+ const VALID_KEYS = new Set([
+   "tagline", "announcementEnabled", "announcementText", "contactEmail", "whatsappNumber",
+   "phoneNumber", "businessName", "businessAddress", "taxId", "taxRatePercent", "invoiceNotes",
+-  "instagramHandle", "facebookUrl", "notificationTypes",
++  "instagramHandle", "facebookUrl", "notificationTypes", "academyLifetimePriceCents",
+ ]);
+ 
+ // Mirrors DEFAULT_SETTINGS in src/data/index.js -- duplicated here (the backend can't import
+@@ -36,6 +36,10 @@ const FALLBACK_SETTINGS = {
+   instagramHandle: "",
+   facebookUrl: "",
+   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
++  // A real, reasonable starting value -- roughly what a year of two or three individual courses
++  // would cost combined, making lifetime access a genuine value proposition rather than an
++  // arbitrary placeholder. Admin-editable from here on, same as every other setting.
++  academyLifetimePriceCents: 24900,
+ };
+ 
+ // Public -- the announcement banner and structured data (business name, contact info) are shown
+diff --git a/server/src/routes/subscriptions.js b/server/src/routes/subscriptions.js
+index d82687e..69f130b 100644
+--- a/server/src/routes/subscriptions.js
++++ b/server/src/routes/subscriptions.js
+@@ -20,6 +20,7 @@ function publicSubscription(row) {
+   return {
+     id: row.id,
+     productId: row.product_id,
++    courseId: row.course_id,
+     quantity: row.quantity,
+     interval: row.interval,
+     amountUsdCents: row.amount_usd_cents,
+@@ -33,23 +34,24 @@ function publicSubscription(row) {
+   };
+ }
+ 
+-// Finds the cached Paystack Plan for this exact product+interval+KES-price, creating a real one
+-// via Paystack's API the first time any customer subscribes to this combination -- see
+-// migrations/011_subscriptions.sql for why this is cached rather than created fresh per
+-// subscriber, and why it's keyed on the KES amount specifically (Plans exist in a fixed
+-// currency, and this app's real charge currency is KES, not USD).
+-async function findOrCreateSubscriptionPlan(product, interval, unitAmountKesCents) {
++// Finds the cached Paystack Plan for this exact target (a product OR a course)+interval+KES-price,
++// creating a real one via Paystack's API the first time any customer subscribes to this exact
++// combination -- see migrations/011_subscriptions.sql and 012_academy.sql for why this is cached
++// rather than created fresh per subscriber, and why it's keyed on the KES amount specifically
++// (Plans exist in a fixed currency, and this app's real charge currency is KES, not USD).
++async function findOrCreateSubscriptionPlan(target, targetType, interval, unitAmountKesCents) {
++  const targetColumn = targetType === "product" ? "product_id" : "course_id";
+   const existing = await query(
+-    "SELECT * FROM subscription_plans WHERE product_id = $1 AND interval = $2 AND amount_kes_cents = $3",
+-    [product.id, interval, unitAmountKesCents]
++    `SELECT * FROM subscription_plans WHERE ${targetColumn} = $1 AND interval = $2 AND amount_kes_cents = $3`,
++    [target.id, interval, unitAmountKesCents]
+   );
+   if (existing.rows[0]) return existing.rows[0];
+ 
+-  const planName = `${product.name} — ${interval}`;
++  const planName = `${target.name} — ${interval}`;
+   const paystackPlan = await createPlan(planName, unitAmountKesCents, interval);
+   const inserted = await query(
+-    "INSERT INTO subscription_plans (product_id, interval, amount_kes_cents, paystack_plan_code) VALUES ($1, $2, $3, $4) RETURNING *",
+-    [product.id, interval, unitAmountKesCents, paystackPlan.plan_code]
++    `INSERT INTO subscription_plans (${targetColumn}, interval, amount_kes_cents, paystack_plan_code) VALUES ($1, $2, $3, $4) RETURNING *`,
++    [target.id, interval, unitAmountKesCents, paystackPlan.plan_code]
+   );
+   return inserted.rows[0];
+ }
+@@ -61,20 +63,34 @@ async function findOrCreateSubscriptionPlan(product, interval, unitAmountKesCent
+ // there is no separate "set up a subscription without paying first" path, matching Paystack's own
+ // real requirement, not a limitation invented here.
+ router.post("/", requireAuth, async (req, res) => {
+-  const { reference, productId, quantity, interval, shippingName, shippingAddress, shippingCity } = req.body || {};
++  const { reference, productId, courseId, quantity, interval, shippingName, shippingAddress, shippingCity } = req.body || {};
+ 
+   if (!reference || typeof reference !== "string") return res.status(400).json({ error: "A real, already-completed payment reference is required." });
+-  if (!productId || typeof productId !== "string") return res.status(400).json({ error: "productId is required." });
+-  const qty = Number(quantity) || 1;
+-  if (!Number.isInteger(qty) || qty < 1) return res.status(400).json({ error: "quantity must be a positive whole number." });
++  if (!productId && !courseId) return res.status(400).json({ error: "Either productId or courseId is required." });
++  if (productId && courseId) return res.status(400).json({ error: "Provide either productId or courseId, not both." });
+   if (!VALID_INTERVALS.includes(interval)) return res.status(400).json({ error: `interval must be one of: ${VALID_INTERVALS.join(", ")}` });
+-  if (!shippingName?.trim() || !shippingAddress?.trim() || !shippingCity?.trim()) {
+-    return res.status(400).json({ error: "Shipping name, address, and city are all required." });
+-  }
+ 
+-  const productResult = await query("SELECT * FROM products WHERE id = $1 AND removed = false", [productId]);
+-  const product = productResult.rows[0];
+-  if (!product) return res.status(400).json({ error: "This product is no longer available." });
++  const targetType = productId ? "product" : "course";
++  let target, qty = 1, unitAmountUsdCents;
++
++  if (targetType === "product") {
++    qty = Number(quantity) || 1;
++    if (!Number.isInteger(qty) || qty < 1) return res.status(400).json({ error: "quantity must be a positive whole number." });
++    if (!shippingName?.trim() || !shippingAddress?.trim() || !shippingCity?.trim()) {
++      return res.status(400).json({ error: "Shipping name, address, and city are all required for a product subscription." });
++    }
++    const productResult = await query("SELECT * FROM products WHERE id = $1 AND removed = false", [productId]);
++    target = productResult.rows[0];
++    if (!target) return res.status(400).json({ error: "This product is no longer available." });
++    unitAmountUsdCents = target.price_cents * qty;
++  } else {
++    const courseResult = await query("SELECT * FROM courses WHERE id = $1 AND removed = false", [courseId]);
++    target = courseResult.rows[0];
++    if (!target) return res.status(400).json({ error: "This course is no longer available." });
++    // The real 20% annual discount, applied here where it actually determines what Paystack
++    // bills -- not just a number shown on the frontend that the real charge might not match.
++    unitAmountUsdCents = interval === "annually" ? Math.round(target.monthly_price_cents * 12 * 0.8) : target.monthly_price_cents;
++  }
+ 
+   let transaction;
+   try {
+@@ -89,20 +105,19 @@ router.post("/", requireAuth, async (req, res) => {
+   const userResult = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
+   const user = userResult.rows[0];
+ 
+-  // product.price_cents is USD cents (the same figure every other price in this catalog is
+-  // stored in) -- but Paystack Plans need a fixed amount in the currency actually being charged,
+-  // and this app charges in KES (see paymentVerification.js's own exchange-rate conversion for
+-  // ordinary orders). Converting here, not passing the USD figure straight through as if it were
+-  // already KES, which would silently and drastically undercharge every subscriber. Rounded to
+-  // whole KES (Paystack's amount field is in the smallest unit -- cents -- so x100 after
+-  // rounding) rather than carrying fractional-cent precision that serves no real purpose here.
++  // Both products and courses store their real price in USD cents -- but Paystack Plans need a
++  // fixed amount in the currency actually being charged, and this app charges in KES (see
++  // paymentVerification.js's own exchange-rate conversion for ordinary orders). Converting here,
++  // not passing the USD figure straight through as if it were already KES, which would silently
++  // and drastically undercharge every subscriber. Rounded to whole KES (Paystack's amount field
++  // is in the smallest unit -- cents -- so x100 after rounding) rather than carrying
++  // fractional-cent precision that serves no real purpose here.
+   let usdToKesRate;
+   try {
+     usdToKesRate = await getUsdToKesRate();
+   } catch (e) {
+     return res.status(502).json({ error: "Couldn't confirm the exchange rate to set up this subscription. Please try again shortly." });
+   }
+-  const unitAmountUsdCents = product.price_cents * qty;
+   const unitAmountKesCents = Math.round((unitAmountUsdCents / 100) * usdToKesRate) * 100;
+ 
+   let plan;
+@@ -113,7 +128,7 @@ router.post("/", requireAuth, async (req, res) => {
+     // version, not a bug: every subscription still charges the correct, current amount either
+     // way, just with less Plan reuse on Paystack's own dashboard than a rate-rounding scheme
+     // could achieve.
+-    plan = await findOrCreateSubscriptionPlan(product, interval, unitAmountKesCents);
++    plan = await findOrCreateSubscriptionPlan(target, targetType, interval, unitAmountKesCents);
+   } catch (e) {
+     return res.status(502).json({ error: e.message });
+   }
+@@ -136,11 +151,16 @@ router.post("/", requireAuth, async (req, res) => {
+   }
+ 
+   const inserted = await query(
+-    `INSERT INTO subscriptions (user_id, product_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date)
+-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
++    `INSERT INTO subscriptions (user_id, product_id, course_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date)
++     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+     [
+-      req.user.sub, productId, qty, interval, unitAmountUsdCents, unitAmountKesCents,
+-      shippingName.trim(), shippingAddress.trim(), shippingCity.trim(),
++      req.user.sub, productId || null, courseId || null, qty, interval, unitAmountUsdCents, unitAmountKesCents,
++      // No real shipping for a course -- always null, never a placeholder string, so
++      // publicSubscription and any downstream display code can rely on its actual presence to
++      // tell a product subscription from a course one, not just courseId/productId.
++      targetType === "product" ? shippingName.trim() : null,
++      targetType === "product" ? shippingAddress.trim() : null,
++      targetType === "product" ? shippingCity.trim() : null,
+       customer.customer_code, paystackSubscription.subscription_code, paystackSubscription.email_token,
+       paystackSubscription.next_payment_date || null,
+     ]
+@@ -203,15 +223,79 @@ router.post("/:id/cancel", requireAuth, async (req, res) => {
+   res.json({ subscription: publicSubscription(updated.rows[0]) });
+ });
+ 
++// A one-time, non-recurring purchase granting permanent access to every course, including ones
++// added later. Fundamentally not a subscription -- no Paystack Subscription object involved at
++// all, just a real, verified one-time payment, same trust boundary as an ordinary order (never
++// take a client's word that a payment succeeded).
++router.post("/lifetime", requireAuth, async (req, res) => {
++  const { reference } = req.body || {};
++  if (!reference || typeof reference !== "string") return res.status(400).json({ error: "A real, already-completed payment reference is required." });
++
++  const existing = await query("SELECT id FROM academy_lifetime_access WHERE user_id = $1", [req.user.sub]);
++  if (existing.rows[0]) return res.status(400).json({ error: "You already have lifetime access." });
++
++  let transaction;
++  try {
++    transaction = await verifyTransaction(reference);
++  } catch (e) {
++    return res.status(502).json({ error: e.message });
++  }
++  if (transaction.status !== "success") return res.status(400).json({ error: "That payment wasn't successful." });
++  if (transaction.currency !== "KES") return res.status(400).json({ error: `Expected a KES payment, got ${transaction.currency}.` });
++
++  const settingsResult = await query("SELECT data FROM settings WHERE id = 1", []);
++  // Same real fallback settings.js itself falls back to, for the same reason: if this
++  // deployment's settings row somehow doesn't have this key yet, a real, sensible default beats
++  // silently treating lifetime access as free.
++  const priceUsdCents = (settingsResult.rows[0] && settingsResult.rows[0].data.academyLifetimePriceCents) || 24900;
++
++  // Same 5% exchange-rate tolerance and reasoning as ordinary order verification
++  // (paymentVerification.js) -- the price is locked in USD, but the customer pays in KES, and
++  // rates genuinely move between when the price was shown and when payment completes.
++  let usdToKesRate;
++  try {
++    usdToKesRate = await getUsdToKesRate();
++  } catch (e) {
++    return res.status(502).json({ error: "Couldn't confirm the exchange rate to verify this payment. Please try again shortly." });
++  }
++  const expectedKesCents = Math.round((priceUsdCents / 100) * usdToKesRate * 100);
++  const tolerance = 0.05;
++  const withinTolerance = Math.abs(transaction.amount - expectedKesCents) <= expectedKesCents * tolerance;
++  if (!withinTolerance) return res.status(400).json({ error: "The amount paid doesn't match the current lifetime access price." });
++
++  try {
++    const inserted = await query(
++      "INSERT INTO academy_lifetime_access (user_id, paystack_reference, amount_usd_cents, amount_kes_cents) VALUES ($1, $2, $3, $4) RETURNING *",
++      [req.user.sub, reference, priceUsdCents, transaction.amount]
++    );
++    res.status(201).json({ hasLifetimeAccess: true, purchasedAt: inserted.rows[0].purchased_at });
++  } catch (e) {
++    // Same real race/replay protection as ordinary order verification -- this specific reference
++    // has already settled a different purchase.
++    if (e.code === "23505") return res.status(400).json({ error: "This payment reference has already been used." });
++    throw e;
++  }
++});
++
++router.get("/lifetime/mine", requireAuth, async (req, res) => {
++  const result = await query("SELECT * FROM academy_lifetime_access WHERE user_id = $1", [req.user.sub]);
++  res.json({ hasLifetimeAccess: !!result.rows[0], purchasedAt: result.rows[0] ? result.rows[0].purchased_at : null });
++});
++
+ // Read-only admin visibility -- per the real scope decision for this feature, customers
+ // self-manage their own subscriptions; admin just needs to see what's happening for support
+ // purposes, not a separate management surface.
+ router.get("/", requireAuth, requirePermission("Orders"), async (req, res) => {
++  // LEFT JOIN against both, not an INNER JOIN against just products -- a subscription's
++  // product_id or course_id is one or the other, never both (see the CHECK constraint in
++  // migrations/012_academy.sql), so an INNER JOIN on products alone would have silently excluded
++  // every real course subscription from this list entirely.
+   const result = await query(
+-    `SELECT s.*, u.email as user_email, u.name as user_name, p.name as product_name
++    `SELECT s.*, u.email as user_email, u.name as user_name, p.name as product_name, c.name as course_name
+      FROM subscriptions s
+      JOIN users u ON u.id = s.user_id
+-     JOIN products p ON p.id = s.product_id
++     LEFT JOIN products p ON p.id = s.product_id
++     LEFT JOIN courses c ON c.id = s.course_id
+      ORDER BY s.created_at DESC`,
+     []
+   );
+@@ -220,7 +304,8 @@ router.get("/", requireAuth, requirePermission("Orders"), async (req, res) => {
+       ...publicSubscription(row),
+       userEmail: row.user_email,
+       userName: row.user_name,
+-      productName: row.product_name,
++      targetType: row.product_id ? "product" : "course",
++      targetName: row.product_name || row.course_name,
+     })),
+   });
+ });
+diff --git a/server/src/routes/webhooks.js b/server/src/routes/webhooks.js
+index 3800e17..a69d00f 100644
+--- a/server/src/routes/webhooks.js
++++ b/server/src/routes/webhooks.js
+@@ -55,9 +55,10 @@ async function handleSubscriptionRenewalCharge(chargeData) {
+     return;
+   }
+ 
+-  // A customer could have more than one active subscription (e.g. two different coffees) --
+-  // customer_code alone doesn't uniquely identify which one this renewal belongs to, so this
+-  // narrows further by the real charge amount, which is genuinely specific to one subscription.
++  // A customer could have more than one active subscription (e.g. two different coffees, or a
++  // coffee and a course) -- customer_code alone doesn't uniquely identify which one this renewal
++  // belongs to, so this narrows further by the real charge amount, which is genuinely specific to
++  // one subscription.
+   const candidates = await query(
+     "SELECT * FROM subscriptions WHERE paystack_customer_code = $1 AND status != 'cancelled'",
+     [customerCode]
+@@ -71,6 +72,20 @@ async function handleSubscriptionRenewalCharge(chargeData) {
+   }
+   const subscription = matches[0];
+ 
++  if (subscription.course_id) {
++    // A course renewal grants nothing new to create -- the subscription's own status='active' row
++    // is what gates access (see routes/courses.js and the frontend's access check), so a
++    // successful renewal charge just needs its next_payment_date kept current. Naturally
++    // idempotent on its own: reprocessing the same event just sets the same value again, unlike a
++    // product renewal, which would otherwise create a second real order.
++    await query("UPDATE subscriptions SET next_payment_date = $1, updated_at = now() WHERE id = $2", [
++      chargeData.paid_at ? new Date(chargeData.paid_at) : null,
++      subscription.id,
++    ]);
++    console.log(`Paystack webhook: subscription renewal charge ${reference} confirmed continued access for course subscription ${subscription.id}.`);
++    return;
++  }
++
+   const productResult = await query("SELECT * FROM products WHERE id = $1", [subscription.product_id]);
+   const product = productResult.rows[0];
+   if (!product) {
+diff --git a/server/test/db.sqlite.js b/server/test/db.sqlite.js
+index 183cd2f..a8acb66 100644
+--- a/server/test/db.sqlite.js
++++ b/server/test/db.sqlite.js
+@@ -90,19 +90,38 @@ async function query(text, params = []) {
+   } else if (/INSERT INTO subscription_plans/i.test(sql) && /RETURNING \*/i.test(sql)) {
+     const id = crypto.randomUUID();
+     const createdAt = new Date().toISOString();
++    // The real column name here is either product_id or course_id (routes/subscriptions.js
++    // builds this dynamically depending on what's being subscribed to) -- matched with a regex
++    // rather than two separate exact-string branches, since both shapes need identical handling
++    // otherwise.
+     sql = sql.replace(
+-      "INSERT INTO subscription_plans (product_id, interval, amount_kes_cents, paystack_plan_code) VALUES ($1, $2, $3, $4)",
+-      "INSERT INTO subscription_plans (id, product_id, interval, amount_kes_cents, paystack_plan_code, created_at) VALUES (?, ?, ?, ?, ?, ?)"
++      /INSERT INTO subscription_plans \((product_id|course_id), interval, amount_kes_cents, paystack_plan_code\) VALUES \(\$1, \$2, \$3, \$4\)/,
++      "INSERT INTO subscription_plans (id, $1, interval, amount_kes_cents, paystack_plan_code, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+     );
+     values = [id, ...values, createdAt];
+   } else if (/INSERT INTO subscriptions/i.test(sql) && /RETURNING \*/i.test(sql)) {
+     const id = crypto.randomUUID();
+     const createdAt = new Date().toISOString();
+     sql = sql.replace(/\s+/g, " ").replace(
+-      "INSERT INTO subscriptions (user_id, product_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+-      "INSERT INTO subscriptions (id, user_id, product_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
++      "INSERT INTO subscriptions (user_id, product_id, course_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
++      "INSERT INTO subscriptions (id, user_id, product_id, course_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+     );
+     values = [id, ...values, createdAt];
++  } else if (/INSERT INTO courses/i.test(sql) && /RETURNING \*/i.test(sql)) {
++    const createdAt = new Date().toISOString();
++    sql = sql.replace(
++      "INSERT INTO courses (id, name, category, blurb, instructor, lessons, monthly_price_cents) VALUES ($1, $2, $3, $4, $5, $6, $7)",
++      "INSERT INTO courses (id, name, category, blurb, instructor, lessons, monthly_price_cents, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
++    );
++    values = [...values, createdAt, createdAt];
++  } else if (/INSERT INTO academy_lifetime_access/i.test(sql) && /RETURNING \*/i.test(sql)) {
++    const id = crypto.randomUUID();
++    const purchasedAt = new Date().toISOString();
++    sql = sql.replace(
++      "INSERT INTO academy_lifetime_access (user_id, paystack_reference, amount_usd_cents, amount_kes_cents) VALUES ($1, $2, $3, $4)",
++      "INSERT INTO academy_lifetime_access (id, user_id, paystack_reference, amount_usd_cents, amount_kes_cents, purchased_at) VALUES (?, ?, ?, ?, ?, ?)"
++    );
++    values = [id, ...values, purchasedAt];
+   } else {
+     // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
+     // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are
+diff --git a/server/test/run-e2e.js b/server/test/run-e2e.js
+index 3763bb1..9bcc798 100644
+--- a/server/test/run-e2e.js
++++ b/server/test/run-e2e.js
+@@ -642,7 +642,7 @@ async function main() {
+   check("returns 200", subAdminList.status === 200);
+   check("includes real subscriptions from more than one customer", subAdminList.body.subscriptions.length >= 2);
+   const subAdminEntry = subAdminList.body.subscriptions.find((s) => s.id === subId);
+-  check("includes the real customer's email and name, and the real product's name, joined in -- not just raw IDs", subAdminEntry && subAdminEntry.userEmail === "second@morningaroma.local" && !!subAdminEntry.productName);
++  check("includes the real customer's email and name, and the real product's name, joined in -- not just raw IDs", subAdminEntry && subAdminEntry.userEmail === "second@morningaroma.local" && subAdminEntry.targetType === "product" && !!subAdminEntry.targetName);
+ 
+   console.log("\nWebhook — a real subscription renewal charge creates a brand-new order, since one doesn't already exist the way it would for an ordinary checkout:");
+   const renewalReference = `sub_renewal_${Date.now()}`;
+@@ -691,6 +691,119 @@ async function main() {
+   const secondCustomerSub = secondCustomerSubs.body.subscriptions.find((s) => s.id);
+   check("that customer's own subscription now shows cancelled", secondCustomerSub && secondCustomerSub.status === "cancelled");
+ 
++  console.log("\nReal Academy courses -- moved out of static frontend data into the database:");
++  console.log("POST /courses as a non-admin:");
++  const courseAsCustomer = await post("/courses", { name: "Test Course", category: "Test", blurb: "A real test course.", instructor: "Test Instructor", lessons: 3, monthlyPriceCents: 999 }, customerToken);
++  check("returns 403", courseAsCustomer.status === 403);
++
++  console.log("\nPOST /courses as the real admin:");
++  const courseCreate = await post("/courses", { name: "Test Course", category: "Test", blurb: "A real test course.", instructor: "Test Instructor", lessons: 3, monthlyPriceCents: 999 }, token);
++  check("returns 201", courseCreate.status === 201);
++  check("the real annual price is derived at 20% off 12 months, not stored separately", courseCreate.body.course && courseCreate.body.course.annualPriceCents === Math.round(999 * 12 * 0.8));
++  const testCourseId = courseCreate.body.course.id;
++
++  console.log("\nGET /courses -- public, no auth needed:");
++  const coursesNoAuth = await get("/courses");
++  check("returns 200 without any token", coursesNoAuth.status === 200);
++  check("includes the real course just created", coursesNoAuth.body.courses.some((c) => c.id === testCourseId));
++
++  console.log("\nPATCH /courses/:id -- real admin price editing, the actual point of this migration:");
++  const coursePriceEdit = await patch(`/courses/${testCourseId}`, { monthlyPriceCents: 1499 }, token);
++  check("returns 200", coursePriceEdit.status === 200);
++  check("the real price genuinely changed", coursePriceEdit.body.course && coursePriceEdit.body.course.monthlyPriceCents === 1499);
++  check("the derived annual price updated to match", coursePriceEdit.body.course && coursePriceEdit.body.course.annualPriceCents === Math.round(1499 * 12 * 0.8));
++
++  console.log("\nDELETE /courses/:id -- soft delete, matching how products handle discontinuing:");
++  const courseDeleteRes = await fetch(base + `/courses/${testCourseId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
++  const courseDelete = { status: courseDeleteRes.status, body: await courseDeleteRes.json() };
++  check("returns 200", courseDelete.status === 200);
++  const coursesAfterDelete = await get("/courses");
++  check("no longer appears in the public list", !coursesAfterDelete.body.courses.some((c) => c.id === testCourseId));
++
++  console.log("\nA fresh course to actually subscribe to (the deleted one above is intentionally gone):");
++  const liveCourseCreate = await post("/courses", { name: "Espresso Basics", category: "Barista Skills", blurb: "Real espresso fundamentals.", instructor: "Test Instructor", lessons: 5, monthlyPriceCents: 1000 }, token);
++  const liveCourseId = liveCourseCreate.body.course.id;
++
++  console.log("\nPOST /subscriptions with both productId and courseId:");
++  const subBothTargets = await post("/subscriptions", { reference: "irrelevant", productId: "sl28-kenya", courseId: liveCourseId, interval: "monthly" }, customerToken);
++  check("returns 400 -- exactly one target, never both", subBothTargets.status === 400);
++
++  console.log("\nPOST /subscriptions with neither productId nor courseId:");
++  const subNoTarget = await post("/subscriptions", { reference: "irrelevant", interval: "monthly" }, customerToken);
++  check("returns 400", subNoTarget.status === 400);
++
++  console.log("\nPOST /subscriptions for a real course, monthly:");
++  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 130000, authorization: { authorization_code: "AUTH_course_monthly" } });
++  paystackMock.setNextPlanResponse({ plan_code: "PLN_test_course_monthly" });
++  paystackMock.setNextCustomerResponse({ customer_code: "CUS_test_course_sub" });
++  paystackMock.setNextSubscriptionResponse({ subscription_code: "SUB_test_course_001", email_token: "test_email_token_course_001", next_payment_date: "2026-10-01T00:00:00.000Z" });
++  const courseSubMonthly = await post("/subscriptions", { reference: "course-ref-monthly", courseId: liveCourseId, interval: "monthly" }, customerToken);
++  check("returns 201", courseSubMonthly.status === 201);
++  check("the real course price is used, no quantity multiplication (courses aren't shipped items)", courseSubMonthly.body.subscription && courseSubMonthly.body.subscription.amountUsdCents === 1000);
++  check("no shipping fields at all -- a course subscription has nothing to ship", courseSubMonthly.body.subscription && courseSubMonthly.body.subscription.shippingName === null && courseSubMonthly.body.subscription.shippingCity === null);
++  const courseSubId = courseSubMonthly.body.subscription.id;
++
++  console.log("\nPOST /subscriptions for the same course, annually -- the real 20% discount:");
++  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 1248000, authorization: { authorization_code: "AUTH_course_annual" } });
++  paystackMock.setNextPlanResponse({ plan_code: "PLN_test_course_annual" });
++  paystackMock.setNextCustomerResponse({ customer_code: "CUS_test_course_sub_2" });
++  paystackMock.setNextSubscriptionResponse({ subscription_code: "SUB_test_course_002", email_token: "test_email_token_course_002" });
++  const secondCourseSubReg = await registerAndVerify(`course-sub-${Date.now()}@example.com`, "correcthorsebattery1", "Course Subscriber");
++  const courseSubAnnual = await post("/subscriptions", { reference: "course-ref-annual", courseId: liveCourseId, interval: "annually" }, secondCourseSubReg.body.token);
++  check("returns 201", courseSubAnnual.status === 201);
++  // 1000 cents/month x 12 x 0.8 (20% off) = 9600 cents/year -- the real, applied discount, not
++  // just a number shown on the frontend that the actual charge might not match.
++  check("the real 20% annual discount is genuinely applied to what's actually charged", courseSubAnnual.body.subscription && courseSubAnnual.body.subscription.amountUsdCents === 9600);
++
++  console.log("\nWebhook -- a course renewal charge confirms continued access, but creates NO order (unlike a product renewal):");
++  const ordersBeforeCourseRenewal = await get("/orders/mine", customerToken);
++  const courseRenewalReference = `course_renewal_${Date.now()}`;
++  const courseRenewalPayload = JSON.stringify({
++    event: "charge.success",
++    data: { reference: courseRenewalReference, status: "success", amount: 130000, currency: "KES", paid_at: "2026-11-01T00:00:00.000Z", customer: { customer_code: "CUS_test_course_sub" }, plan: { plan_code: "PLN_test_course_monthly" } },
++  });
++  const courseRenewalWebhook = await postWebhook(courseRenewalPayload, signBody(courseRenewalPayload));
++  check("returns 200", courseRenewalWebhook.status === 200);
++  const ordersAfterCourseRenewal = await get("/orders/mine", customerToken);
++  check("genuinely created no new order -- a course renewal isn't a shipment", ordersAfterCourseRenewal.body.orders.length === ordersBeforeCourseRenewal.body.orders.length);
++
++  console.log("\nGET /subscriptions as admin -- includes both a product subscription and a course subscription correctly:");
++  const subsAdminWithCourse = await get("/subscriptions", token);
++  const courseEntry = subsAdminWithCourse.body.subscriptions.find((s) => s.id === courseSubId);
++  check("the course subscription is present with the right target type and name", courseEntry && courseEntry.targetType === "course" && courseEntry.targetName === "Espresso Basics");
++
++  console.log("\nReal one-time lifetime Academy access -- fundamentally not a subscription, no recurring charge at all:");
++  console.log("POST /subscriptions/lifetime with no reference:");
++  const lifetimeNoRef = await post("/subscriptions/lifetime", {}, customerToken);
++  check("returns 400", lifetimeNoRef.status === 400);
++
++  console.log("\nPOST /subscriptions/lifetime with the wrong amount paid:");
++  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 100 }); // nowhere near the real settings price
++  const lifetimeWrongAmount = await post("/subscriptions/lifetime", { reference: "lifetime-wrong-amount" }, customerToken);
++  check("returns 400 -- the amount paid doesn't match the real, current lifetime price", lifetimeWrongAmount.status === 400);
++
++  console.log("\nPOST /subscriptions/lifetime with the real, correct amount:");
++  // Default academyLifetimePriceCents is 24900 (see server/src/routes/settings.js) -- at the
++  // mock's fixed 130 KES/USD rate: 249 x 130 x 100 = 3,237,000 KES cents.
++  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 3237000 });
++  const lifetimePurchase = await post("/subscriptions/lifetime", { reference: "lifetime-correct-amount" }, customerToken);
++  check("returns 201", lifetimePurchase.status === 201);
++  check("confirms real lifetime access was granted", lifetimePurchase.body.hasLifetimeAccess === true);
++
++  console.log("\nGET /subscriptions/lifetime/mine:");
++  const lifetimeMine = await get("/subscriptions/lifetime/mine", customerToken);
++  check("returns 200", lifetimeMine.status === 200);
++  check("confirms real, persisted lifetime access", lifetimeMine.body.hasLifetimeAccess === true);
++
++  console.log("\nBuying lifetime access a second time:");
++  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 3237000 });
++  const lifetimeSecondPurchase = await post("/subscriptions/lifetime", { reference: "lifetime-second-attempt" }, customerToken);
++  check("returns 400 -- already has real lifetime access, can't buy it twice", lifetimeSecondPurchase.status === 400);
++
++  console.log("\nA different customer checking lifetime access before ever buying it:");
++  const lifetimeMineOther = await get("/subscriptions/lifetime/mine", secondCourseSubReg.body.token);
++  check("correctly reports no lifetime access for a customer who never purchased it", lifetimeMineOther.body.hasLifetimeAccess === false);
++
+   console.log("\nGET /products — public, no auth needed:");
+   const productsNoAuth = await get("/products");
+   check("returns 200 without any token", productsNoAuth.status === 200);
+diff --git a/server/test/schema.sqlite.sql b/server/test/schema.sqlite.sql
+index 28724ef..56106df 100644
+--- a/server/test/schema.sqlite.sql
++++ b/server/test/schema.sqlite.sql
+@@ -45,28 +45,47 @@ CREATE TABLE products (
+   updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+ );
+ 
++CREATE TABLE courses (
++  id                    TEXT PRIMARY KEY,
++  name                  TEXT NOT NULL,
++  category              TEXT NOT NULL,
++  blurb                 TEXT NOT NULL,
++  instructor            TEXT NOT NULL,
++  lessons               INTEGER NOT NULL,
++  monthly_price_cents   INTEGER NOT NULL,
++  removed               INTEGER NOT NULL DEFAULT 0,
++  created_at            TEXT NOT NULL DEFAULT (datetime('now')),
++  updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
++);
++
++CREATE INDEX idx_courses_removed ON courses (removed);
++
+ CREATE TABLE subscription_plans (
+   id                   TEXT PRIMARY KEY,
+-  product_id           TEXT NOT NULL REFERENCES products(id),
++  product_id           TEXT REFERENCES products(id),
++  course_id            TEXT REFERENCES courses(id),
+   interval             TEXT NOT NULL,
+   amount_kes_cents     INTEGER NOT NULL,
+   paystack_plan_code   TEXT NOT NULL,
+-  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+-  UNIQUE (product_id, interval, amount_kes_cents)
++  created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+ );
+ 
++CREATE UNIQUE INDEX idx_subscription_plans_product_target ON subscription_plans (product_id, interval, amount_kes_cents) WHERE product_id IS NOT NULL;
++CREATE UNIQUE INDEX idx_subscription_plans_course_target ON subscription_plans (course_id, interval, amount_kes_cents) WHERE course_id IS NOT NULL;
++
+ CREATE TABLE subscriptions (
+   id                          TEXT PRIMARY KEY,
+   user_id                     TEXT NOT NULL REFERENCES users(id),
+-  product_id                  TEXT NOT NULL REFERENCES products(id),
++  product_id                  TEXT REFERENCES products(id),
++  course_id                   TEXT REFERENCES courses(id),
+   quantity                    INTEGER NOT NULL DEFAULT 1,
+   interval                    TEXT NOT NULL,
+   amount_usd_cents            INTEGER NOT NULL,
+   amount_kes_cents            INTEGER NOT NULL,
+   status                      TEXT NOT NULL DEFAULT 'active',
+-  shipping_name               TEXT NOT NULL,
+-  shipping_address            TEXT NOT NULL,
+-  shipping_city               TEXT NOT NULL,
++  shipping_name               TEXT,
++  shipping_address            TEXT,
++  shipping_city               TEXT,
+   paystack_customer_code      TEXT NOT NULL,
+   paystack_subscription_code  TEXT NOT NULL,
+   paystack_email_token        TEXT NOT NULL,
+@@ -78,6 +97,15 @@ CREATE TABLE subscriptions (
+ CREATE INDEX idx_subscriptions_user_id ON subscriptions (user_id);
+ CREATE INDEX idx_subscriptions_status ON subscriptions (status);
+ 
++CREATE TABLE academy_lifetime_access (
++  id                  TEXT PRIMARY KEY,
++  user_id             TEXT NOT NULL REFERENCES users(id) UNIQUE,
++  paystack_reference  TEXT NOT NULL UNIQUE,
++  amount_usd_cents    INTEGER NOT NULL,
++  amount_kes_cents    INTEGER NOT NULL,
++  purchased_at        TEXT NOT NULL DEFAULT (datetime('now'))
++);
++
+ CREATE TABLE green_beans (
+   id                  TEXT PRIMARY KEY,
+   name                TEXT NOT NULL,
+diff --git a/src/data/index.js b/src/data/index.js
+index 1fdd60b..8ac11c9 100644
+--- a/src/data/index.js
++++ b/src/data/index.js
+@@ -1005,5 +1005,6 @@ export const DEFAULT_SETTINGS = {
+   // default, but an admin who doesn't want to be interrupted by, say, live chat pings can turn
+   // just that one off without losing the others.
+   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
++  academyLifetimePriceCents: 24900,
+ };
+ 
