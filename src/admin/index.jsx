@@ -405,6 +405,64 @@ export function AdminOrders() {
   );
 }
 
+export function AdminSubscriptions() {
+  const { realSubscriptions: allSubsSorted, realSubscriptionsLoading: loading, realSubscriptionsError: loadError, refetchRealSubscriptions } = useAdmin();
+  const [query, setQuery] = useState("");
+  const filtered = allSubsSorted.filter((s) => {
+    const q = query.toLowerCase();
+    return !q || s.userEmail.toLowerCase().includes(q) || s.userName.toLowerCase().includes(q) || s.productName.toLowerCase().includes(q) || s.status.toLowerCase().includes(q);
+  });
+  const subscriptions = [...filtered].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const { page, setPage, pageItems, totalPages } = usePagination(subscriptions, 10);
+  const exportSubscriptions = () => exportToCSV("subscriptions", ["Customer", "Email", "Product", "Interval", "Amount (USD)", "Status", "Next payment", "Started"], subscriptions.map((s) => [
+    s.userName, s.userEmail, s.productName, s.interval, (s.amountUsdCents / 100).toFixed(2), s.status,
+    s.nextPaymentDate ? s.nextPaymentDate.slice(0, 10) : "", s.createdAt.slice(0, 10),
+  ]));
+
+  if (loading) return <p className="hint">Loading subscriptions…</p>;
+  if (loadError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load subscriptions: {loadError}</p>
+        <button className="btn-outline" onClick={refetchRealSubscriptions}>Try again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="matched-head">All subscriptions ({subscriptions.length}{query ? ` of ${allSubsSorted.length}` : ""})</h3>
+      <p className="hint">
+        Read-only — customers manage their own subscriptions (pause, resume, cancel) from My Aroma Journey. This is for
+        support visibility only.
+      </p>
+      <AdminTableToolbar query={query} setQuery={setQuery} onExport={allSubsSorted.length > 0 ? exportSubscriptions : null} placeholder="Search by customer, product, or status…" />
+      {allSubsSorted.length === 0 ? (
+        <p className="hint">No subscriptions yet.</p>
+      ) : subscriptions.length === 0 ? (
+        <p className="hint">No subscriptions match "{query}".</p>
+      ) : (
+        <div className="admin-table admin-table-orders">
+          <div className="admin-row admin-header">
+            <span>Customer</span><span>Product</span><span>Interval</span><span>Amount</span><span>Next payment</span><span>Status</span>
+          </div>
+          {pageItems.map((s) => (
+            <div key={s.id} className="admin-row">
+              <span>{s.userName} <span className="hint">({s.userEmail})</span></span>
+              <span>{s.productName}</span>
+              <span>{s.interval === "monthly" ? "Monthly" : "Annually"}</span>
+              <span>{fmtPrice(s.amountUsdCents)}</span>
+              <span>{s.nextPaymentDate ? s.nextPaymentDate.slice(0, 10) : "—"}</span>
+              <span className={`payment-badge ${s.status === "active" ? "paid" : s.status === "cancelled" ? "refunded" : s.status === "past_due" ? "unpaid" : "refund_pending"}`}>{s.status.replace("_", " ")}</span>
+            </div>
+          ))}
+          <AdminPager page={page} setPage={setPage} totalPages={totalPages} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminInvoices() {
   const { realOrders: orders, greenOrders, serviceInquiries, settings, setServiceInquiryFee, getAllProducts } = useAdmin();
   const { addToast } = useToast();
@@ -1896,7 +1954,11 @@ export function AdminDashboard() {
   // immediately available one way or the other; real, async session restoration means there's
   // now a genuine render where `user` is still null followed by one where it's populated, which
   // is exactly the transition that exposes this class of bug.
-  const visibleSections = user && user.role === "super_admin" ? ADMIN_SECTIONS : ["Overview", ...((user && user.permissions) || [])];
+  const baseSections = user && user.role === "super_admin" ? ADMIN_SECTIONS : ["Overview", ...((user && user.permissions) || [])];
+  // Not its own independently-grantable staff permission -- bundled with Orders access, matching
+  // the backend's own requirePermission("Orders") decision for GET /subscriptions (subscriptions
+  // are treated as a kind of recurring order, not a separate admin capability).
+  const visibleSections = baseSections.includes("Orders") ? [...baseSections, "Subscriptions"] : baseSections;
   useEffect(() => {
     // Guards against a staff member's permission being revoked while a restricted section was
     // still selected — falls back to Overview instead of rendering a section they can no longer see.
@@ -1942,6 +2004,7 @@ export function AdminDashboard() {
         {section === "Overview" && <AdminOverview />}
         {section === "Analytics" && <AdminAnalytics />}
         {section === "Orders" && <AdminOrders />}
+        {section === "Subscriptions" && <AdminSubscriptions />}
         {section === "Invoices" && <AdminInvoices />}
         {section === "Customers" && <AdminCustomers />}
         {section === "Products" && <AdminProducts />}

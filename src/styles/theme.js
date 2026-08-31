@@ -531,6 +531,9 @@ a { color: inherit; text-decoration: none; }
 .checkout-confirmed { max-width: 480px; margin: 0 auto; text-align: center; }
 .checkout-confirmed h2 { font-size: 1.8rem; margin: 10px 0; }
 .checkout-confirmed-actions { display: flex; gap: 12px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+.checkout-subscribe-offer { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--gold); }
+.checkout-subscribe-row { margin-top: 14px; }
+.checkout-subscribe-prompt { margin: 0 0 8px; font-weight: 600; }
 
 /* feedback overlay */
 .feedback-card { max-width: 420px; max-height: 88vh; overflow-y: auto; }

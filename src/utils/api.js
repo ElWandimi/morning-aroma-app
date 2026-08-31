@@ -88,6 +88,18 @@ export const api = {
     request(`/orders/${id}/verify-payment`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reference }) }),
   refundOrder: (token, id) =>
     request(`/orders/${id}/refund`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  createSubscription: (token, subscription) =>
+    request("/subscriptions", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(subscription) }),
+  getMySubscriptions: (token) =>
+    request("/subscriptions/mine", { headers: { Authorization: `Bearer ${token}` } }),
+  pauseSubscription: (token, id) =>
+    request(`/subscriptions/${id}/pause`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  resumeSubscription: (token, id) =>
+    request(`/subscriptions/${id}/resume`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  cancelSubscription: (token, id) =>
+    request(`/subscriptions/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  getAllSubscriptions: (token) =>
+    request("/subscriptions", { headers: { Authorization: `Bearer ${token}` } }),
   getProducts: () => request("/products"),
   createProduct: (token, product) =>
     request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),

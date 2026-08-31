@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext, lazy, Suspense } from "react";
 const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
 import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, TranslateSuggestBanner, WishlistDrawer } from "./components";
-import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
+import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
 import { BREW_GUIDES, COUNTRIES, COURSES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META, PRODUCTS } from "./data";
 import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
 import { AcademyHubPage, CoursePage } from "./pages/Academy";
@@ -162,9 +162,11 @@ export function App() {
                 <CartProvider>
                   <WishlistProvider>
                     <OrdersProvider>
-                      <JournalProvider>
-                        <AppShell />
-                      </JournalProvider>
+                      <SubscriptionsProvider>
+                        <JournalProvider>
+                          <AppShell />
+                        </JournalProvider>
+                      </SubscriptionsProvider>
                     </OrdersProvider>
                   </WishlistProvider>
                 </CartProvider>

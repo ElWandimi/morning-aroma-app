@@ -1,0 +1,75 @@
+diff --git a/index.html b/index.html
+index 2b57ea8..ca321b8 100644
+--- a/index.html
++++ b/index.html
+@@ -39,24 +39,62 @@
+     <style>
+       /* Inline and self-contained on purpose — this must render before the app's own stylesheet
+          (bundled into the JS) has loaded, so it can't depend on anything external. Removed
+-         automatically the instant React mounts and takes over #root, no manual cleanup needed. */
++         automatically the instant React mounts and takes over #root, no manual cleanup needed.
++         Colors matched exactly to the app's real theme (--chestnut, --espresso, --cream, --gold
++         in src/styles/theme.js), not approximated, so this doesn't visually clash with what
++         appears the instant the real app takes over. */
+       #ma-preload {
+         position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+-        background: #FDF8F0; font-family: Georgia, 'Times New Roman', serif; color: #3E2C23; gap: 14px; z-index: 9999;
++        background: #FDF8F0; font-family: Georgia, 'Times New Roman', serif; color: #3E2C23; gap: 18px; z-index: 9999;
+       }
+-      #ma-preload .ma-preload-cup {
+-        width: 40px; height: 40px; border: 3px solid #E8D5B5; border-top-color: #8B5A3A; border-radius: 50%;
+-        animation: ma-preload-spin 0.9s linear infinite;
++      #ma-preload .ma-preload-cup-wrap { position: relative; width: 76px; height: 76px; }
++      #ma-preload .ma-preload-cup-wrap svg { width: 100%; height: 100%; overflow: visible; }
++      #ma-preload .ma-preload-bean {
++        transform-origin: center;
++        animation: ma-preload-bounce 1.4s ease-in-out infinite;
++      }
++      #ma-preload .ma-preload-bean:nth-child(1) { animation-delay: 0s; }
++      #ma-preload .ma-preload-bean:nth-child(2) { animation-delay: 0.25s; }
++      #ma-preload .ma-preload-bean:nth-child(3) { animation-delay: 0.5s; }
++      @keyframes ma-preload-bounce {
++        0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
++        15%  { opacity: 1; }
++        55%  { transform: translateY(-30px) rotate(200deg); opacity: 1; }
++        80%  { opacity: 0; }
++        100% { transform: translateY(-30px) rotate(200deg); opacity: 0; }
+       }
+       #ma-preload p { margin: 0; font-size: 1.1rem; letter-spacing: 0.02em; }
+-      @keyframes ma-preload-spin { to { transform: rotate(360deg); } }
+-      @media (prefers-reduced-motion: reduce) { #ma-preload .ma-preload-cup { animation: none; } }
++      @media (prefers-reduced-motion: reduce) {
++        /* A gently pulsing cup rather than a hard freeze -- a completely static loading screen
++           can read as broken/frozen, which is worse than a subtle, motion-safe pulse for someone
++           who's asked for reduced motion specifically, not zero visual feedback at all. */
++        #ma-preload .ma-preload-bean { animation: none; opacity: 0; }
++        #ma-preload .ma-preload-cup-wrap { animation: ma-preload-pulse 1.6s ease-in-out infinite; }
++      }
++      @keyframes ma-preload-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+     </style>
+   </head>
+   <body>
+     <div id="root">
+       <div id="ma-preload" aria-hidden="true">
+-        <div class="ma-preload-cup"></div>
++        <div class="ma-preload-cup-wrap">
++          <svg viewBox="0 0 76 76" xmlns="http://www.w3.org/2000/svg">
++            <!-- Three coffee beans, bouncing up out of the cup on a staggered loop -->
++            <g fill="#3E2C23">
++              <ellipse class="ma-preload-bean" cx="28" cy="30" rx="4.5" ry="6" />
++              <ellipse class="ma-preload-bean" cx="38" cy="26" rx="4.5" ry="6" />
++              <ellipse class="ma-preload-bean" cx="48" cy="30" rx="4.5" ry="6" />
++            </g>
++            <!-- Saucer -->
++            <ellipse cx="38" cy="66" rx="26" ry="5" fill="#E8D5B5" />
++            <!-- Cup body -->
++            <path d="M14 38 L18 60 Q18 64 22 64 L54 64 Q58 64 58 60 L62 38 Z" fill="#FDF8F0" stroke="#8B5A3A" stroke-width="2.5" stroke-linejoin="round" />
++            <!-- Coffee surface -->
++            <ellipse cx="38" cy="38" rx="24" ry="5" fill="#8B5A3A" />
++            <!-- Handle -->
++            <path d="M62 42 Q74 42 74 50 Q74 58 62 57" fill="none" stroke="#8B5A3A" stroke-width="4" stroke-linecap="round" />
++          </svg>
++        </div>
+         <p>Morning Aroma</p>
+       </div>
+     </div>

@@ -513,6 +513,76 @@ export function OrdersProvider({ children }) {
 
 export const useOrders = () => useContext(OrdersCtx);
 
+export const SubscriptionsCtx = createContext(null);
+
+export function SubscriptionsProvider({ children }) {
+  const { token, user } = useAuth();
+  const [mySubscriptions, setMySubscriptions] = useState([]);
+  const [mySubscriptionsLoading, setMySubscriptionsLoading] = useState(true);
+  const [mySubscriptionsError, setMySubscriptionsError] = useState("");
+
+  const refetchMySubscriptions = () => {
+    if (!token) { setMySubscriptionsLoading(false); return; }
+    setMySubscriptionsLoading(true);
+    setMySubscriptionsError("");
+    api.getMySubscriptions(token)
+      .then((body) => setMySubscriptions(pluck(body, "subscriptions", { array: true })))
+      .catch((e) => setMySubscriptionsError(e.message))
+      .finally(() => setMySubscriptionsLoading(false));
+  };
+  useEffect(() => {
+    if (user) refetchMySubscriptions();
+    else { setMySubscriptions([]); setMySubscriptionsLoading(false); }
+  }, [token, user && user.email]);
+
+  // All four return { ok, error? } rather than throwing, matching useOrders' own pattern, so
+  // callers (Checkout, Journey) can show an inline error without their own try/catch.
+  const createSubscription = async (subscriptionData) => {
+    try {
+      const { subscription } = await api.createSubscription(token, subscriptionData);
+      setMySubscriptions((prev) => [subscription, ...prev]);
+      return { ok: true, subscription };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const pauseSubscription = async (id) => {
+    try {
+      const { subscription } = await api.pauseSubscription(token, id);
+      setMySubscriptions((prev) => prev.map((s) => (s.id === id ? subscription : s)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const resumeSubscription = async (id) => {
+    try {
+      const { subscription } = await api.resumeSubscription(token, id);
+      setMySubscriptions((prev) => prev.map((s) => (s.id === id ? subscription : s)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const cancelSubscription = async (id) => {
+    try {
+      const { subscription } = await api.cancelSubscription(token, id);
+      setMySubscriptions((prev) => prev.map((s) => (s.id === id ? subscription : s)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  return (
+    <SubscriptionsCtx.Provider value={{ mySubscriptions, mySubscriptionsLoading, mySubscriptionsError, refetchMySubscriptions, createSubscription, pauseSubscription, resumeSubscription, cancelSubscription }}>
+      {children}
+    </SubscriptionsCtx.Provider>
+  );
+}
+
+export const useSubscriptions = () => useContext(SubscriptionsCtx);
+
 export const AdminCtx = createContext(null);
 
 export function AdminDataProvider({ children }) {
@@ -558,6 +628,23 @@ export function AdminDataProvider({ children }) {
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealOrders();
     else setRealOrdersLoading(false);
+  }, [token, user && user.role]);
+
+  const [realSubscriptions, setRealSubscriptions] = useState([]);
+  const [realSubscriptionsLoading, setRealSubscriptionsLoading] = useState(true);
+  const [realSubscriptionsError, setRealSubscriptionsError] = useState("");
+  const refetchRealSubscriptions = () => {
+    if (!token) { setRealSubscriptionsLoading(false); return; }
+    setRealSubscriptionsLoading(true);
+    setRealSubscriptionsError("");
+    api.getAllSubscriptions(token)
+      .then((body) => setRealSubscriptions(pluck(body, "subscriptions", { array: true })))
+      .catch((e) => { if (e.status !== 403) setRealSubscriptionsError(e.message); }) // same reasoning as realUsers/realOrders above
+      .finally(() => setRealSubscriptionsLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealSubscriptions();
+    else setRealSubscriptionsLoading(false);
   }, [token, user && user.role]);
   const updateOrderStatus = async (orderId, status) => {
     try {
@@ -929,6 +1016,7 @@ export function AdminDataProvider({ children }) {
         getTier, setTier,
         realUsers, realUsersLoading, realUsersError, refetchRealUsers,
         realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus, refundOrder,
+        realSubscriptions, realSubscriptionsLoading, realSubscriptionsError, refetchRealSubscriptions,
         getStock, setStock,
         getAllProducts, addProduct, removeProduct, setProductPhoto,
         realProductsLoading, realProductsError, refetchRealProducts,

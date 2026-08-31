@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { SignInModal, SignUpModal, RadarChart } from "../components";
-import { useAdmin, useAuth, useCart, useJournal, useOrders, useRoute, useToast } from "../context";
+import { useAdmin, useAuth, useCart, useCurrency, useJournal, useOrders, useRoute, useSubscriptions, useToast } from "../context";
 
 // Must match CANCELLATION_WINDOW_MINUTES in server/src/routes/orders.js exactly -- this only
 // controls whether the Cancel button is shown at all (a UX nicety, avoiding a guaranteed-to-fail
@@ -218,6 +218,8 @@ export function JourneyPage() {
   })();
 
   const { myOrders: orders, myOrdersLoading, myOrdersError, refetchMyOrders, cancelOrder } = useOrders();
+  const { mySubscriptions: subscriptions, mySubscriptionsLoading, mySubscriptionsError, refetchMySubscriptions, pauseSubscription, resumeSubscription, cancelSubscription } = useSubscriptions();
+  const { format } = useCurrency();
 
   const submitEntry = (e) => {
     e.preventDefault();
@@ -313,6 +315,74 @@ export function JourneyPage() {
                   <p className="journal-date">{e.date}</p>
                 </div>
                 <button className="link-btn" onClick={() => removeEntry(user.email, e.id)}>Remove</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <h3 className="matched-head">My subscriptions</h3>
+      {mySubscriptionsLoading ? (
+        <p className="hint">Loading your subscriptions…</p>
+      ) : mySubscriptionsError ? (
+        <div>
+          <p className="form-error">Couldn't load your subscriptions: {mySubscriptionsError}</p>
+          <button className="btn-outline small" onClick={refetchMySubscriptions}>Try again</button>
+        </div>
+      ) : subscriptions.length === 0 ? (
+        <div className="empty-state">
+          <p>No active subscriptions — you can start one right after your next order.</p>
+        </div>
+      ) : (
+        <div className="order-list">
+          {subscriptions.map((s) => {
+            const p = allProducts.find((p) => p.id === s.productId);
+            return (
+              <div key={s.id} className="order-card">
+                <div className="order-head">
+                  <span>{p ? `${p.name} — ${p.country}` : "Discontinued item"}</span>
+                  <span className="order-status">{s.status}</span>
+                </div>
+                <p className="hint">
+                  {s.interval === "monthly" ? "Billed monthly" : "Billed annually"} — {format(s.amountUsdCents)} × {s.quantity}
+                  {s.status === "active" && s.nextPaymentDate && ` — next payment ${s.nextPaymentDate.slice(0, 10)}`}
+                </p>
+                {s.status === "active" && (
+                  <button
+                    className="btn-outline small"
+                    onClick={async () => {
+                      const result = await pauseSubscription(s.id);
+                      addToast(result.ok ? "Subscription paused" : result.error);
+                    }}
+                  >
+                    Pause
+                  </button>
+                )}
+                {s.status === "paused" && (
+                  <button
+                    className="btn-outline small"
+                    onClick={async () => {
+                      const result = await resumeSubscription(s.id);
+                      addToast(result.ok ? "Subscription resumed" : result.error);
+                    }}
+                  >
+                    Resume
+                  </button>
+                )}
+                {(s.status === "active" || s.status === "paused") && (
+                  <button
+                    className="link-btn"
+                    style={{ marginLeft: 10 }}
+                    onClick={async () => {
+                      if (window.confirm("Cancel this subscription? This can't be undone.")) {
+                        const result = await cancelSubscription(s.id);
+                        addToast(result.ok ? "Subscription cancelled" : result.error);
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             );
           })}

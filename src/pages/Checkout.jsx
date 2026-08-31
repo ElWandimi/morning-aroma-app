@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { Glass, SignInModal, SignUpModal } from "../components";
-import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute } from "../context";
+import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute, useSubscriptions } from "../context";
 import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { getProductPhotoUrl } from "../utils/helpers";
 
@@ -31,9 +31,14 @@ export function CheckoutPage() {
   const { items, updateQty, remove, totalCents, clearCart } = useCart();
   const { go } = useRoute();
   const { createOrder, verifyPayment } = useOrders();
+  const { createSubscription } = useSubscriptions();
   const { getPrice, getAllProducts } = useAdmin();
   const { format, rates, ratesLoading } = useCurrency();
   const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
+  // Keyed by product id -- tracks the interval chosen and the real submit state for the
+  // post-purchase subscribe offer (step 4), independently per item, since a multi-item order can
+  // offer more than one product to subscribe to at once.
+  const [subOffers, setSubOffers] = useState({});
   // A signed-in customer still starts at Review (0) to see their bag before continuing. A
   // signed-out guest skips straight to Sign-in (1) -- there's nothing for them to do at Review
   // that isn't also available once they're back from signing in, and this is what the cart
@@ -133,6 +138,26 @@ export function CheckoutPage() {
         setPayingStatus("idle");
       },
     });
+  };
+
+  // Real, if uncommon: a product could be discontinued between checkout and this exact click.
+  // Keyed by product id, matching subOffers above.
+  const subscribeToItem = async (item) => {
+    const interval = (subOffers[item.id] && subOffers[item.id].interval) || "monthly";
+    setSubOffers((prev) => ({ ...prev, [item.id]: { ...prev[item.id], interval, submitting: true, error: "" } }));
+    const result = await createSubscription({
+      reference: confirmedOrder.paystackReference,
+      productId: item.id,
+      quantity: item.qty,
+      interval,
+      shippingName: shipping.name,
+      shippingAddress: shipping.address,
+      shippingCity: shipping.city,
+    });
+    setSubOffers((prev) => ({
+      ...prev,
+      [item.id]: { ...prev[item.id], interval, submitting: false, done: result.ok, error: result.ok ? "" : result.error },
+    }));
   };
 
   return (
@@ -246,6 +271,38 @@ export function CheckoutPage() {
           <p className="eyebrow">order confirmed</p>
           <h2>Thank you — {confirmedOrder.orderNumber} is roasting soon</h2>
           <p className="quiz-copy">A confirmation would normally land in your inbox. For now, find it any time in My Aroma Journey.</p>
+          {confirmedOrder.items && confirmedOrder.items.length > 0 && (
+            <div className="checkout-subscribe-offer">
+              <p className="eyebrow">subscribe &amp; save the hassle</p>
+              {confirmedOrder.items.map((item) => {
+                const product = getAllProducts().find((p) => p.id === item.id);
+                // A real, if uncommon, edge case: the product was discontinued between checkout
+                // and this exact render. Nothing meaningful to offer a subscription on.
+                if (!product) return null;
+                const offer = subOffers[item.id] || {};
+                const interval = offer.interval || "monthly";
+                return (
+                  <div key={item.id} className="checkout-subscribe-row">
+                    {offer.done ? (
+                      <p className="form-success">You're subscribed to {product.name} — manage it anytime from My Aroma Journey.</p>
+                    ) : (
+                      <>
+                        <p className="checkout-subscribe-prompt">Get {product.name} delivered automatically?</p>
+                        <div className="mode-toggle">
+                          <button type="button" className={interval === "monthly" ? "active" : ""} onClick={() => setSubOffers((prev) => ({ ...prev, [item.id]: { ...prev[item.id], interval: "monthly" } }))}>Monthly</button>
+                          <button type="button" className={interval === "annually" ? "active" : ""} onClick={() => setSubOffers((prev) => ({ ...prev, [item.id]: { ...prev[item.id], interval: "annually" } }))}>Annually</button>
+                        </div>
+                        {offer.error && <p className="form-error">{offer.error}</p>}
+                        <button className="btn-outline small" onClick={() => subscribeToItem(item)} disabled={offer.submitting}>
+                          {offer.submitting ? "Setting up…" : "Subscribe"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="checkout-confirmed-actions">
             <button className="btn-primary" onClick={() => go("journey")}>View my orders</button>
             <button className="btn-outline" onClick={() => go("shop")}>Continue shopping</button>
