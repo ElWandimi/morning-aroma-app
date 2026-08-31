@@ -31,6 +31,9 @@ function publicOrder(row) {
     paidCurrency: row.paid_currency,
     paidAt: row.paid_at,
     paymentMode: row.payment_mode,
+    // Null for every ordinary order (which remains most of them); set only on an order a
+    // subscription renewal generated automatically (see routes/webhooks.js).
+    subscriptionId: row.subscription_id || null,
     createdAt: row.created_at,
     // Only present on the admin listing (joined in there) — a customer's own /orders/mine
     // response has no reason to include their own email back to them on every order.

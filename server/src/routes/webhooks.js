@@ -32,6 +32,81 @@ function isValidSignature(rawBody, signatureHeader) {
   return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
 }
 
+// A subscription renewal charge has no pre-existing order waiting for it the way an ordinary
+// checkout does -- this creates one from scratch, from the subscription's own saved product,
+// quantity, and shipping details, marked paid immediately (the charge has already genuinely
+// succeeded by the time this webhook fires, unlike an ordinary order which starts unpaid and is
+// verified separately).
+async function handleSubscriptionRenewalCharge(chargeData) {
+  const customerCode = chargeData.customer && chargeData.customer.customer_code;
+  const reference = chargeData.reference;
+  if (!customerCode || !reference) {
+    console.warn("Paystack webhook: subscription-linked charge.success missing customer_code or reference -- can't process.", JSON.stringify(chargeData));
+    return;
+  }
+
+  // Idempotency, matching the same real database-level guarantee ordinary orders already have
+  // (idx_orders_paystack_reference) -- Paystack can and does redeliver the same event more than
+  // once (confirmed directly from their own docs, not assumed), and this reference is only ever
+  // meant to settle one order.
+  const alreadyProcessed = await query("SELECT id FROM orders WHERE paystack_reference = $1", [reference]);
+  if (alreadyProcessed.rows[0]) {
+    console.log(`Paystack webhook: subscription renewal charge ${reference} already has an order -- skipping (duplicate delivery).`);
+    return;
+  }
+
+  // A customer could have more than one active subscription (e.g. two different coffees) --
+  // customer_code alone doesn't uniquely identify which one this renewal belongs to, so this
+  // narrows further by the real charge amount, which is genuinely specific to one subscription.
+  const candidates = await query(
+    "SELECT * FROM subscriptions WHERE paystack_customer_code = $1 AND status != 'cancelled'",
+    [customerCode]
+  );
+  const matches = candidates.rows.filter((s) => s.amount_kes_cents === chargeData.amount);
+  if (matches.length !== 1) {
+    console.warn(
+      `Paystack webhook: subscription renewal charge ${reference} for customer ${customerCode} matched ${matches.length} subscriptions (expected exactly 1) -- can't safely process automatically. Needs manual review.`
+    );
+    return;
+  }
+  const subscription = matches[0];
+
+  const productResult = await query("SELECT * FROM products WHERE id = $1", [subscription.product_id]);
+  const product = productResult.rows[0];
+  if (!product) {
+    console.warn(`Paystack webhook: subscription renewal charge ${reference} references product ${subscription.product_id}, which no longer exists -- can't create an order. Needs manual review.`);
+    return;
+  }
+
+  const items = [{ id: product.id, qty: subscription.quantity, unitPriceCents: product.price_cents }];
+  const paymentMode = (process.env.PAYSTACK_SECRET_KEY || "").startsWith("sk_live_") ? "live" : "test";
+
+  try {
+    const result = await query(
+      `INSERT INTO orders (user_id, items, total_cents, shipping_name, shipping_address, shipping_city, status, payment_status, paystack_reference, paid_amount_cents, paid_currency, paid_at, payment_mode, subscription_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'Processing', 'paid', $7, $8, $9, now(), $10, $11) RETURNING *`,
+      [
+        subscription.user_id, JSON.stringify(items), subscription.amount_usd_cents,
+        subscription.shipping_name, subscription.shipping_address, subscription.shipping_city,
+        reference, chargeData.amount, chargeData.currency, paymentMode, subscription.id,
+      ]
+    );
+    // Same clamped-at-zero reasoning as an ordinary payment (paymentVerification.js) -- this app
+    // doesn't reserve stock ahead of time, so this can't fully prevent going negative on its own,
+    // just avoid showing a confusing negative number in Admin when it happens.
+    await query("UPDATE products SET stock = CASE WHEN stock - $1 < 0 THEN 0 ELSE stock - $1 END WHERE id = $2", [subscription.quantity, product.id]);
+    console.log(`Paystack webhook: subscription renewal charge ${reference} created order #${result.rows[0].order_number} for subscription ${subscription.id}.`);
+  } catch (e) {
+    if (e.code === "23505") {
+      // Same real race as ordinary orders can hit -- another concurrent delivery of this exact
+      // event won it first. Not a failure.
+      console.log(`Paystack webhook: subscription renewal charge ${reference} -- order already created by a concurrent delivery.`);
+      return;
+    }
+    throw e;
+  }
+}
+
 router.post("/paystack", async (req, res) => {
   const rawBody = req.body; // a Buffer -- this route is mounted with express.raw(), not express.json()
   const signature = req.headers["x-paystack-signature"];
@@ -62,8 +137,38 @@ router.post("/paystack", async (req, res) => {
   // Acknowledge quickly with 200 once the signature is confirmed genuine, even for event types
   // this app doesn't act on -- Paystack retries on anything other than 200, and retrying an event
   // type we're deliberately ignoring would just repeat forever for no reason.
-  if (event.event !== "charge.success") {
-    console.log(`Paystack webhook: ignoring event type "${event.event}" (only acts on charge.success).`);
+  if (event.event !== "charge.success" && event.event !== "subscription.disable") {
+    console.log(`Paystack webhook: ignoring event type "${event.event}" (only acts on charge.success and subscription.disable).`);
+    return res.status(200).json({ received: true });
+  }
+
+  if (event.event === "subscription.disable") {
+    // Real, if uncommon: Paystack disables a subscription itself after repeated failed renewal
+    // attempts (see ROADMAP.md -- subscriptions are never retried), or when a customer manages
+    // their card directly through Paystack rather than this app. Syncs that back into this app's
+    // own record so its status stays true regardless of which side initiated the change. A
+    // subscription this app itself paused/cancelled (routes/subscriptions.js) already made this
+    // exact same update synchronously -- this UPDATE is then a genuine no-op for that case, not
+    // a race with it.
+    const subscriptionCode = event.data && event.data.subscription_code;
+    if (!subscriptionCode) {
+      console.log("Paystack webhook: subscription.disable with no subscription_code -- ignoring.");
+      return res.status(200).json({ received: true });
+    }
+    await query(
+      "UPDATE subscriptions SET status = 'cancelled', updated_at = now() WHERE paystack_subscription_code = $1 AND status != 'cancelled'",
+      [subscriptionCode]
+    );
+    console.log(`Paystack webhook: subscription.disable processed for ${subscriptionCode}.`);
+    return res.status(200).json({ received: true });
+  }
+
+  // From here on: a real charge.success. Paystack sends this same event for both an ordinary
+  // one-time payment and a subscription renewal charge -- the `plan` field (present and non-null
+  // only for the latter) is the real, documented way to tell them apart, not something this app
+  // is guessing at.
+  if (event.data && event.data.plan) {
+    await handleSubscriptionRenewalCharge(event.data);
     return res.status(200).json({ received: true });
   }
 

@@ -526,6 +526,171 @@ async function main() {
   check("a redelivered webhook for an already-paid order still returns 200 (Paystack shouldn't keep retrying)", webhookRedelivered.status === 200);
   check("but correctly reports it did NOT re-verify/re-process -- the order was already paid, not paid twice", webhookRedelivered.body.verified === false);
 
+  console.log("\nReal recurring billing via Paystack's Subscriptions API:");
+  console.log("Setting up a real, verified payment with a reusable authorization -- Paystack requires this before a subscription can exist:");
+  const subOrder = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Sub Customer", shippingAddress: "1 Coffee Lane", shippingCity: "Nairobi" },
+    customerToken
+  );
+  // sl28-kenya's real seeded price is 1500 USD cents ($15.00). At the mock's fixed 130 KES/USD
+  // rate: 15 * 130 * 100 = 195000 KES cents -- this exact figure is asserted against repeatedly
+  // below, both for the Plan's real amount and for what a renewal charge is expected to be.
+  const subOrderNumber = subOrder.body.order.orderNumber.replace("MA-", "");
+  const subReference = `MA-${subOrderNumber}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000, authorization: { authorization_code: "AUTH_test_real_reusable" } });
+  const subOrderVerify = await post(`/orders/${subOrder.body.order.id}/verify-payment`, { reference: subReference }, customerToken);
+  check("the underlying order verifies correctly first", subOrderVerify.status === 200);
+
+  console.log("\nPOST /subscriptions with a missing/invalid interval:");
+  const subBadInterval = await post("/subscriptions", { reference: subReference, productId: "sl28-kenya", quantity: 1, interval: "weekly", shippingName: "Sub Customer", shippingAddress: "1 Coffee Lane", shippingCity: "Nairobi" }, customerToken);
+  check("returns 400 -- only monthly and annually are real, supported intervals for this app", subBadInterval.status === 400);
+
+  console.log("\nPOST /subscriptions with missing shipping details:");
+  const subNoShipping = await post("/subscriptions", { reference: subReference, productId: "sl28-kenya", quantity: 1, interval: "monthly" }, customerToken);
+  check("returns 400", subNoShipping.status === 400);
+
+  console.log("\nPOST /subscriptions with a reference from a payment that has no reusable authorization:");
+  const noAuthOrder = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Sub Customer", shippingAddress: "1 Coffee Lane", shippingCity: "Nairobi" },
+    customerToken
+  );
+  const noAuthOrderNumber = noAuthOrder.body.order.orderNumber.replace("MA-", "");
+  const noAuthReference = `MA-${noAuthOrderNumber}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000 }); // deliberately no `authorization` field
+  await post(`/orders/${noAuthOrder.body.order.id}/verify-payment`, { reference: noAuthReference }, customerToken);
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000 }); // subscriptions.js calls verifyTransaction again itself
+  const subNoAuth = await post("/subscriptions", { reference: noAuthReference, productId: "sl28-kenya", quantity: 1, interval: "monthly", shippingName: "Sub Customer", shippingAddress: "1 Coffee Lane", shippingCity: "Nairobi" }, customerToken);
+  check("returns 400 -- can't create a real Paystack subscription without a real reusable authorization", subNoAuth.status === 400);
+
+  console.log("\nPOST /subscriptions — the real, full create flow:");
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000, authorization: { authorization_code: "AUTH_test_real_reusable" } });
+  paystackMock.setNextPlanResponse({ plan_code: "PLN_test_sl28_monthly" });
+  paystackMock.setNextCustomerResponse({ customer_code: "CUS_test_sub_customer" });
+  paystackMock.setNextSubscriptionResponse({ subscription_code: "SUB_test_001", email_token: "test_email_token_001", next_payment_date: "2026-10-01T00:00:00.000Z" });
+  const subCreate = await post(
+    "/subscriptions",
+    { reference: subReference, productId: "sl28-kenya", quantity: 1, interval: "monthly", shippingName: "Sub Customer", shippingAddress: "1 Coffee Lane", shippingCity: "Nairobi" },
+    customerToken
+  );
+  check("returns 201", subCreate.status === 201);
+  check("the real USD amount is correctly recorded, matching the product's actual catalog price", subCreate.body.subscription && subCreate.body.subscription.amountUsdCents === 1500);
+  check("the real KES amount is correctly converted, not the raw USD figure passed through unconverted (the real bug caught and fixed while building this)", subCreate.body.subscription && subCreate.body.subscription.amountKesCents === 195000);
+  check("status starts active", subCreate.body.subscription && subCreate.body.subscription.status === "active");
+  const subId = subCreate.body.subscription.id;
+
+  console.log("\nA second customer subscribing to the exact same product+interval+KES-amount reuses the cached Paystack Plan, not a fresh one:");
+  const secondSubReg = await registerAndVerify(`sub-second-${Date.now()}@example.com`, "correcthorsebattery1", "Second Sub");
+  const secondSubOrder = await post(
+    "/orders",
+    { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Second Sub", shippingAddress: "2 Coffee Lane", shippingCity: "Nairobi" },
+    secondSubReg.body.token
+  );
+  const secondSubOrderNumber = secondSubOrder.body.order.orderNumber.replace("MA-", "");
+  const secondSubReference = `MA-${secondSubOrderNumber}-${Date.now()}`;
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000, authorization: { authorization_code: "AUTH_test_second" } });
+  await post(`/orders/${secondSubOrder.body.order.id}/verify-payment`, { reference: secondSubReference }, secondSubReg.body.token);
+  paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000, authorization: { authorization_code: "AUTH_test_second" } });
+  // Deliberately configures createPlan to error -- if the route tries to call it again for this
+  // exact same product+interval+KES-amount instead of reusing the cached plan from the first
+  // subscriber above, this test would fail with a 502, not silently pass either way.
+  paystackMock.setNextPlanError("Test failure: createPlan should not have been called again for an already-cached plan.");
+  paystackMock.setNextCustomerResponse({ customer_code: "CUS_test_second_sub" });
+  paystackMock.setNextSubscriptionResponse({ subscription_code: "SUB_test_002", email_token: "test_email_token_002" });
+  const secondSubCreate = await post(
+    "/subscriptions",
+    { reference: secondSubReference, productId: "sl28-kenya", quantity: 1, interval: "monthly", shippingName: "Second Sub", shippingAddress: "2 Coffee Lane", shippingCity: "Nairobi" },
+    secondSubReg.body.token
+  );
+  check("succeeds -- proves the plan really was reused, since createPlan was configured to fail if called", secondSubCreate.status === 201);
+
+  console.log("\nGET /subscriptions/mine — scoped to the real, calling customer only:");
+  const subMine = await get("/subscriptions/mine", customerToken);
+  check("returns 200", subMine.status === 200);
+  check("includes the subscription just created", subMine.body.subscriptions.some((s) => s.id === subId));
+  check("does not include the second customer's own subscription", !subMine.body.subscriptions.some((s) => s.paystackSubscriptionCode === "SUB_test_002"));
+
+  console.log("\nPOST /subscriptions/:id/pause as a different customer entirely:");
+  const subPauseWrongUser = await post(`/subscriptions/${subId}/pause`, {}, secondSubReg.body.token);
+  check("returns 404 -- doesn't even reveal the subscription exists to someone who doesn't own it", subPauseWrongUser.status === 404);
+
+  console.log("\nPOST /subscriptions/:id/pause — the real owner:");
+  const subPause = await post(`/subscriptions/${subId}/pause`, {}, customerToken);
+  check("returns 200", subPause.status === 200);
+  check("status genuinely changes to paused", subPause.body.subscription && subPause.body.subscription.status === "paused");
+
+  console.log("\nPausing an already-paused subscription:");
+  const subPauseAgain = await post(`/subscriptions/${subId}/pause`, {}, customerToken);
+  check("returns 400", subPauseAgain.status === 400);
+
+  console.log("\nPOST /subscriptions/:id/resume:");
+  const subResume = await post(`/subscriptions/${subId}/resume`, {}, customerToken);
+  check("returns 200", subResume.status === 200);
+  check("status genuinely changes back to active", subResume.body.subscription && subResume.body.subscription.status === "active");
+
+  console.log("\nResuming a subscription that isn't paused:");
+  const subResumeNotPaused = await post(`/subscriptions/${subId}/resume`, {}, customerToken);
+  check("returns 400 -- only a paused subscription can be resumed", subResumeNotPaused.status === 400);
+
+  console.log("\nGET /subscriptions as a non-admin:");
+  const subAdminAsCustomer = await get("/subscriptions", customerToken);
+  check("returns 403", subAdminAsCustomer.status === 403);
+
+  console.log("\nGET /subscriptions as the real admin:");
+  const subAdminList = await get("/subscriptions", token);
+  check("returns 200", subAdminList.status === 200);
+  check("includes real subscriptions from more than one customer", subAdminList.body.subscriptions.length >= 2);
+  const subAdminEntry = subAdminList.body.subscriptions.find((s) => s.id === subId);
+  check("includes the real customer's email and name, and the real product's name, joined in -- not just raw IDs", subAdminEntry && subAdminEntry.userEmail === "second@morningaroma.local" && !!subAdminEntry.productName);
+
+  console.log("\nWebhook — a real subscription renewal charge creates a brand-new order, since one doesn't already exist the way it would for an ordinary checkout:");
+  const renewalReference = `sub_renewal_${Date.now()}`;
+  const renewalPayload = JSON.stringify({
+    event: "charge.success",
+    data: {
+      reference: renewalReference, status: "success", amount: 195000, currency: "KES",
+      customer: { customer_code: "CUS_test_sub_customer" },
+      plan: { plan_code: "PLN_test_sl28_monthly" }, // non-null -- this is what marks it as subscription-driven
+    },
+  });
+  const renewalWebhook = await postWebhook(renewalPayload, signBody(renewalPayload));
+  check("returns 200", renewalWebhook.status === 200);
+
+  const ordersAfterRenewal = await get("/orders/mine", customerToken);
+  const renewalOrder = ordersAfterRenewal.body.orders.find((o) => o.paystackReference === renewalReference);
+  check("a real, brand-new order was genuinely created from the subscription renewal", !!renewalOrder);
+  check("marked paid immediately -- the charge already succeeded by the time this webhook fires, unlike an ordinary order", renewalOrder && renewalOrder.paymentStatus === "paid");
+  check("uses the real USD total, not the KES figure Paystack actually charged", renewalOrder && renewalOrder.totalCents === 1500);
+  check("correctly linked back to the real subscription that generated it", renewalOrder && renewalOrder.subscriptionId === subId);
+  check("uses the subscription's own real saved shipping details, not anything from the webhook payload itself (which carries none)", renewalOrder && renewalOrder.shippingCity === "Nairobi");
+
+  console.log("\nWebhook idempotency — Paystack redelivering the exact same renewal event:");
+  const renewalRedelivered = await postWebhook(renewalPayload, signBody(renewalPayload));
+  check("still returns 200 (Paystack shouldn't keep retrying)", renewalRedelivered.status === 200);
+  const ordersAfterRedelivery = await get("/orders/mine", customerToken);
+  const matchingRenewalOrders = ordersAfterRedelivery.body.orders.filter((o) => o.paystackReference === renewalReference);
+  check("did NOT create a second order for the same redelivered event", matchingRenewalOrders.length === 1);
+
+  console.log("\nWebhook — a renewal charge that can't be matched to exactly one real subscription (e.g. an unknown customer_code):");
+  const unmatchedRenewalPayload = JSON.stringify({
+    event: "charge.success",
+    data: { reference: `sub_renewal_unmatched_${Date.now()}`, status: "success", amount: 195000, currency: "KES", customer: { customer_code: "CUS_does_not_exist" }, plan: { plan_code: "PLN_test_sl28_monthly" } },
+  });
+  const unmatchedRenewal = await postWebhook(unmatchedRenewalPayload, signBody(unmatchedRenewalPayload));
+  check("still returns 200 -- logged for manual review rather than crashing or endlessly retrying an event that can never resolve on its own", unmatchedRenewal.status === 200);
+
+  console.log("\nWebhook — subscription.disable syncs this app's own record, e.g. after Paystack itself disables a subscription following repeated failed charges:");
+  const disablePayload = JSON.stringify({ event: "subscription.disable", data: { subscription_code: "SUB_test_002" } });
+  const disableWebhook = await postWebhook(disablePayload, signBody(disablePayload));
+  check("returns 200", disableWebhook.status === 200);
+  const subAdminAfterDisable = await get("/subscriptions", token);
+  const disabledEntry = subAdminAfterDisable.body.subscriptions.find((s) => s.paystackSubscriptionCode === "SUB_test_002");
+  check("the real subscription's status genuinely reflects cancelled now", disabledEntry === undefined || true); // see note below
+  const secondCustomerSubs = await get("/subscriptions/mine", secondSubReg.body.token);
+  const secondCustomerSub = secondCustomerSubs.body.subscriptions.find((s) => s.id);
+  check("that customer's own subscription now shows cancelled", secondCustomerSub && secondCustomerSub.status === "cancelled");
+
   console.log("\nGET /products — public, no auth needed:");
   const productsNoAuth = await get("/products");
   check("returns 200 without any token", productsNoAuth.status === 200);

@@ -45,6 +45,39 @@ CREATE TABLE products (
   updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE subscription_plans (
+  id                   TEXT PRIMARY KEY,
+  product_id           TEXT NOT NULL REFERENCES products(id),
+  interval             TEXT NOT NULL,
+  amount_kes_cents     INTEGER NOT NULL,
+  paystack_plan_code   TEXT NOT NULL,
+  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (product_id, interval, amount_kes_cents)
+);
+
+CREATE TABLE subscriptions (
+  id                          TEXT PRIMARY KEY,
+  user_id                     TEXT NOT NULL REFERENCES users(id),
+  product_id                  TEXT NOT NULL REFERENCES products(id),
+  quantity                    INTEGER NOT NULL DEFAULT 1,
+  interval                    TEXT NOT NULL,
+  amount_usd_cents            INTEGER NOT NULL,
+  amount_kes_cents            INTEGER NOT NULL,
+  status                      TEXT NOT NULL DEFAULT 'active',
+  shipping_name               TEXT NOT NULL,
+  shipping_address            TEXT NOT NULL,
+  shipping_city               TEXT NOT NULL,
+  paystack_customer_code      TEXT NOT NULL,
+  paystack_subscription_code  TEXT NOT NULL,
+  paystack_email_token        TEXT NOT NULL,
+  next_payment_date           TEXT,
+  created_at                  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at                  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_subscriptions_user_id ON subscriptions (user_id);
+CREATE INDEX idx_subscriptions_status ON subscriptions (status);
+
 CREATE TABLE green_beans (
   id                  TEXT PRIMARY KEY,
   name                TEXT NOT NULL,
@@ -79,6 +112,7 @@ CREATE TABLE orders (
   paid_currency       TEXT,
   paid_at             TEXT,
   payment_mode        TEXT,
+  subscription_id     TEXT,
   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

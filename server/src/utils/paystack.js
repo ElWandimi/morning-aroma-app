@@ -60,4 +60,75 @@ async function initiateRefund(reference) {
   return body.data; // { status, amount, currency, transaction_reference, ... } -- see Paystack's Create Refund docs
 }
 
-module.exports = { verifyTransaction, getUsdToKesRate, initiateRefund };
+// Real Plan creation -- Paystack requires a Plan (amount + interval) to exist before a
+// Subscription can attach to it. See findOrCreateSubscriptionPlan in routes/subscriptions.js for
+// why this is cached rather than called fresh for every subscriber.
+async function createPlan(name, amountCents, interval) {
+  const res = await fetch(`${PAYSTACK_API}/plan`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, amount: amountCents, interval, currency: "KES" }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.status) throw new Error(body.message || "Could not create this plan with Paystack.");
+  return body.data; // { plan_code, ... } -- see Paystack's Create Plan docs
+}
+
+// Real Customer lookup/creation -- a Subscription attaches to a Paystack Customer, not directly
+// to an email. Paystack's own /customer endpoint is itself idempotent on email (creating with an
+// email that already exists returns the existing customer rather than erroring), so this can
+// always just call create rather than needing its own separate lookup-then-create logic.
+async function findOrCreateCustomer(email, firstName, lastName) {
+  const res = await fetch(`${PAYSTACK_API}/customer`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, first_name: firstName, last_name: lastName }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.status) throw new Error(body.message || "Could not create this customer with Paystack.");
+  return body.data; // { customer_code, ... } -- see Paystack's Create Customer docs
+}
+
+// Real Subscription creation -- requires an authorization_code from an already-verified
+// transaction (Paystack's own requirement: the customer must have paid at least once before a
+// subscription can exist). Paystack owns everything from here on: billing dates and charging the
+// saved card automatically. Paystack does NOT retry a failed renewal charge (confirmed directly
+// from their own docs, not assumed) -- see webhooks.js for how a failed renewal is handled here.
+async function createSubscription(customerCode, planCode, authorizationCode) {
+  const res = await fetch(`${PAYSTACK_API}/subscription`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ customer: customerCode, plan: planCode, authorization: authorizationCode }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.status) throw new Error(body.message || "Could not create this subscription with Paystack.");
+  return body.data; // { subscription_code, email_token, next_payment_date, ... } -- see Paystack's Create Subscription docs
+}
+
+// Real pause -- Paystack's own disable endpoint requires both the subscription code and its
+// email_token (returned once, at creation) as a pair; the subscription code alone isn't enough
+// to authorize disabling it.
+async function disableSubscription(subscriptionCode, emailToken) {
+  const res = await fetch(`${PAYSTACK_API}/subscription/disable`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ code: subscriptionCode, token: emailToken }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.status) throw new Error(body.message || "Could not pause this subscription with Paystack.");
+  return body.data;
+}
+
+// Real resume -- the same code/token pair, against Paystack's enable endpoint instead.
+async function enableSubscription(subscriptionCode, emailToken) {
+  const res = await fetch(`${PAYSTACK_API}/subscription/enable`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ code: subscriptionCode, token: emailToken }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.status) throw new Error(body.message || "Could not resume this subscription with Paystack.");
+  return body.data;
+}
+
+module.exports = { verifyTransaction, getUsdToKesRate, initiateRefund, createPlan, findOrCreateCustomer, createSubscription, disableSubscription, enableSubscription };

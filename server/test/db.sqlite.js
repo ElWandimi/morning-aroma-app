@@ -65,13 +65,44 @@ async function query(text, params = []) {
     const id = crypto.randomUUID();
     const orderNumber = nextOrderNumber++;
     const createdAt = new Date().toISOString();
-    sql = sql
-      .replace(/\s+/g, " ")
-      .replace(
+    const normalized = sql.replace(/\s+/g, " ").trim();
+    // The subscription-renewal order shape (routes/webhooks.js's handleSubscriptionRenewalCharge)
+    // is a genuinely different column list from an ordinary order -- already paid at creation
+    // time, not created unpaid and verified separately -- so it needs its own match rather than
+    // reusing the ordinary-order branch below. Its `now()` is a literal Postgres understands
+    // natively but SQLite doesn't have a same-named function for; substituted with a bound,
+    // JS-generated timestamp instead, the same real accommodation already applied to id/
+    // created_at throughout this adapter.
+    if (normalized.includes("status, payment_status, paystack_reference, paid_amount_cents, paid_currency, paid_at, payment_mode, subscription_id")) {
+      const paidAt = new Date().toISOString();
+      sql = normalized.replace(
+        "INSERT INTO orders (user_id, items, total_cents, shipping_name, shipping_address, shipping_city, status, payment_status, paystack_reference, paid_amount_cents, paid_currency, paid_at, payment_mode, subscription_id) VALUES ($1, $2, $3, $4, $5, $6, 'Processing', 'paid', $7, $8, $9, now(), $10, $11)",
+        "INSERT INTO orders (id, order_number, user_id, items, total_cents, shipping_name, shipping_address, shipping_city, status, payment_status, paystack_reference, paid_amount_cents, paid_currency, paid_at, payment_mode, subscription_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Processing', 'paid', ?, ?, ?, ?, ?, ?)"
+      );
+      values = [id, orderNumber, values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], paidAt, values[9], values[10]];
+    } else {
+      sql = normalized.replace(
         "INSERT INTO orders (user_id, items, total_cents, shipping_name, shipping_address, shipping_city) VALUES ($1, $2, $3, $4, $5, $6)",
         "INSERT INTO orders (id, order_number, user_id, items, total_cents, shipping_name, shipping_address, shipping_city, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       );
-    values = [id, orderNumber, values[0], values[1], values[2], values[3], values[4], values[5], createdAt];
+      values = [id, orderNumber, values[0], values[1], values[2], values[3], values[4], values[5], createdAt];
+    }
+  } else if (/INSERT INTO subscription_plans/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO subscription_plans (product_id, interval, amount_kes_cents, paystack_plan_code) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO subscription_plans (id, product_id, interval, amount_kes_cents, paystack_plan_code, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    values = [id, ...values, createdAt];
+  } else if (/INSERT INTO subscriptions/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(/\s+/g, " ").replace(
+      "INSERT INTO subscriptions (user_id, product_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+      "INSERT INTO subscriptions (id, user_id, product_id, quantity, interval, amount_usd_cents, amount_kes_cents, shipping_name, shipping_address, shipping_city, paystack_customer_code, paystack_subscription_code, paystack_email_token, next_payment_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    values = [id, ...values, createdAt];
   } else {
     // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
     // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are
