@@ -1,0 +1,56 @@
+diff --git a/src/App.jsx b/src/App.jsx
+index 546aa83..3f9080a 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext, lazy, Su
+ const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
+ import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, TranslateSuggestBanner, WishlistDrawer } from "./components";
+ import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
+-import { BREW_GUIDES, COUNTRIES, COURSES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META, PRODUCTS } from "./data";
++import { BREW_GUIDES, COUNTRIES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META } from "./data";
+ import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
+ import { AcademyHubPage, CoursePage } from "./pages/Academy";
+ import { BrewGuidePage, BrewGuidesHubPage } from "./pages/BrewGuides";
+@@ -28,12 +28,18 @@ import { slugify } from "./utils/helpers";
+ // pull straight from PAGE_META, pages with an :id (product, moment, course, etc.) look up the
+ // actual item so e.g. a product page's title is genuinely "SL28 — Kenya | Morning Aroma", not
+ // just the generic site title repeated on every page.
+-function getPageMeta(route) {
++//
++// realProducts/realCourses are passed in rather than imported as static data (PRODUCTS/COURSES
++// from ./data) -- both are now real, database-backed, admin-editable data (see ROADMAP.md), and
++// reading from the static arrays here would keep showing a stale title/description after an
++// admin genuinely renamed a product or changed a course's blurb, since those static arrays are
++// never updated by an admin edit at all, only ever by a code change.
++function getPageMeta(route, realProducts, realCourses) {
+   const suffix = " | Morning Aroma";
+   switch (route.page) {
+     case "product":
+     case "growingprofile": {
+-      const p = PRODUCTS.find((p) => p.id === route.id);
++      const p = realProducts.find((p) => p.id === route.id);
+       return p
+         ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note }
+         : PAGE_META[route.page === "product" ? "shop" : "growing"];
+@@ -43,7 +49,7 @@ function getPageMeta(route) {
+       return m ? { title: `${m.name}${suffix}`, description: m.benefit } : PAGE_META.moments;
+     }
+     case "course": {
+-      const c = COURSES.find((c) => slugify(c.name) === route.id);
++      const c = realCourses.find((c) => c.id === route.id);
+       return c ? { title: `${c.name}${suffix}`, description: c.blurb } : PAGE_META.academy;
+     }
+     case "brewguide": {
+@@ -77,10 +83,10 @@ export function AppShell() {
+   const [authView, setAuthView] = useState(null);
+   const [searchOpen, setSearchOpen] = useState(false);
+   const { route } = useRoute();
+-  const { settings } = useAdmin();
++  const { settings, getAllProducts, getAllCourses } = useAdmin();
+   const routeKey = route.page + (route.id || "");
+   useScrollReveal(routeKey);
+-  const pageMeta = getPageMeta(route);
++  const pageMeta = getPageMeta(route, getAllProducts(), getAllCourses());
+   useDocumentMeta(pageMeta.title, pageMeta.description);
+   useStructuredData({
+     "@context": "https://schema.org",
