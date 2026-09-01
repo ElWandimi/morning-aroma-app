@@ -8,4 +8,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.morningaroma.com/sitemap.xml
+Sitemap: https://morning-aroma.com/sitemap.xml

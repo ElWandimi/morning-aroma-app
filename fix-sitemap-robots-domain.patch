@@ -1,0 +1,466 @@
+diff --git a/package.json b/package.json
+index a62c587..e7fb497 100644
+--- a/package.json
++++ b/package.json
+@@ -6,7 +6,7 @@
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+-    "build": "vite build && node scripts/generate-route-meta.mjs",
++    "build": "node scripts/generate-sitemap.mjs && vite build && node scripts/generate-route-meta.mjs",
+     "start": "node server.cjs",
+     "preview": "vite preview",
+     "test:e2e": "playwright test"
+diff --git a/public/robots.txt b/public/robots.txt
+index dd4874b..b4f146b 100644
+--- a/public/robots.txt
++++ b/public/robots.txt
+@@ -8,4 +8,4 @@
+ User-agent: *
+ Allow: /
+ 
+-Sitemap: https://www.morningaroma.com/sitemap.xml
++Sitemap: https://morning-aroma.com/sitemap.xml
+diff --git a/public/sitemap.xml b/public/sitemap.xml
+index 6f9a83c..1bae320 100644
+--- a/public/sitemap.xml
++++ b/public/sitemap.xml
+@@ -1,103 +1,343 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/</loc>
++    <loc>https://morning-aroma.com/</loc>
+     <changefreq>weekly</changefreq>
+     <priority>1.0</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/shop</loc>
++    <loc>https://morning-aroma.com/shop</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/moments</loc>
++    <loc>https://morning-aroma.com/moments</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/brew-guides</loc>
++    <loc>https://morning-aroma.com/brew-guides</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/academy</loc>
++    <loc>https://morning-aroma.com/academy</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/growing</loc>
++    <loc>https://morning-aroma.com/growing</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/soil-explorer</loc>
++    <loc>https://morning-aroma.com/soil-explorer</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/seasons</loc>
++    <loc>https://morning-aroma.com/seasons</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/history</loc>
++    <loc>https://morning-aroma.com/history</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/our-promise</loc>
++    <loc>https://morning-aroma.com/our-promise</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/quiz</loc>
++    <loc>https://morning-aroma.com/quiz</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/rituals</loc>
++    <loc>https://morning-aroma.com/rituals</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/faq</loc>
++    <loc>https://morning-aroma.com/faq</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/contact</loc>
++    <loc>https://morning-aroma.com/contact</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/source-library</loc>
++    <loc>https://morning-aroma.com/source-library</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/world-journey</loc>
++    <loc>https://morning-aroma.com/world-journey</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/services</loc>
++    <loc>https://morning-aroma.com/services</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/privacy</loc>
++    <loc>https://morning-aroma.com/privacy</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/terms</loc>
++    <loc>https://morning-aroma.com/terms</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
+   <url>
+-    <loc>https://morning-aroma-app-production.up.railway.app/green-beans</loc>
++    <loc>https://morning-aroma.com/green-beans</loc>
+     <changefreq>weekly</changefreq>
+     <priority>0.7</priority>
+   </url>
++  <url>
++    <loc>https://morning-aroma.com/product/geisha-panama</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/laurina-brazil</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/sl28-kenya</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/pacamara-elsalvador</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/bourbon-rwanda</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/typica-guatemala</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/caturra-colombia</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/catuai-honduras</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/yirgacheffe-ethiopia</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/longberry-indonesia</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/villa-sarch-costa-rica</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/ngozi-burundi</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/matari-yemen</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/peaberry-tanzania</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/product/chanchamayo-peru</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.8</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/panama</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/brazil</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/kenya</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/el-salvador</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/rwanda</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/guatemala</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/colombia</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/honduras</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/ethiopia</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/indonesia</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/costa-rica</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/burundi</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/yemen</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/tanzania</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/country/peru</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.6</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/moment/first-light</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/moment/the-hustle</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/moment/the-reset</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/moment/comfort</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/pour-over</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/french-press</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/espresso</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/cold-brew</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/moka-pot</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/aeropress</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/cappuccino</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/latte</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/flat-white</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/mocha</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/americano</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/turkish</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/vietnamese</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
++  <url>
++    <loc>https://morning-aroma.com/brew-guide/affogato</loc>
++    <changefreq>weekly</changefreq>
++    <priority>0.5</priority>
++  </url>
+ </urlset>
+diff --git a/scripts/generate-sitemap.mjs b/scripts/generate-sitemap.mjs
+index 6e22a3b..9a8b655 100644
+--- a/scripts/generate-sitemap.mjs
++++ b/scripts/generate-sitemap.mjs
+@@ -1,20 +1,30 @@
+-// Generates public/sitemap.xml from the real routing data (PAGE_TO_SLUG), so it can never
+-// silently drift out of sync with the app's actual pages the way a hand-written sitemap would.
+-// Run manually with: node scripts/generate-sitemap.mjs
++// Generates public/sitemap.xml from the real routing data, so it can never silently drift out of
++// sync with the app's actual pages and content the way a hand-written sitemap would. Runs
++// automatically as part of `npm run build` -- was previously a real, if only intended, mechanism
++// that was never actually wired in, so it silently never ran; that, combined with defaulting to
++// the Railway staging domain rather than the real production one, is exactly why the sitemap that
++// shipped pointed at the wrong domain entirely and never listed a single product, country,
++// moment, or brew-guide page.
+ //
+ // Real path-based URLs (/shop, not #/shop) -- this app switched off hash routing specifically
+ // because a browser never sends the part of a URL after '#' in an HTTP request at all, meaning
+ // search engines could never reliably index hash-fragment routes the way they can real paths.
+ // See ROADMAP.md's change log for the full detail.
+-import { PAGE_TO_SLUG } from "../src/data/index.js";
++import { PAGE_TO_SLUG, PRODUCTS, COUNTRIES, MOMENTS, BREW_GUIDES } from "../src/data/index.js";
+ import { writeFileSync } from "fs";
+ 
+ // SITE_ORIGIN env var lets this reflect the real deployed domain without editing this file by
+-// hand -- falls back to the actual current Railway domain (not a domain the project owner
+-// doesn't own) if unset, same reasoning already applied to FRONTEND_URL in the backend's email
+-// links: never hardcode a domain that isn't genuinely real and controlled by this project.
+-const SITE_ORIGIN = process.env.SITE_ORIGIN || "https://morning-aroma-app-production.up.railway.app";
++// hand -- falls back to the actual, real, live production domain (not the Railway staging URL
++// this previously, incorrectly fell back to) if unset, same reasoning already applied to
++// FRONTEND_URL in the backend's email links: never hardcode a domain that isn't genuinely real
++// and controlled by this project.
++const SITE_ORIGIN = process.env.SITE_ORIGIN || "https://morning-aroma.com";
++const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+ 
++// course/growingprofile/growingfactor stay excluded here, not an oversight -- courses now live in
++// the real database (see ROADMAP.md), not static data this build-time script can read directly
++// without adding a real network dependency to every build, and growingprofile/growingfactor are
++// product-specific sub-pages whose real content already lives on the product page itself.
+ const STATIC_PAGES = Object.keys(PAGE_TO_SLUG).filter(
+   (page) => ![
+     "product", "moment", "brewguide", "course", "growingprofile", "country", "growingfactor",
+@@ -22,13 +32,26 @@ const STATIC_PAGES = Object.keys(PAGE_TO_SLUG).filter(
+   ].includes(page)
+ );
+ 
+-const urls = STATIC_PAGES.map((page) => {
++const staticUrls = STATIC_PAGES.map((page) => {
+   const slug = PAGE_TO_SLUG[page];
+   const path = slug ? `/${slug}` : "/";
+-  return `  <url>\n    <loc>${SITE_ORIGIN}${path}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>${page === "home" ? "1.0" : "0.7"}</priority>\n  </url>`;
+-}).join("\n");
++  return { loc: `${SITE_ORIGIN}${path}`, priority: page === "home" ? "1.0" : "0.7" };
++});
+ 
+-const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
++// Real, individual detail pages -- the previous sitemap never had any of these at all, only
++// static hub pages, meaning it never actually helped a search engine discover this site's real
++// content: any of its 15 products, 15 countries, 8 coffee moments, or 14 brew guides.
++const detailUrls = [
++  ...PRODUCTS.map((p) => ({ loc: `${SITE_ORIGIN}/product/${p.id}`, priority: "0.8" })),
++  ...COUNTRIES.map((c) => ({ loc: `${SITE_ORIGIN}/country/${slugify(c.name)}`, priority: "0.6" })),
++  ...MOMENTS.map((m) => ({ loc: `${SITE_ORIGIN}/moment/${slugify(m.name)}`, priority: "0.5" })),
++  ...BREW_GUIDES.map((b) => ({ loc: `${SITE_ORIGIN}/brew-guide/${slugify(b.name)}`, priority: "0.5" })),
++];
++
++const allUrls = [...staticUrls, ...detailUrls];
++const urlsXml = allUrls.map((u) => `  <url>\n    <loc>${u.loc}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`).join("\n");
++
++const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlsXml}\n</urlset>\n`;
+ 
+ writeFileSync(new URL("../public/sitemap.xml", import.meta.url), xml);
+-console.log(`Wrote public/sitemap.xml with ${STATIC_PAGES.length} URLs`);
++console.log(`Wrote public/sitemap.xml with ${allUrls.length} real URLs (${STATIC_PAGES.length} static, ${PRODUCTS.length} products, ${COUNTRIES.length} countries, ${MOMENTS.length} moments, ${BREW_GUIDES.length} brew guides)`);

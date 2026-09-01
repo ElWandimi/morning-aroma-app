@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/generate-route-meta.mjs",
+    "build": "node scripts/generate-sitemap.mjs && vite build && node scripts/generate-route-meta.mjs",
     "start": "node server.cjs",
     "preview": "vite preview",
     "test:e2e": "playwright test"

@@ -1,103 +1,343 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/</loc>
+    <loc>https://morning-aroma.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/shop</loc>
+    <loc>https://morning-aroma.com/shop</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/moments</loc>
+    <loc>https://morning-aroma.com/moments</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/brew-guides</loc>
+    <loc>https://morning-aroma.com/brew-guides</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/academy</loc>
+    <loc>https://morning-aroma.com/academy</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/growing</loc>
+    <loc>https://morning-aroma.com/growing</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/soil-explorer</loc>
+    <loc>https://morning-aroma.com/soil-explorer</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/seasons</loc>
+    <loc>https://morning-aroma.com/seasons</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/history</loc>
+    <loc>https://morning-aroma.com/history</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/our-promise</loc>
+    <loc>https://morning-aroma.com/our-promise</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/quiz</loc>
+    <loc>https://morning-aroma.com/quiz</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/rituals</loc>
+    <loc>https://morning-aroma.com/rituals</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/faq</loc>
+    <loc>https://morning-aroma.com/faq</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/contact</loc>
+    <loc>https://morning-aroma.com/contact</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/source-library</loc>
+    <loc>https://morning-aroma.com/source-library</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/world-journey</loc>
+    <loc>https://morning-aroma.com/world-journey</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/services</loc>
+    <loc>https://morning-aroma.com/services</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/privacy</loc>
+    <loc>https://morning-aroma.com/privacy</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/terms</loc>
+    <loc>https://morning-aroma.com/terms</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://morning-aroma-app-production.up.railway.app/green-beans</loc>
+    <loc>https://morning-aroma.com/green-beans</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/geisha-panama</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/laurina-brazil</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/sl28-kenya</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/pacamara-elsalvador</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/bourbon-rwanda</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/typica-guatemala</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/caturra-colombia</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/catuai-honduras</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/yirgacheffe-ethiopia</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/longberry-indonesia</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/villa-sarch-costa-rica</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/ngozi-burundi</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/matari-yemen</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/peaberry-tanzania</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/product/chanchamayo-peru</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/panama</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/brazil</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/kenya</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/el-salvador</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/rwanda</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/guatemala</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/colombia</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/honduras</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/ethiopia</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/indonesia</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/costa-rica</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/burundi</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/yemen</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/tanzania</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/country/peru</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/moment/first-light</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/moment/the-hustle</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/moment/the-reset</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/moment/comfort</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/pour-over</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/french-press</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/espresso</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/cold-brew</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/moka-pot</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/aeropress</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/cappuccino</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/latte</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/flat-white</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/mocha</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/americano</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/turkish</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/vietnamese</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://morning-aroma.com/brew-guide/affogato</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
   </url>
 </urlset>
