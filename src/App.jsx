@@ -4,25 +4,47 @@ import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBo
 import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
 import { BREW_GUIDES, COUNTRIES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META } from "./data";
 import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
-import { AcademyHubPage, CoursePage } from "./pages/Academy";
-import { BrewGuidePage, BrewGuidesHubPage } from "./pages/BrewGuides";
-import { CheckoutPage } from "./pages/Checkout";
-import { CountryPage, GrowingFactorPage, GrowingHubPage, GrowingProfilePage, SeasonsPage, SoilExplorerPage } from "./pages/Growing";
-import { HistoryPage } from "./pages/History";
 import { HomePage } from "./pages/Home";
-import { JourneyPage } from "./pages/Journey";
-import { ContactPage, FaqPage, PrivacyPolicyPage, SourceLibraryPage, TermsOfServicePage } from "./pages/Misc";
-import { MomentPage, MomentsHubPage } from "./pages/Moments";
-import { OurPromisePage } from "./pages/Promise";
-import { QuizPage } from "./pages/Quiz";
-import { RitualsPage } from "./pages/Rituals";
-import { OurServicesPage } from "./pages/Services";
-import { GreenBeansPage } from "./pages/GreenBeans";
-import { SearchResultsPage } from "./pages/Search";
-import { ProductPage, ShopPage } from "./pages/Shop";
-import { WorldJourneyPage } from "./pages/WorldJourney";
 import { CSS } from "./styles/theme";
 import { slugify } from "./utils/helpers";
+
+// Every page below except HomePage (imported eagerly above -- it's the landing page most
+// visitors see first, and lazy-loading it would add an unnecessary extra network request for the
+// single most common case) is loaded on demand, the same real pattern already proven for the
+// admin panel above. Someone who only ever visits the homepage and shop now downloads genuinely
+// less code than before; a page they never visit (say, Green Coffee or Our Services) never loads
+// at all. Multiple named exports from the same file (e.g. AcademyHubPage and CoursePage both from
+// ./pages/Academy) naturally land in the same chunk together, which is fine -- they're the hub and
+// detail page for the same real feature, so loading one usually means the other is coming next.
+const AcademyHubPage = lazy(() => import("./pages/Academy").then((m) => ({ default: m.AcademyHubPage })));
+const CoursePage = lazy(() => import("./pages/Academy").then((m) => ({ default: m.CoursePage })));
+const BrewGuidePage = lazy(() => import("./pages/BrewGuides").then((m) => ({ default: m.BrewGuidePage })));
+const BrewGuidesHubPage = lazy(() => import("./pages/BrewGuides").then((m) => ({ default: m.BrewGuidesHubPage })));
+const CheckoutPage = lazy(() => import("./pages/Checkout").then((m) => ({ default: m.CheckoutPage })));
+const CountryPage = lazy(() => import("./pages/Growing").then((m) => ({ default: m.CountryPage })));
+const GrowingFactorPage = lazy(() => import("./pages/Growing").then((m) => ({ default: m.GrowingFactorPage })));
+const GrowingHubPage = lazy(() => import("./pages/Growing").then((m) => ({ default: m.GrowingHubPage })));
+const GrowingProfilePage = lazy(() => import("./pages/Growing").then((m) => ({ default: m.GrowingProfilePage })));
+const SeasonsPage = lazy(() => import("./pages/Growing").then((m) => ({ default: m.SeasonsPage })));
+const SoilExplorerPage = lazy(() => import("./pages/Growing").then((m) => ({ default: m.SoilExplorerPage })));
+const HistoryPage = lazy(() => import("./pages/History").then((m) => ({ default: m.HistoryPage })));
+const JourneyPage = lazy(() => import("./pages/Journey").then((m) => ({ default: m.JourneyPage })));
+const ContactPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.ContactPage })));
+const FaqPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.FaqPage })));
+const PrivacyPolicyPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.PrivacyPolicyPage })));
+const SourceLibraryPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.SourceLibraryPage })));
+const TermsOfServicePage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.TermsOfServicePage })));
+const MomentPage = lazy(() => import("./pages/Moments").then((m) => ({ default: m.MomentPage })));
+const MomentsHubPage = lazy(() => import("./pages/Moments").then((m) => ({ default: m.MomentsHubPage })));
+const OurPromisePage = lazy(() => import("./pages/Promise").then((m) => ({ default: m.OurPromisePage })));
+const QuizPage = lazy(() => import("./pages/Quiz").then((m) => ({ default: m.QuizPage })));
+const RitualsPage = lazy(() => import("./pages/Rituals").then((m) => ({ default: m.RitualsPage })));
+const OurServicesPage = lazy(() => import("./pages/Services").then((m) => ({ default: m.OurServicesPage })));
+const GreenBeansPage = lazy(() => import("./pages/GreenBeans").then((m) => ({ default: m.GreenBeansPage })));
+const SearchResultsPage = lazy(() => import("./pages/Search").then((m) => ({ default: m.SearchResultsPage })));
+const ProductPage = lazy(() => import("./pages/Shop").then((m) => ({ default: m.ProductPage })));
+const ShopPage = lazy(() => import("./pages/Shop").then((m) => ({ default: m.ShopPage })));
+const WorldJourneyPage = lazy(() => import("./pages/WorldJourney").then((m) => ({ default: m.WorldJourneyPage })));
 
 // Builds the real per-page <title> / meta description for the current route — static pages
 // pull straight from PAGE_META, pages with an :id (product, moment, course, etc.) look up the
@@ -107,42 +129,43 @@ export function AppShell() {
       <TranslateSuggestBanner />
       <Nav onOpenLogin={() => setAuthView("signin")} onOpenSearch={() => setSearchOpen(true)} />
       <div key={routeKey} id="main-content" className="page-fade">
-        {route.page === "home" && <HomePage />}
-        {route.page === "shop" && <ShopPage />}
-        {route.page === "product" && <ProductPage id={route.id} />}
-        {route.page === "moments" && <MomentsHubPage />}
-        {route.page === "moment" && <MomentPage id={route.id} />}
-        {route.page === "brewguides" && <BrewGuidesHubPage />}
-        {route.page === "brewguide" && <BrewGuidePage id={route.id} />}
-        {route.page === "academy" && <AcademyHubPage />}
-        {route.page === "course" && <CoursePage id={route.id} />}
-        {route.page === "growing" && <GrowingHubPage />}
-        {route.page === "growingprofile" && <GrowingProfilePage id={route.id} />}
-        {route.page === "country" && <CountryPage id={route.id} />}
-        {route.page === "growingfactor" && <GrowingFactorPage id={route.id} />}
-        {route.page === "soilexplorer" && <SoilExplorerPage id={route.id} />}
-        {route.page === "seasons" && <SeasonsPage />}
-        {route.page === "history" && <HistoryPage />}
-        {route.page === "promise" && <OurPromisePage />}
-        {route.page === "journey" && <JourneyPage />}
-        {route.page === "checkout" && <CheckoutPage />}
-        {route.page === "quiz" && <QuizPage />}
-        {route.page === "rituals" && <RitualsPage />}
-        {route.page === "worldjourney" && <WorldJourneyPage />}
-        {route.page === "services" && <OurServicesPage />}
-        {route.page === "greenbeans" && <GreenBeansPage />}
-        {route.page === "searchresults" && <SearchResultsPage id={route.id} />}
-        {route.page === "faq" && <FaqPage />}
-        {route.page === "contact" && <ContactPage />}
-        {route.page === "sourcelibrary" && <SourceLibraryPage />}
-        {route.page === "privacy" && <PrivacyPolicyPage />}
-        {route.page === "terms" && <TermsOfServicePage />}
-        {route.page === "admin" && (
-          <Suspense fallback={<div className="admin-chunk-loading"><span className="bean-shape" /><p>Loading admin…</p></div>}>
-            <AdminDashboard />
+        {route.page === "home" ? (
+          <HomePage />
+        ) : (
+          <Suspense fallback={<div className="admin-chunk-loading"><span className="bean-shape" /><p>Loading…</p></div>}>
+            {route.page === "shop" && <ShopPage />}
+            {route.page === "product" && <ProductPage id={route.id} />}
+            {route.page === "moments" && <MomentsHubPage />}
+            {route.page === "moment" && <MomentPage id={route.id} />}
+            {route.page === "brewguides" && <BrewGuidesHubPage />}
+            {route.page === "brewguide" && <BrewGuidePage id={route.id} />}
+            {route.page === "academy" && <AcademyHubPage />}
+            {route.page === "course" && <CoursePage id={route.id} />}
+            {route.page === "growing" && <GrowingHubPage />}
+            {route.page === "growingprofile" && <GrowingProfilePage id={route.id} />}
+            {route.page === "country" && <CountryPage id={route.id} />}
+            {route.page === "growingfactor" && <GrowingFactorPage id={route.id} />}
+            {route.page === "soilexplorer" && <SoilExplorerPage id={route.id} />}
+            {route.page === "seasons" && <SeasonsPage />}
+            {route.page === "history" && <HistoryPage />}
+            {route.page === "promise" && <OurPromisePage />}
+            {route.page === "journey" && <JourneyPage />}
+            {route.page === "checkout" && <CheckoutPage />}
+            {route.page === "quiz" && <QuizPage />}
+            {route.page === "rituals" && <RitualsPage />}
+            {route.page === "worldjourney" && <WorldJourneyPage />}
+            {route.page === "services" && <OurServicesPage />}
+            {route.page === "greenbeans" && <GreenBeansPage />}
+            {route.page === "searchresults" && <SearchResultsPage id={route.id} />}
+            {route.page === "faq" && <FaqPage />}
+            {route.page === "contact" && <ContactPage />}
+            {route.page === "sourcelibrary" && <SourceLibraryPage />}
+            {route.page === "privacy" && <PrivacyPolicyPage />}
+            {route.page === "terms" && <TermsOfServicePage />}
+            {route.page === "admin" && <AdminDashboard />}
+            {!KNOWN_ROUTES.has(route.page) && <NotFoundPage />}
           </Suspense>
         )}
-        {!KNOWN_ROUTES.has(route.page) && <NotFoundPage />}
       </div>
       <Footer />
       <FeedbackBean />
