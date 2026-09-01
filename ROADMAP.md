@@ -743,6 +743,42 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
       people-free photography in each spot. Found by the user directly on the live site, not
       caught by any test; a reminder that visual/content review still needs a real human looking
       at the real, rendered result, not just code review.
+- [x] **Real, backend-persisted product reviews — was purely local, in-memory state before this.**
+      A customer submitting one through "Leave Your Aroma" previously never left that browser tab:
+      it disappeared on refresh, no other visitor ever saw it, admin couldn't see it either unless
+      looking at that exact session, and the product page's own "aggregate rating" SEO structured
+      data was always empty for a fresh visitor since there was nothing real behind it. Now a real
+      database table, a real anonymous (matching the existing, established UX — never required a
+      login before this either) rate-limited submission endpoint, and a real moderation gate
+      enforced by the database query itself, not just trusted to the frontend to filter correctly.
+      **Two real bugs caught by the tests actually running, not by review**: a `.toISOString()`
+      call assumed a JS `Date` object, which real Postgres returns but the SQLite test adapter
+      doesn't (a plain string); and a genuine, previously-latent gap in that same test adapter —
+      SQLite stores booleans as 0/1 integers, and nothing was coercing them back to real JS
+      booleans on read, only on write, likely sitting there unnoticed since much earlier database
+      work, only exposed once a test used a strict `=== true`/`=== false` comparison.
+- [x] **Real, live SEO infrastructure — sitemap.xml, robots.txt, and Search Console, none of
+      which were actually correct before this.** `sitemap.xml` had all 18 of its URLs pointing at
+      a Railway staging domain, not the real, live site, and `robots.txt` pointed at a completely
+      different domain (`www.morningaroma.com` — missing the hyphen). The deeper cause: a real
+      sitemap-generation script already existed in the repo, but was only ever meant to be run
+      manually and had never actually been wired into the real build, so it silently never ran —
+      combined with its own fallback domain also being wrong, that's exactly why the stale,
+      incorrect file just sat there. Fixed the script, wired it into `npm run build` so it can
+      never silently stop running again, and — since this was worth doing thoroughly, not just
+      patching the domain — extended it to include every individual product, country, moment, and
+      brew guide page, none of which were ever in the sitemap at all before, only static hub
+      pages. 68 real URLs now, verified directly against a real build, not just claimed.
+      **The same wrong domain was also found, separately, in `index.html`'s own `og:image`,
+      `og:url`, and `twitter:image` tags** — meaning link previews on Facebook, WhatsApp, and
+      Twitter/X had likely been broken this whole time too. Fixed alongside adding a real Google
+      Search Console verification tag; confirmed live and working end to end — Search Console
+      verified the domain and successfully discovered all 68 real sitemap URLs.
+      **Also set up, real infrastructure outside this codebase but worth recording**: `hello@
+      morning-aroma.com` now genuinely receives mail (Cloudflare Email Routing, forwarding to a
+      real inbox) and can send/reply as that address too (Gmail's "Send mail as," configured with
+      a real app password) — this address previously could only send transactional email via
+      Resend, with nowhere for a reply or a direct inquiry to actually land.
 - [ ] Real localized content (currently machine-translated via Google Translate, not real copy)
 - [x] **History timeline, Source Library, and Brew Guides expanded beyond the 6 origins.** 5 new,
       cross-verified historical moments (Sumatra 1888, Tanzania 1925, Burundi 1933, Costa Rica
@@ -780,6 +816,19 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real, backend-persisted product reviews (previously purely local, in-memory state — a
+  submitted review never survived a page refresh and no other visitor ever saw it), and a real
+  fix for the site's actual SEO infrastructure, none of which was correct before this.**
+  `sitemap.xml` and `robots.txt` both pointed at the wrong domain entirely (a Railway staging URL,
+  and a differently-spelled domain, respectively) — root cause was a real sitemap-generation
+  script that existed but was never wired into the actual build, so it silently never ran. Fixed,
+  wired in, and extended to include every product/country/moment/brew-guide page, none of which
+  were ever in the sitemap before. The same wrong domain was separately found in `index.html`'s
+  own social-preview tags too. Google Search Console is now genuinely verified and has
+  successfully discovered all 68 real URLs. Also set up (outside this codebase, but real
+  infrastructure worth recording): `hello@morning-aroma.com` now both receives and can send mail,
+  where before it could only send transactional email with nowhere for a reply to land. See Tier
+  4 for full detail on all of this.
 - **Code-splitting pass — every page except the homepage now lazy-loads, dropping the main
   bundle from 509 KB to 412 KB (139 KB to 115 KB gzipped) and fully resolving Vite's own
   bundle-size warning, present all session.** Same batch: History timeline, Source Library, and
