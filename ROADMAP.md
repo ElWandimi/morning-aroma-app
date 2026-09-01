@@ -591,7 +591,82 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
       limiter itself at all, which is a real, working security feature — it just makes the test
       suite request auth the same modest number of times an actual single user would. Confirmed
       clean, twice, once fully validated with zero retries needed.
-- [ ] Subscriptions / recurring orders (FAQ already says "coming soon")
+- [x] **Real email verification on sign-up, plus a batch of real sign-up form improvements
+      requested together.** A password-based registration no longer signs someone in immediately
+      — a real 6-digit code is emailed, and sign-in is genuinely blocked until it's entered
+      (mirrors the existing 2FA pending-token pattern). Google and OTP/email-code sign-ins skip
+      this, since both already prove real email ownership a different way — only the password
+      path had a genuine gap. Existing users, from before this feature existed, are grandfathered
+      in as already verified, so nobody (including the site's own admin account) got retroactively
+      locked out.
+      Also, in the same batch: first/last name split (previously one "Name" field), a real
+      password-confirmation field, a stronger password rule (minimum 6 characters, at least one
+      letter and one number, enforced on the backend as the actual source of truth), and clear
+      client-side email/password validation with real error messages instead of relying on the
+      browser's own, inconsistent native validation.
+      **A real capability discovered as a side effect, not originally requested**: admin can now
+      manually mark an account's email as verified — a genuinely useful support tool (a customer
+      having real email trouble can be verified another way and unblocked), and also the actual
+      fix for a real problem this feature introduced: Playwright's E2E suite could no longer
+      complete a registration by reading a real inbox, so every test that just needed *some*
+      signed-in customer now registers, then admin-verifies via this same new capability, instead
+      of trying to read a real verification code that was never going to be readable from an
+      automated test.
+      **Real, comprehensive backend test coverage** for the whole flow (wrong code, resend,
+      lockout after repeated wrong attempts, expiry) — the same depth already established for the
+      existing OTP flow, not a lighter, second-class treatment for the newer feature.
+- [x] **Subscriptions / recurring orders — real recurring billing via Paystack's actual
+      Subscriptions API, not a home-grown scheduler.** Paystack owns the billing schedule once a
+      subscription exists (auto-charges the saved card, notifies this app via webhook); this app
+      never charges a card directly for a renewal, only for the very first payment (an ordinary
+      one-time transaction), which is what gives Paystack the reusable authorization a
+      subscription needs to exist at all.
+      **Two kinds, genuinely different shapes:** product subscriptions (monthly/annually, tied to
+      a real shipment — a renewal charge creates a brand-new order, marked paid immediately since
+      the charge already succeeded) and Academy course subscriptions (monthly/annually, tied to
+      real access — a renewal charge creates no order at all, just confirms continued access,
+      since nothing is shipped). A real, requested 20% discount for annual course billing, applied
+      to what Paystack actually charges, not just shown on a screen.
+      **A separate, one-time "lifetime Academy access" purchase** — fundamentally not a
+      subscription (no recurring charge, no Paystack Subscription object involved), unlocking
+      every course including ones added later. Its price, and each course's individual monthly
+      price, are both real, admin-editable settings — not hardcoded.
+      **Real courses, not static data.** Academy courses were moved out of static frontend data
+      into a real database table with admin-editable prices, the same migration this project
+      already did for products earlier. Real access-gating replaced a purely local, fake
+      `useState(false)` "Enrolled" toggle that never actually checked whether anyone had paid for
+      anything.
+      **Two real currency bugs caught and fixed before shipping, not after:** product/course
+      prices are stored in USD cents, but Paystack Plans need a fixed KES amount (this app's real
+      charge currency) — an early draft passed the USD figure straight through unconverted, which
+      would have drastically undercharged every subscriber. Fixing it required storing both
+      currencies separately (KES for what Paystack actually bills, USD for keeping a
+      renewal-generated order consistent with every other order in the app), not conflating them
+      into one column.
+      **Real, comprehensive backend test coverage** (349 tests across the whole backend) —
+      including a genuine off-by-one bug in the test suite's own SQLite adapter, caught by the
+      tests actually running, not by review.
+- [x] **New loading animation** — an SVG cappuccino cup with three coffee beans bouncing out on a
+      staggered loop, replacing a plain spinning ring. Kept fully self-contained inline in
+      `index.html` on purpose (same as the spinner it replaced) — it has to render before the
+      app's own bundled stylesheet has loaded, so it can't depend on anything external.
+- [x] **Fixed stale page `<title>`/meta descriptions for both products and courses.** Found while
+      fixing this for courses specifically that the exact same bug already existed for products —
+      the page-meta logic was still reading from static frontend arrays that never reflect a real
+      admin edit, a leftover from before either was migrated to a real database. Renaming a
+      product or a course through the real admin editor now correctly updates that page's real
+      title/description; it used to stay stuck on whatever the original static data said,
+      regardless of any later edit.
+- [x] **Fixed Live Messages (the Kenya "Auction Beat" banner) never actually persisting an edit.**
+      Was purely local, in-memory React state, seeded once from static data — editing a message in
+      admin looked like it worked in that same browser tab, but never reached any other visitor,
+      or even the same admin after a page refresh, since it was never actually saved anywhere
+      real. Now a genuine, admin-editable setting, persisted the same way every other setting
+      already is. Also fixed a related problem caught while building the actual fix: the original
+      UI called the update function directly from the textarea's `onChange`, which would have
+      meant a real backend request per keystroke once the update function became real and
+      asynchronous — redesigned to use a local draft with an explicit Save button instead, the
+      same pattern already used for course editing.
 - [x] **Click-outside dismiss audit — real gaps found, not just confirmed already-correct.**
       `LoginModal`, `SearchModal`, and the feedback/review modal all had click-outside-to-close
       completely missing (clicking the darkened backdrop did nothing). `CustomerCareWidget` — not
@@ -660,6 +735,18 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Real recurring billing (Paystack Subscriptions API) for both products and Academy courses,
+  plus one-time lifetime Academy access — and real email verification on sign-up, which had been
+  built earlier but never actually made it into this changelog or Tier list until now.** Product
+  subscriptions ship real orders on renewal; course subscriptions and lifetime access instead
+  unlock real, persisted access, replacing a purely local, fake "Enrolled" toggle. Courses
+  themselves got moved out of static frontend data into a real, admin-editable database table,
+  the same migration this project already did for products. A real currency bug (USD passed
+  through unconverted where Paystack needed KES) was caught and fixed before shipping, not after.
+  See Tier 3 for full detail on both this and the earlier, now-documented email verification work.
+  Also in this batch: a new loading animation, a fix for stale page titles on both products and
+  courses (reading from static data instead of real, live admin-edited data), and a fix for the
+  Kenya "Auction Beat" live messages never actually persisting an edit past the same browser tab.
 - **The Playwright suite's occasional flakiness was genuinely root-caused, not just hardened
   around further — confirmed via Railway's own logs that it was really hitting the live
   production rate limiter, not a code bug.** Every admin-gated test that doesn't specifically
