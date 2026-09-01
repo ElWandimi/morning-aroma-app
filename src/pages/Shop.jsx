@@ -160,7 +160,7 @@ export function ShopPage() {
 export function ProductPage({ id }) {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getTier, getStock, getAllProducts, feedbackList, realProductsLoading } = useAdmin();
+  const { getPrice, getTier, getStock, getAllProducts, getProductFeedback, realProductsLoading } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const { addToast } = useToast();
@@ -169,6 +169,22 @@ export function ProductPage({ id }) {
   const allProducts = getAllProducts();
   const product = allProducts.find((p) => p.id === id);
 
+  // Real, per-product reviews, fetched from the real backend -- was a synchronous filter over a
+  // local, in-memory feedbackList before this (see ROADMAP.md), which no longer exists for a
+  // regular customer at all (that data is now real, admin-only backend state). Called
+  // unconditionally, before either early return below, for the exact same Rules of Hooks reason
+  // useStructuredData is: skipping this hook when product isn't known yet would mean a different
+  // number of hooks called between renders once it is.
+  const [reviews, setReviews] = useState([]);
+  useEffect(() => {
+    if (!product) { setReviews([]); return; }
+    let cancelled = false;
+    getProductFeedback(product.id)
+      .then((data) => { if (!cancelled) setReviews(data); })
+      .catch(() => { if (!cancelled) setReviews([]); });
+    return () => { cancelled = true; };
+  }, [product && product.id]);
+
   // Called unconditionally, before either early return below -- a real, previously-broken Rules
   // of Hooks violation (this hook used to be called only once product was known, meaning it
   // wasn't called at all on the very first render of a fresh page load, before realProducts had
@@ -176,7 +192,6 @@ export function ProductPage({ id }) {
   // between renders that crashes the whole component. useStructuredData itself already handles a
   // falsy argument gracefully (see hooks/index.js), so the real fix is keeping the hook call
   // itself unconditional and making only its argument conditional.
-  const reviews = product ? feedbackList.filter((f) => f.productId === product.id && f.reviewed) : [];
   const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
   const soldOut = product ? getStock(product.id) === 0 : false;
   useStructuredData(

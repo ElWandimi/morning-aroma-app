@@ -106,6 +106,13 @@ export const api = {
     request("/subscriptions/lifetime/mine", { headers: { Authorization: `Bearer ${token}` } }),
   getAllLifetimeAccess: (token) =>
     request("/subscriptions/lifetime", { headers: { Authorization: `Bearer ${token}` } }),
+  submitFeedback: (feedback) =>
+    request("/feedback", { method: "POST", body: JSON.stringify(feedback) }),
+  getProductFeedback: (productId) => request(`/feedback/product/${productId}`),
+  getAllFeedback: (token) =>
+    request("/feedback", { headers: { Authorization: `Bearer ${token}` } }),
+  setFeedbackReviewed: (token, id, reviewed) =>
+    request(`/feedback/${id}/reviewed`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reviewed }) }),
   getCourses: () => request("/courses"),
   createCourse: (token, course) =>
     request("/courses", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(course) }),

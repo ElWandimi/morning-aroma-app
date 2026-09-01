@@ -1187,6 +1187,8 @@ export function FeedbackBean() {
   const [tags, setTags] = useState([]);
   const [productId, setProductId] = useState("");
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const toggleTag = (t) => setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
 
@@ -1199,6 +1201,7 @@ export function FeedbackBean() {
     setTags([]);
     setProductId("");
     setNote("");
+    setSubmitError("");
   };
 
   const roastColor = rating === 0 ? "var(--gold)" : lerpColor("E8D5B5", "3E2C23", rating / 5);
@@ -1271,15 +1274,20 @@ export function FeedbackBean() {
                 <label htmlFor="fb-note">A note, if you'd like</label>
                 <textarea id="fb-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="What stood out to you?" maxLength={500} />
 
+                {submitError && <p className="form-error">{submitError}</p>}
                 <button
                   className="btn-primary full"
-                  disabled={rating === 0}
-                  onClick={() => {
-                    addFeedback({ rating, aroma, texture, tags, productId, note });
-                    setStep("thanks");
+                  disabled={rating === 0 || submitting}
+                  onClick={async () => {
+                    setSubmitting(true);
+                    setSubmitError("");
+                    const result = await addFeedback({ rating, aroma, texture, tags, productId, note });
+                    setSubmitting(false);
+                    if (result.ok) setStep("thanks");
+                    else setSubmitError(result.error);
                   }}
                 >
-                  Brew My Review
+                  {submitting ? "Brewing…" : "Brew My Review"}
                 </button>
               </>
             ) : (

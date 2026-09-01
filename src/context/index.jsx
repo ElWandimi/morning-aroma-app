@@ -695,6 +695,27 @@ export function AdminDataProvider({ children }) {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealLifetimeAccess();
     else setRealLifetimeAccessLoading(false);
   }, [token, user && user.role]);
+
+  // Real, backend-persisted feedback/reviews -- was purely local, in-memory state before this
+  // (see ROADMAP.md). Exposed as feedbackList (the same name it always had) so AdminFeedback.jsx
+  // and every other existing consumer keep working unchanged.
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [feedbackListLoading, setFeedbackListLoading] = useState(true);
+  const [feedbackListError, setFeedbackListError] = useState("");
+  const refetchFeedbackList = () => {
+    if (!token) { setFeedbackListLoading(false); return; }
+    setFeedbackListLoading(true);
+    setFeedbackListError("");
+    api.getAllFeedback(token)
+      .then((body) => setFeedbackList(pluck(body, "feedback", { array: true })))
+      .catch((e) => { if (e.status !== 403) setFeedbackListError(e.message); })
+      .finally(() => setFeedbackListLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchFeedbackList();
+    else setFeedbackListLoading(false);
+  }, [token, user && user.role]);
+
   const updateOrderStatus = async (orderId, status) => {
     try {
       await api.updateOrderStatus(token, orderId, status);
@@ -772,7 +793,6 @@ export function AdminDataProvider({ children }) {
   const [quotations, setQuotations] = useState([]);
   const [serviceInquiries, setServiceInquiries] = useState([]);
   const [liveChats, setLiveChats] = useState([]);
-  const [feedbackList, setFeedbackList] = useState([]);
   const [momentOverrides, setMomentOverrides] = useState({});
   const [courseOverrides, setCourseOverrides] = useState({});
   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
@@ -915,6 +935,15 @@ export function AdminDataProvider({ children }) {
     } catch (e) {
       return { ok: false, error: e.message };
     }
+  };
+
+  // A simple, stateless wrapper, not global/cached state like realProducts above -- this is
+  // inherently per-product-page-visit data (only ever needed by whichever product a visitor is
+  // actually looking at right now), so the caller (ProductPage) owns its own loading state and
+  // calls this directly in its own effect, rather than this context managing it.
+  const getProductFeedback = async (productId) => {
+    const body = await api.getProductFeedback(productId);
+    return Array.isArray(body && body.feedback) ? body.feedback : [];
   };
 
   // Real Academy course admin actions, mirroring the equivalent product functions exactly.
@@ -1061,13 +1090,28 @@ export function AdminDataProvider({ children }) {
   const updateChatStatus = (chatId, status) =>
     setLiveChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, status } : c)));
 
-  const addFeedback = (f) =>
-    setFeedbackList((prev) => [
-      { ...f, id: `FB-${1000 + prev.length}`, date: new Date().toISOString().slice(0, 10), reviewed: false },
-      ...prev,
-    ]);
-  const toggleFeedbackReviewed = (id) =>
-    setFeedbackList((prev) => prev.map((f) => (f.id === id ? { ...f, reviewed: !f.reviewed } : f)));
+  // Public, anonymous submission -- no token needed, matching the real, existing "Leave Your
+  // Aroma" UX (never asked for a name or login before this either). Doesn't touch feedbackList
+  // (the admin-wide moderation list) at all -- a regular customer submitting a review has no
+  // access to that data in the first place, only admin does.
+  const addFeedback = async (f) => {
+    try {
+      const { feedback } = await api.submitFeedback(f);
+      return { ok: true, feedback };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const toggleFeedbackReviewed = async (id) => {
+    try {
+      const current = feedbackList.find((f) => f.id === id);
+      const { feedback } = await api.setFeedbackReviewed(token, id, !(current && current.reviewed));
+      setFeedbackList((prev) => prev.map((f) => (f.id === id ? feedback : f)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 
   const getMomentContent = (m) => ({ ...m, ...(momentOverrides[m.id] || {}) });
   const setMomentContent = (id, patch) => {
@@ -1104,7 +1148,7 @@ export function AdminDataProvider({ children }) {
   // real backup strategy (Railway's own database backups), not an ad-hoc JSON download.
   const exportAdminData = () => ({
     greenOrders,
-    auditLog, quotations, serviceInquiries, liveChats, feedbackList,
+    auditLog, quotations, serviceInquiries, liveChats,
     momentOverrides, courseOverrides, countryHistoryOverrides,
   });
   // Restores each piece independently rather than one big setState -- if the uploaded file is
@@ -1117,7 +1161,6 @@ export function AdminDataProvider({ children }) {
     if (Array.isArray(data.quotations)) setQuotations(data.quotations);
     if (Array.isArray(data.serviceInquiries)) setServiceInquiries(data.serviceInquiries);
     if (Array.isArray(data.liveChats)) setLiveChats(data.liveChats);
-    if (Array.isArray(data.feedbackList)) setFeedbackList(data.feedbackList);
     if (data.momentOverrides) setMomentOverrides(data.momentOverrides);
     if (data.courseOverrides) setCourseOverrides(data.courseOverrides);
     if (data.countryHistoryOverrides) setCountryHistoryOverrides(data.countryHistoryOverrides);
@@ -1135,7 +1178,7 @@ export function AdminDataProvider({ children }) {
         realLifetimeAccess, realLifetimeAccessLoading, realLifetimeAccessError, refetchRealLifetimeAccess,
         getStock, setStock,
         getAllProducts, addProduct, removeProduct, setProductPhoto,
-        realProductsLoading, realProductsError, refetchRealProducts,
+        realProductsLoading, realProductsError, refetchRealProducts, getProductFeedback,
         getAllCourses, addCourse, updateCourseDetails, removeCourse,
         realCoursesLoading, realCoursesError, refetchRealCourses,
         getGreenPrice, setGreenPrice,

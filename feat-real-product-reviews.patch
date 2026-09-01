@@ -1,0 +1,398 @@
+diff --git a/server/src/app.js b/server/src/app.js
+index 895b4dd..ff336f8 100644
+--- a/server/src/app.js
++++ b/server/src/app.js
+@@ -8,6 +8,7 @@ const greenBeansRoutes = require("./routes/greenBeans");
+ const settingsRoutes = require("./routes/settings");
+ const subscriptionsRoutes = require("./routes/subscriptions");
+ const coursesRoutes = require("./routes/courses");
++const feedbackRoutes = require("./routes/feedback");
+ const webhooksRoutes = require("./routes/webhooks");
+ 
+ const app = express();
+@@ -59,6 +60,7 @@ app.use("/green-beans", greenBeansRoutes);
+ app.use("/settings", settingsRoutes);
+ app.use("/subscriptions", subscriptionsRoutes);
+ app.use("/courses", coursesRoutes);
++app.use("/feedback", feedbackRoutes);
+ 
+ app.use((req, res) => {
+   res.status(404).json({ error: "Not found" });
+diff --git a/server/test/db.sqlite.js b/server/test/db.sqlite.js
+index a8acb66..a283d82 100644
+--- a/server/test/db.sqlite.js
++++ b/server/test/db.sqlite.js
+@@ -122,6 +122,14 @@ async function query(text, params = []) {
+       "INSERT INTO academy_lifetime_access (id, user_id, paystack_reference, amount_usd_cents, amount_kes_cents, purchased_at) VALUES (?, ?, ?, ?, ?, ?)"
+     );
+     values = [id, ...values, purchasedAt];
++  } else if (/INSERT INTO feedback/i.test(sql) && /RETURNING \*/i.test(sql)) {
++    const id = crypto.randomUUID();
++    const createdAt = new Date().toISOString();
++    sql = sql.replace(
++      "INSERT INTO feedback (product_id, rating, aroma, texture, tags, note) VALUES ($1, $2, $3, $4, $5, $6)",
++      "INSERT INTO feedback (id, product_id, rating, aroma, texture, tags, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
++    );
++    values = [id, ...values, createdAt];
+   } else {
+     // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
+     // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are
+diff --git a/server/test/run-e2e.js b/server/test/run-e2e.js
+index 4fc4495..7b86307 100644
+--- a/server/test/run-e2e.js
++++ b/server/test/run-e2e.js
+@@ -814,6 +814,59 @@ async function main() {
+   const lifetimeEntry = lifetimeAdminList.body.lifetimeAccess.find((l) => l.userEmail === "second@morningaroma.local");
+   check("includes the real purchase, with the real customer's email and name joined in", !!lifetimeEntry && lifetimeEntry.amountUsdCents === 24900);
+ 
++  console.log("\nReal, backend-persisted product feedback -- was purely local, in-memory state before this (see ROADMAP.md):");
++  console.log("POST /feedback with an invalid rating:");
++  const feedbackBadRating = await post("/feedback", { rating: 6, aroma: 5, texture: 5 }, null);
++  check("returns 400", feedbackBadRating.status === 400);
++
++  console.log("\nPOST /feedback with an aroma/texture out of range:");
++  const feedbackBadAroma = await post("/feedback", { rating: 4, aroma: 15, texture: 5 }, null);
++  check("returns 400", feedbackBadAroma.status === 400);
++
++  console.log("\nPOST /feedback referencing a product that doesn't exist:");
++  const feedbackBadProduct = await post("/feedback", { rating: 4, aroma: 6, texture: 6, productId: "does-not-exist" }, null);
++  check("returns 400", feedbackBadProduct.status === 400);
++
++  console.log("\nPOST /feedback — real, anonymous submission, no token needed (matches the real, existing UX):");
++  const feedbackSubmit = await post("/feedback", { rating: 5, aroma: 8, texture: 7, tags: ["Fruity", "Bright"], productId: "sl28-kenya", note: "Genuinely my favorite so far." }, null);
++  check("returns 201", feedbackSubmit.status === 201);
++  check("starts unreviewed -- the real moderation gate, not published the instant it's submitted", feedbackSubmit.body.feedback && feedbackSubmit.body.feedback.reviewed === false);
++  const feedbackId = feedbackSubmit.body.feedback.id;
++
++  console.log("\nGeneral feedback -- no productId at all, a real, existing option in the submission form:");
++  const feedbackGeneral = await post("/feedback", { rating: 3, aroma: 5, texture: 5 }, null);
++  check("returns 201 -- productId genuinely optional, not silently required", feedbackGeneral.status === 201);
++  check("productId is null, not an empty string or undefined", feedbackGeneral.body.feedback.productId === null);
++
++  console.log("\nGET /feedback/product/sl28-kenya — public, before this review is moderated:");
++  const productFeedbackBefore = await get("/feedback/product/sl28-kenya");
++  check("returns 200", productFeedbackBefore.status === 200);
++  check("the real moderation gate is enforced by the query itself, not just trusted to the frontend -- an unreviewed submission is genuinely invisible here", !productFeedbackBefore.body.feedback.some((f) => f.id === feedbackId));
++
++  console.log("\nGET /feedback as a non-admin:");
++  const feedbackAdminAsCustomer = await get("/feedback", customerToken);
++  check("returns 403", feedbackAdminAsCustomer.status === 403);
++
++  console.log("\nGET /feedback as the real admin -- sees everything, including unreviewed:");
++  const feedbackAdminList = await get("/feedback", token);
++  check("returns 200", feedbackAdminList.status === 200);
++  check("includes the real, still-unreviewed submission", feedbackAdminList.body.feedback.some((f) => f.id === feedbackId));
++
++  console.log("\nPATCH /feedback/:id/reviewed as a non-admin:");
++  const feedbackToggleAsCustomer = await patch(`/feedback/${feedbackId}/reviewed`, { reviewed: true }, customerToken);
++  check("returns 403", feedbackToggleAsCustomer.status === 403);
++
++  console.log("\nPATCH /feedback/:id/reviewed as the real admin:");
++  const feedbackToggle = await patch(`/feedback/${feedbackId}/reviewed`, { reviewed: true }, token);
++  check("returns 200", feedbackToggle.status === 200);
++  check("genuinely marked reviewed now", feedbackToggle.body.feedback && feedbackToggle.body.feedback.reviewed === true);
++
++  console.log("\nGET /feedback/product/sl28-kenya — after moderation, the real, live effect of the toggle above:");
++  const productFeedbackAfter = await get("/feedback/product/sl28-kenya");
++  const nowPublicEntry = productFeedbackAfter.body.feedback.find((f) => f.id === feedbackId);
++  check("the same review is now genuinely public -- confirms the moderation toggle has a real, live effect on what a real visitor sees, not just an admin-side flag", !!nowPublicEntry);
++  check("carries through the real submitted rating/aroma/texture/tags/note, not just a subset", nowPublicEntry && nowPublicEntry.rating === 5 && nowPublicEntry.tags.length === 2 && nowPublicEntry.note === "Genuinely my favorite so far.");
++
+   console.log("\nGET /products — public, no auth needed:");
+   const productsNoAuth = await get("/products");
+   check("returns 200 without any token", productsNoAuth.status === 200);
+diff --git a/server/test/schema.sqlite.sql b/server/test/schema.sqlite.sql
+index 56106df..d2e3a38 100644
+--- a/server/test/schema.sqlite.sql
++++ b/server/test/schema.sqlite.sql
+@@ -106,6 +106,21 @@ CREATE TABLE academy_lifetime_access (
+   purchased_at        TEXT NOT NULL DEFAULT (datetime('now'))
+ );
+ 
++CREATE TABLE feedback (
++  id           TEXT PRIMARY KEY,
++  product_id   TEXT REFERENCES products(id),
++  rating       INTEGER NOT NULL,
++  aroma        INTEGER NOT NULL,
++  texture      INTEGER NOT NULL,
++  tags         TEXT NOT NULL DEFAULT '[]',
++  note         TEXT,
++  reviewed     INTEGER NOT NULL DEFAULT 0,
++  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
++);
++
++CREATE INDEX idx_feedback_product_id ON feedback (product_id);
++CREATE INDEX idx_feedback_reviewed ON feedback (reviewed);
++
+ CREATE TABLE green_beans (
+   id                  TEXT PRIMARY KEY,
+   name                TEXT NOT NULL,
+diff --git a/src/admin/index.jsx b/src/admin/index.jsx
+index 504ea1b..6bc1326 100644
+--- a/src/admin/index.jsx
++++ b/src/admin/index.jsx
+@@ -1539,8 +1539,20 @@ export function AdminLiveChat() {
+ }
+ 
+ export function AdminFeedback() {
+-  const { feedbackList, toggleFeedbackReviewed, getAllProducts } = useAdmin();
++  const { feedbackList, feedbackListLoading, feedbackListError, refetchFeedbackList, toggleFeedbackReviewed, getAllProducts } = useAdmin();
++  const { addToast } = useToast();
+   const allProducts = getAllProducts();
++
++  if (feedbackListLoading) return <p className="hint">Loading feedback…</p>;
++  if (feedbackListError) {
++    return (
++      <div>
++        <p className="form-error">Couldn't load feedback: {feedbackListError}</p>
++        <button className="btn-outline" onClick={refetchFeedbackList}>Try again</button>
++      </div>
++    );
++  }
++
+   return (
+     <div>
+       <h3 className="matched-head">Feedback ({feedbackList.length})</h3>
+@@ -1556,7 +1568,14 @@ export function AdminFeedback() {
+                 <div className="admin-card-head">
+                   <strong>{"●".repeat(f.rating)}{"○".repeat(5 - f.rating)}</strong>
+                   <label className="reviewed-toggle">
+-                    <input type="checkbox" checked={f.reviewed} onChange={() => toggleFeedbackReviewed(f.id)} /> Reviewed
++                    <input
++                      type="checkbox"
++                      checked={f.reviewed}
++                      onChange={async () => {
++                        const result = await toggleFeedbackReviewed(f.id);
++                        if (!result.ok) addToast(result.error);
++                      }}
++                    /> Reviewed
+                   </label>
+                 </div>
+                 <p className="hint">{p ? `${p.name} — ${p.country}` : "General feedback"} · {f.date}</p>
+diff --git a/src/components/index.jsx b/src/components/index.jsx
+index 462adc5..7b37cc5 100644
+--- a/src/components/index.jsx
++++ b/src/components/index.jsx
+@@ -1187,6 +1187,8 @@ export function FeedbackBean() {
+   const [tags, setTags] = useState([]);
+   const [productId, setProductId] = useState("");
+   const [note, setNote] = useState("");
++  const [submitting, setSubmitting] = useState(false);
++  const [submitError, setSubmitError] = useState("");
+ 
+   const toggleTag = (t) => setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+ 
+@@ -1199,6 +1201,7 @@ export function FeedbackBean() {
+     setTags([]);
+     setProductId("");
+     setNote("");
++    setSubmitError("");
+   };
+ 
+   const roastColor = rating === 0 ? "var(--gold)" : lerpColor("E8D5B5", "3E2C23", rating / 5);
+@@ -1271,15 +1274,20 @@ export function FeedbackBean() {
+                 <label htmlFor="fb-note">A note, if you'd like</label>
+                 <textarea id="fb-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="What stood out to you?" maxLength={500} />
+ 
++                {submitError && <p className="form-error">{submitError}</p>}
+                 <button
+                   className="btn-primary full"
+-                  disabled={rating === 0}
+-                  onClick={() => {
+-                    addFeedback({ rating, aroma, texture, tags, productId, note });
+-                    setStep("thanks");
++                  disabled={rating === 0 || submitting}
++                  onClick={async () => {
++                    setSubmitting(true);
++                    setSubmitError("");
++                    const result = await addFeedback({ rating, aroma, texture, tags, productId, note });
++                    setSubmitting(false);
++                    if (result.ok) setStep("thanks");
++                    else setSubmitError(result.error);
+                   }}
+                 >
+-                  Brew My Review
++                  {submitting ? "Brewing…" : "Brew My Review"}
+                 </button>
+               </>
+             ) : (
+diff --git a/src/context/index.jsx b/src/context/index.jsx
+index 610916c..26c493a 100644
+--- a/src/context/index.jsx
++++ b/src/context/index.jsx
+@@ -695,6 +695,27 @@ export function AdminDataProvider({ children }) {
+     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealLifetimeAccess();
+     else setRealLifetimeAccessLoading(false);
+   }, [token, user && user.role]);
++
++  // Real, backend-persisted feedback/reviews -- was purely local, in-memory state before this
++  // (see ROADMAP.md). Exposed as feedbackList (the same name it always had) so AdminFeedback.jsx
++  // and every other existing consumer keep working unchanged.
++  const [feedbackList, setFeedbackList] = useState([]);
++  const [feedbackListLoading, setFeedbackListLoading] = useState(true);
++  const [feedbackListError, setFeedbackListError] = useState("");
++  const refetchFeedbackList = () => {
++    if (!token) { setFeedbackListLoading(false); return; }
++    setFeedbackListLoading(true);
++    setFeedbackListError("");
++    api.getAllFeedback(token)
++      .then((body) => setFeedbackList(pluck(body, "feedback", { array: true })))
++      .catch((e) => { if (e.status !== 403) setFeedbackListError(e.message); })
++      .finally(() => setFeedbackListLoading(false));
++  };
++  useEffect(() => {
++    if (user && (user.role === "super_admin" || user.role === "staff")) refetchFeedbackList();
++    else setFeedbackListLoading(false);
++  }, [token, user && user.role]);
++
+   const updateOrderStatus = async (orderId, status) => {
+     try {
+       await api.updateOrderStatus(token, orderId, status);
+@@ -772,7 +793,6 @@ export function AdminDataProvider({ children }) {
+   const [quotations, setQuotations] = useState([]);
+   const [serviceInquiries, setServiceInquiries] = useState([]);
+   const [liveChats, setLiveChats] = useState([]);
+-  const [feedbackList, setFeedbackList] = useState([]);
+   const [momentOverrides, setMomentOverrides] = useState({});
+   const [courseOverrides, setCourseOverrides] = useState({});
+   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
+@@ -917,6 +937,15 @@ export function AdminDataProvider({ children }) {
+     }
+   };
+ 
++  // A simple, stateless wrapper, not global/cached state like realProducts above -- this is
++  // inherently per-product-page-visit data (only ever needed by whichever product a visitor is
++  // actually looking at right now), so the caller (ProductPage) owns its own loading state and
++  // calls this directly in its own effect, rather than this context managing it.
++  const getProductFeedback = async (productId) => {
++    const body = await api.getProductFeedback(productId);
++    return Array.isArray(body && body.feedback) ? body.feedback : [];
++  };
++
+   // Real Academy course admin actions, mirroring the equivalent product functions exactly.
+   const getAllCourses = () => realCourses;
+   const addCourse = async (data) => {
+@@ -1061,13 +1090,28 @@ export function AdminDataProvider({ children }) {
+   const updateChatStatus = (chatId, status) =>
+     setLiveChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, status } : c)));
+ 
+-  const addFeedback = (f) =>
+-    setFeedbackList((prev) => [
+-      { ...f, id: `FB-${1000 + prev.length}`, date: new Date().toISOString().slice(0, 10), reviewed: false },
+-      ...prev,
+-    ]);
+-  const toggleFeedbackReviewed = (id) =>
+-    setFeedbackList((prev) => prev.map((f) => (f.id === id ? { ...f, reviewed: !f.reviewed } : f)));
++  // Public, anonymous submission -- no token needed, matching the real, existing "Leave Your
++  // Aroma" UX (never asked for a name or login before this either). Doesn't touch feedbackList
++  // (the admin-wide moderation list) at all -- a regular customer submitting a review has no
++  // access to that data in the first place, only admin does.
++  const addFeedback = async (f) => {
++    try {
++      const { feedback } = await api.submitFeedback(f);
++      return { ok: true, feedback };
++    } catch (e) {
++      return { ok: false, error: e.message };
++    }
++  };
++  const toggleFeedbackReviewed = async (id) => {
++    try {
++      const current = feedbackList.find((f) => f.id === id);
++      const { feedback } = await api.setFeedbackReviewed(token, id, !(current && current.reviewed));
++      setFeedbackList((prev) => prev.map((f) => (f.id === id ? feedback : f)));
++      return { ok: true };
++    } catch (e) {
++      return { ok: false, error: e.message };
++    }
++  };
+ 
+   const getMomentContent = (m) => ({ ...m, ...(momentOverrides[m.id] || {}) });
+   const setMomentContent = (id, patch) => {
+@@ -1104,7 +1148,7 @@ export function AdminDataProvider({ children }) {
+   // real backup strategy (Railway's own database backups), not an ad-hoc JSON download.
+   const exportAdminData = () => ({
+     greenOrders,
+-    auditLog, quotations, serviceInquiries, liveChats, feedbackList,
++    auditLog, quotations, serviceInquiries, liveChats,
+     momentOverrides, courseOverrides, countryHistoryOverrides,
+   });
+   // Restores each piece independently rather than one big setState -- if the uploaded file is
+@@ -1117,7 +1161,6 @@ export function AdminDataProvider({ children }) {
+     if (Array.isArray(data.quotations)) setQuotations(data.quotations);
+     if (Array.isArray(data.serviceInquiries)) setServiceInquiries(data.serviceInquiries);
+     if (Array.isArray(data.liveChats)) setLiveChats(data.liveChats);
+-    if (Array.isArray(data.feedbackList)) setFeedbackList(data.feedbackList);
+     if (data.momentOverrides) setMomentOverrides(data.momentOverrides);
+     if (data.courseOverrides) setCourseOverrides(data.courseOverrides);
+     if (data.countryHistoryOverrides) setCountryHistoryOverrides(data.countryHistoryOverrides);
+@@ -1135,7 +1178,7 @@ export function AdminDataProvider({ children }) {
+         realLifetimeAccess, realLifetimeAccessLoading, realLifetimeAccessError, refetchRealLifetimeAccess,
+         getStock, setStock,
+         getAllProducts, addProduct, removeProduct, setProductPhoto,
+-        realProductsLoading, realProductsError, refetchRealProducts,
++        realProductsLoading, realProductsError, refetchRealProducts, getProductFeedback,
+         getAllCourses, addCourse, updateCourseDetails, removeCourse,
+         realCoursesLoading, realCoursesError, refetchRealCourses,
+         getGreenPrice, setGreenPrice,
+diff --git a/src/pages/Shop.jsx b/src/pages/Shop.jsx
+index 8112fe8..cc1ce3e 100644
+--- a/src/pages/Shop.jsx
++++ b/src/pages/Shop.jsx
+@@ -160,7 +160,7 @@ export function ShopPage() {
+ export function ProductPage({ id }) {
+   const { go } = useRoute();
+   const { add } = useCart();
+-  const { getPrice, getTier, getStock, getAllProducts, feedbackList, realProductsLoading } = useAdmin();
++  const { getPrice, getTier, getStock, getAllProducts, getProductFeedback, realProductsLoading } = useAdmin();
+   const { format } = useCurrency();
+   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
+   const { addToast } = useToast();
+@@ -169,6 +169,22 @@ export function ProductPage({ id }) {
+   const allProducts = getAllProducts();
+   const product = allProducts.find((p) => p.id === id);
+ 
++  // Real, per-product reviews, fetched from the real backend -- was a synchronous filter over a
++  // local, in-memory feedbackList before this (see ROADMAP.md), which no longer exists for a
++  // regular customer at all (that data is now real, admin-only backend state). Called
++  // unconditionally, before either early return below, for the exact same Rules of Hooks reason
++  // useStructuredData is: skipping this hook when product isn't known yet would mean a different
++  // number of hooks called between renders once it is.
++  const [reviews, setReviews] = useState([]);
++  useEffect(() => {
++    if (!product) { setReviews([]); return; }
++    let cancelled = false;
++    getProductFeedback(product.id)
++      .then((data) => { if (!cancelled) setReviews(data); })
++      .catch(() => { if (!cancelled) setReviews([]); });
++    return () => { cancelled = true; };
++  }, [product && product.id]);
++
+   // Called unconditionally, before either early return below -- a real, previously-broken Rules
+   // of Hooks violation (this hook used to be called only once product was known, meaning it
+   // wasn't called at all on the very first render of a fresh page load, before realProducts had
+@@ -176,7 +192,6 @@ export function ProductPage({ id }) {
+   // between renders that crashes the whole component. useStructuredData itself already handles a
+   // falsy argument gracefully (see hooks/index.js), so the real fix is keeping the hook call
+   // itself unconditional and making only its argument conditional.
+-  const reviews = product ? feedbackList.filter((f) => f.productId === product.id && f.reviewed) : [];
+   const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+   const soldOut = product ? getStock(product.id) === 0 : false;
+   useStructuredData(
+diff --git a/src/utils/api.js b/src/utils/api.js
+index 4cd0cf7..e9ec12d 100644
+--- a/src/utils/api.js
++++ b/src/utils/api.js
+@@ -106,6 +106,13 @@ export const api = {
+     request("/subscriptions/lifetime/mine", { headers: { Authorization: `Bearer ${token}` } }),
+   getAllLifetimeAccess: (token) =>
+     request("/subscriptions/lifetime", { headers: { Authorization: `Bearer ${token}` } }),
++  submitFeedback: (feedback) =>
++    request("/feedback", { method: "POST", body: JSON.stringify(feedback) }),
++  getProductFeedback: (productId) => request(`/feedback/product/${productId}`),
++  getAllFeedback: (token) =>
++    request("/feedback", { headers: { Authorization: `Bearer ${token}` } }),
++  setFeedbackReviewed: (token, id, reviewed) =>
++    request(`/feedback/${id}/reviewed`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reviewed }) }),
+   getCourses: () => request("/courses"),
+   createCourse: (token, course) =>
+     request("/courses", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(course) }),

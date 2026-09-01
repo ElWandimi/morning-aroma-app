@@ -814,6 +814,59 @@ async function main() {
   const lifetimeEntry = lifetimeAdminList.body.lifetimeAccess.find((l) => l.userEmail === "second@morningaroma.local");
   check("includes the real purchase, with the real customer's email and name joined in", !!lifetimeEntry && lifetimeEntry.amountUsdCents === 24900);
 
+  console.log("\nReal, backend-persisted product feedback -- was purely local, in-memory state before this (see ROADMAP.md):");
+  console.log("POST /feedback with an invalid rating:");
+  const feedbackBadRating = await post("/feedback", { rating: 6, aroma: 5, texture: 5 }, null);
+  check("returns 400", feedbackBadRating.status === 400);
+
+  console.log("\nPOST /feedback with an aroma/texture out of range:");
+  const feedbackBadAroma = await post("/feedback", { rating: 4, aroma: 15, texture: 5 }, null);
+  check("returns 400", feedbackBadAroma.status === 400);
+
+  console.log("\nPOST /feedback referencing a product that doesn't exist:");
+  const feedbackBadProduct = await post("/feedback", { rating: 4, aroma: 6, texture: 6, productId: "does-not-exist" }, null);
+  check("returns 400", feedbackBadProduct.status === 400);
+
+  console.log("\nPOST /feedback — real, anonymous submission, no token needed (matches the real, existing UX):");
+  const feedbackSubmit = await post("/feedback", { rating: 5, aroma: 8, texture: 7, tags: ["Fruity", "Bright"], productId: "sl28-kenya", note: "Genuinely my favorite so far." }, null);
+  check("returns 201", feedbackSubmit.status === 201);
+  check("starts unreviewed -- the real moderation gate, not published the instant it's submitted", feedbackSubmit.body.feedback && feedbackSubmit.body.feedback.reviewed === false);
+  const feedbackId = feedbackSubmit.body.feedback.id;
+
+  console.log("\nGeneral feedback -- no productId at all, a real, existing option in the submission form:");
+  const feedbackGeneral = await post("/feedback", { rating: 3, aroma: 5, texture: 5 }, null);
+  check("returns 201 -- productId genuinely optional, not silently required", feedbackGeneral.status === 201);
+  check("productId is null, not an empty string or undefined", feedbackGeneral.body.feedback.productId === null);
+
+  console.log("\nGET /feedback/product/sl28-kenya — public, before this review is moderated:");
+  const productFeedbackBefore = await get("/feedback/product/sl28-kenya");
+  check("returns 200", productFeedbackBefore.status === 200);
+  check("the real moderation gate is enforced by the query itself, not just trusted to the frontend -- an unreviewed submission is genuinely invisible here", !productFeedbackBefore.body.feedback.some((f) => f.id === feedbackId));
+
+  console.log("\nGET /feedback as a non-admin:");
+  const feedbackAdminAsCustomer = await get("/feedback", customerToken);
+  check("returns 403", feedbackAdminAsCustomer.status === 403);
+
+  console.log("\nGET /feedback as the real admin -- sees everything, including unreviewed:");
+  const feedbackAdminList = await get("/feedback", token);
+  check("returns 200", feedbackAdminList.status === 200);
+  check("includes the real, still-unreviewed submission", feedbackAdminList.body.feedback.some((f) => f.id === feedbackId));
+
+  console.log("\nPATCH /feedback/:id/reviewed as a non-admin:");
+  const feedbackToggleAsCustomer = await patch(`/feedback/${feedbackId}/reviewed`, { reviewed: true }, customerToken);
+  check("returns 403", feedbackToggleAsCustomer.status === 403);
+
+  console.log("\nPATCH /feedback/:id/reviewed as the real admin:");
+  const feedbackToggle = await patch(`/feedback/${feedbackId}/reviewed`, { reviewed: true }, token);
+  check("returns 200", feedbackToggle.status === 200);
+  check("genuinely marked reviewed now", feedbackToggle.body.feedback && feedbackToggle.body.feedback.reviewed === true);
+
+  console.log("\nGET /feedback/product/sl28-kenya — after moderation, the real, live effect of the toggle above:");
+  const productFeedbackAfter = await get("/feedback/product/sl28-kenya");
+  const nowPublicEntry = productFeedbackAfter.body.feedback.find((f) => f.id === feedbackId);
+  check("the same review is now genuinely public -- confirms the moderation toggle has a real, live effect on what a real visitor sees, not just an admin-side flag", !!nowPublicEntry);
+  check("carries through the real submitted rating/aroma/texture/tags/note, not just a subset", nowPublicEntry && nowPublicEntry.rating === 5 && nowPublicEntry.tags.length === 2 && nowPublicEntry.note === "Genuinely my favorite so far.");
+
   console.log("\nGET /products — public, no auth needed:");
   const productsNoAuth = await get("/products");
   check("returns 200 without any token", productsNoAuth.status === 200);

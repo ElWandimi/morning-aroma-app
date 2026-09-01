@@ -106,6 +106,21 @@ CREATE TABLE academy_lifetime_access (
   purchased_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE feedback (
+  id           TEXT PRIMARY KEY,
+  product_id   TEXT REFERENCES products(id),
+  rating       INTEGER NOT NULL,
+  aroma        INTEGER NOT NULL,
+  texture      INTEGER NOT NULL,
+  tags         TEXT NOT NULL DEFAULT '[]',
+  note         TEXT,
+  reviewed     INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_feedback_product_id ON feedback (product_id);
+CREATE INDEX idx_feedback_reviewed ON feedback (reviewed);
+
 CREATE TABLE green_beans (
   id                  TEXT PRIMARY KEY,
   name                TEXT NOT NULL,

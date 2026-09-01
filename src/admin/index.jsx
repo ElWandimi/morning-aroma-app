@@ -1539,8 +1539,20 @@ export function AdminLiveChat() {
 }
 
 export function AdminFeedback() {
-  const { feedbackList, toggleFeedbackReviewed, getAllProducts } = useAdmin();
+  const { feedbackList, feedbackListLoading, feedbackListError, refetchFeedbackList, toggleFeedbackReviewed, getAllProducts } = useAdmin();
+  const { addToast } = useToast();
   const allProducts = getAllProducts();
+
+  if (feedbackListLoading) return <p className="hint">Loading feedback…</p>;
+  if (feedbackListError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load feedback: {feedbackListError}</p>
+        <button className="btn-outline" onClick={refetchFeedbackList}>Try again</button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h3 className="matched-head">Feedback ({feedbackList.length})</h3>
@@ -1556,7 +1568,14 @@ export function AdminFeedback() {
                 <div className="admin-card-head">
                   <strong>{"●".repeat(f.rating)}{"○".repeat(5 - f.rating)}</strong>
                   <label className="reviewed-toggle">
-                    <input type="checkbox" checked={f.reviewed} onChange={() => toggleFeedbackReviewed(f.id)} /> Reviewed
+                    <input
+                      type="checkbox"
+                      checked={f.reviewed}
+                      onChange={async () => {
+                        const result = await toggleFeedbackReviewed(f.id);
+                        if (!result.ok) addToast(result.error);
+                      }}
+                    /> Reviewed
                   </label>
                 </div>
                 <p className="hint">{p ? `${p.name} — ${p.country}` : "General feedback"} · {f.date}</p>

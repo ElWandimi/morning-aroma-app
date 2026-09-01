@@ -122,6 +122,14 @@ async function query(text, params = []) {
       "INSERT INTO academy_lifetime_access (id, user_id, paystack_reference, amount_usd_cents, amount_kes_cents, purchased_at) VALUES (?, ?, ?, ?, ?, ?)"
     );
     values = [id, ...values, purchasedAt];
+  } else if (/INSERT INTO feedback/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO feedback (product_id, rating, aroma, texture, tags, note) VALUES ($1, $2, $3, $4, $5, $6)",
+      "INSERT INTO feedback (id, product_id, rating, aroma, texture, tags, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    values = [id, ...values, createdAt];
   } else {
     // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
     // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are
