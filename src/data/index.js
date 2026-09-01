@@ -267,6 +267,86 @@ export const BREW_GUIDES = [
     ],
     course: "Home Brewing",
   },
+  {
+    name: "Cappuccino", icon: "🫧",
+    flavor: "Equal parts espresso, steamed milk, and microfoam — light, airy, and balanced.",
+    steps: [
+      "Pull an 18g double shot (about 36g) into a 150ml cup.",
+      "Steam 120ml milk to a glossy, paint-like microfoam — no large bubbles.",
+      "Pour to fill in one-third increments, ending with a thick foam cap.",
+    ],
+    course: "Cappuccino",
+  },
+  {
+    name: "Latte", icon: "🌷",
+    flavor: "Milk-forward and silky — a thin layer of foam is the whole point, not a mistake.",
+    steps: [
+      "Pull a double shot (about 36g) into a 240ml cup.",
+      "Steam 180ml milk longer than a cappuccino, aiming for a thinner, more integrated foam.",
+      "Pour steadily from height, then drop low and wiggle for a heart or rosetta.",
+    ],
+    course: "Latte",
+  },
+  {
+    name: "Flat White", icon: "⚪",
+    flavor: "Tighter and stronger than a latte — more coffee, less milk, almost no visible foam.",
+    steps: [
+      "Pull a ristretto double shot (about 25–30g) for a sweeter, more concentrated base.",
+      "Steam 120ml milk to a very fine, velvety microfoam — barely any bubbles at all.",
+      "Pour directly into the center, keeping the foam layer thin throughout.",
+    ],
+    course: "Flat White",
+  },
+  {
+    name: "Mocha", icon: "🍫",
+    flavor: "Espresso and chocolate in equal partnership — neither one should hide the other.",
+    steps: [
+      "Stir 20g chocolate sauce into a fresh double shot until fully dissolved.",
+      "Steam 180ml milk and pour it in the same way as a latte.",
+      "Top with a light dusting of cocoa powder, or whipped cream if desired.",
+    ],
+    course: "Mocha",
+  },
+  {
+    name: "Americano", icon: "💧",
+    flavor: "Espresso stretched with hot water — closer to drip in body, still espresso in flavor.",
+    steps: [
+      "Heat 150ml water separately, just off the boil.",
+      "Pull a double shot directly into the hot water, not the other way around, to protect the crema.",
+      "Adjust the water-to-espresso ratio to taste — less water for something bolder.",
+    ],
+    course: "Americano",
+  },
+  {
+    name: "Turkish", icon: "🏺",
+    flavor: "Unfiltered and intensely concentrated — the grounds settle in the cup, they're never removed.",
+    steps: [
+      "Add 7g extremely fine (powder-like) grounds to a cezve with 70ml cold water, stir once to combine.",
+      "Set over the lowest possible heat and don't stir again — watch closely as foam begins to rise.",
+      "Remove the moment before it boils, spoon the foam into the cup first, then pour the rest and let the grounds settle before sipping.",
+    ],
+    course: "Turkish",
+  },
+  {
+    name: "Vietnamese", icon: "🥥",
+    flavor: "Bold, dark-roast coffee balanced against sweetened condensed milk — traditionally finished over ice.",
+    steps: [
+      "Spoon 2 tbsp sweetened condensed milk into a glass, then set a phin filter with 15g medium-fine grounds on top.",
+      "Pour a small splash of hot water to bloom for 30 seconds, then fill the phin and let it drip slowly for about 4–5 minutes.",
+      "Stir the coffee into the condensed milk at the bottom, then pour over ice if serving cold.",
+    ],
+    course: "Vietnamese",
+  },
+  {
+    name: "Affogato", icon: "🍨",
+    flavor: "Dessert and drink at once — hot espresso poured straight over cold vanilla gelato.",
+    steps: [
+      "Place one generous scoop of vanilla gelato or ice cream in a small glass.",
+      "Pull a fresh single shot of espresso immediately before serving.",
+      "Pour the hot espresso directly over the gelato at the table and serve right away, before it melts too far.",
+    ],
+    course: "Affogato",
+  },
 ];
 
 export const COURSES = [
@@ -573,14 +653,39 @@ export const LEGENDARY_MOMENTS = [
     photo: "https://images.unsplash.com/photo-1639527924446-3edc522ae4b0?auto=format&fit=crop&w=900&q=65",
   },
   {
+    year: "1888", title: "Coffee Takes Root Beside a Volcanic Lake",
+    story: "The first coffee trees are planted in the North Sumatra highlands near Lake Toba — the beginning of a wet-hulled, earthy style of coffee unlike anywhere else on Earth.",
+    photo: "https://images.unsplash.com/photo-1591284915748-bc48608e894d?auto=format&fit=crop&w=900&q=65",
+  },
+  {
     year: "1901", title: "Espresso Roars to Life",
     story: "In Milan, Luigi Bezzera patents a machine that forces steam through grounds in under a minute — inventing an entirely new, urgent way to drink coffee.",
     photo: "https://images.unsplash.com/photo-1461988091159-192b6df7054f?auto=format&fit=crop&w=900&q=65",
   },
   {
+    year: "1925", title: "Farmers Form Their Own Union on Kilimanjaro's Slopes",
+    story: "Chagga farmers around Moshi organize the Kilimanjaro Native Planters' Association — Tanzania's first coffee cooperative, letting growers sell directly to London markets instead of through a middleman.",
+    photo: "https://images.unsplash.com/photo-1525537341348-a20ce9e89b72?auto=format&fit=crop&w=900&q=65",
+  },
+  {
+    year: "1933", title: "Fifty Trees, By Order of the Colonial Government",
+    story: "Under Belgian colonial rule, every farming family in Burundi is required to plant at least fifty coffee trees — the forced beginning of an industry that today belongs entirely to the country's own smallholders.",
+    photo: "https://images.unsplash.com/photo-1672575659057-a2061f9a576b?auto=format&fit=crop&w=900&q=65",
+  },
+  {
     year: "1971", title: "One Small Shop in Seattle",
     story: "A single storefront opens at Pike Place Market. Nobody there knows it yet, but they've just planted the seed of a global coffee culture.",
     photo: "https://images.unsplash.com/photo-1761271046396-97d231b59dd7?auto=format&fit=crop&w=900&q=65",
+  },
+  {
+    year: "1989", title: "A Country Bets Everything on One Bean",
+    story: "Costa Rica bans Robusta cultivation outright, committing the entire nation to Arabica alone — a single law that quietly shaped an entire country's reputation for quality.",
+    photo: "https://images.unsplash.com/photo-1611223156134-07ade11dfe6a?auto=format&fit=crop&w=900&q=65",
+  },
+  {
+    year: "1990s", title: "Too Poor for Pesticides, Perfect for Organic",
+    story: "A 1980s economic crisis leaves Peruvian farmers unable to afford fertilizer or pesticides — and when the world's ethical-coffee movement arrives soon after, their coffee is already exactly what buyers are looking for. Peru becomes the world's largest organic coffee exporter almost by accident.",
+    photo: "https://images.unsplash.com/photo-1616791438538-fa5d3e9e96ed?auto=format&fit=crop&w=900&q=65",
   },
   {
     year: "2004", title: "A Record Shattered Overnight",

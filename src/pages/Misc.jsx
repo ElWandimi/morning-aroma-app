@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useAuth, useRoute } from "../context";
-import { COUNTRIES, FAQ_ITEMS, PROCESSING_METHODS, PRODUCTS } from "../data";
+import { COUNTRIES, FAQ_ITEMS, PROCESSING_METHODS } from "../data";
 import { fmtPrice, slugify } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
 
@@ -205,7 +205,8 @@ export function SourceLibraryPage() {
   // getPrice was never actually imported here at all -- a real, pre-existing bug that would
   // have crashed this exact page with the original 9 products too, just never triggered because
   // nobody had visited Source Library until now.
-  const { getPrice } = useAdmin();
+  const { getPrice, getAllProducts } = useAdmin();
+  const products = getAllProducts();
   return (
     <div className="shop-page">
       <div className="shop-head">
@@ -242,7 +243,7 @@ export function SourceLibraryPage() {
         <div className="fob-row fob-header">
           <span>Variety</span><span>Country</span><span>Retail</span><span>Paid to farmer (FOB)</span>
         </div>
-        {PRODUCTS.map((p) => (
+        {products.map((p) => (
           <div key={p.id} className="fob-row" onClick={() => go("product", { id: p.id })}>
             <span>{p.name}</span>
             <span>{p.country}</span>

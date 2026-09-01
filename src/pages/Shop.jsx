@@ -169,6 +169,42 @@ export function ProductPage({ id }) {
   const allProducts = getAllProducts();
   const product = allProducts.find((p) => p.id === id);
 
+  // Called unconditionally, before either early return below -- a real, previously-broken Rules
+  // of Hooks violation (this hook used to be called only once product was known, meaning it
+  // wasn't called at all on the very first render of a fresh page load, before realProducts had
+  // finished loading, but was called on the very next render once it had -- a hook count mismatch
+  // between renders that crashes the whole component. useStructuredData itself already handles a
+  // falsy argument gracefully (see hooks/index.js), so the real fix is keeping the hook call
+  // itself unconditional and making only its argument conditional.
+  const reviews = product ? feedbackList.filter((f) => f.productId === product.id && f.reviewed) : [];
+  const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+  const soldOut = product ? getStock(product.id) === 0 : false;
+  useStructuredData(
+    product
+      ? {
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: `${product.name} — ${product.country}`,
+          description: product.note,
+          image: (() => {
+            const url = getProductPhotoUrl(product, COUNTRY_JOURNEY_PHOTO);
+            return url.startsWith("http") ? url : url.startsWith("data:") ? undefined : `${window.location.origin}${url}`;
+          })(),
+          brand: { "@type": "Brand", name: "Morning Aroma" },
+          offers: {
+            "@type": "Offer",
+            priceCurrency: "USD",
+            price: (getPrice(product.id) / 100).toFixed(2),
+            availability: soldOut ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+            url: `${window.location.origin}${pathFor("product", { id: product.id })}`,
+          },
+          ...(reviews.length > 0 ? {
+            aggregateRating: { "@type": "AggregateRating", ratingValue: avgRating.toFixed(1), reviewCount: reviews.length, bestRating: 5, worstRating: 1 },
+          } : {}),
+        }
+      : null
+  );
+
   if (realProductsLoading) {
     return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
   }
@@ -183,38 +219,8 @@ export function ProductPage({ id }) {
   }
 
   const related = allProducts.filter((p) => p.tags.moment === product.tags.moment && p.id !== product.id).slice(0, 3);
-  // Only moderated (admin-reviewed) feedback shows publicly — a light moderation gate rather than
-  // publishing every submission the instant it's sent.
-  const reviews = feedbackList.filter((f) => f.productId === product.id && f.reviewed);
-  const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
   const saved = hasWishlist(product.id);
   const stock = getStock(product.id);
-  const soldOut = stock === 0;
-
-  const productPhotoUrl = getProductPhotoUrl(product, COUNTRY_JOURNEY_PHOTO);
-  const absoluteProductImage = productPhotoUrl.startsWith("http")
-    ? productPhotoUrl
-    : productPhotoUrl.startsWith("data:")
-      ? undefined // an admin-uploaded photo is a base64 data URL — not a real, fetchable URL search engines can use as an image reference, so omit rather than mangle it
-      : `${window.location.origin}${productPhotoUrl}`;
-  useStructuredData({
-    "@context": "https://schema.org",
-    "@type": "Product",
-    name: `${product.name} — ${product.country}`,
-    description: product.note,
-    image: absoluteProductImage,
-    brand: { "@type": "Brand", name: "Morning Aroma" },
-    offers: {
-      "@type": "Offer",
-      priceCurrency: "USD",
-      price: (getPrice(product.id) / 100).toFixed(2),
-      availability: soldOut ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
-      url: `${window.location.origin}${pathFor("product", { id: product.id })}`,
-    },
-    ...(reviews.length > 0 ? {
-      aggregateRating: { "@type": "AggregateRating", ratingValue: avgRating.toFixed(1), reviewCount: reviews.length, bestRating: 5, worstRating: 1 },
-    } : {}),
-  });
   const lowStock = stock > 0 && stock <= 8;
 
   return (
