@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 import { Glass, SignInModal, SignUpModal } from "../components";
 import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute, useSubscriptions } from "../context";
 import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO } from "../data";
-import { getProductPhotoUrl } from "../utils/helpers";
+import { getProductPhotoUrl, loadPaystackScript } from "../utils/helpers";
 
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 if (!PAYSTACK_PUBLIC_KEY && import.meta.env.PROD) {
@@ -10,20 +10,6 @@ if (!PAYSTACK_PUBLIC_KEY && import.meta.env.PROD) {
   // than letting a missing key surface later as a confusing runtime error at the moment someone
   // actually tries to pay.
   console.error("VITE_PAYSTACK_PUBLIC_KEY is not set — checkout cannot reach Paystack. Set it in the frontend service's environment variables.");
-}
-
-// Loads Paystack's real InlineJS v2 script on demand -- only when a customer actually reaches the
-// payment step, not on every page load site-wide. Safe to call more than once; only loads the
-// script the first time, since window.PaystackPop existing already means it's already loaded.
-function loadPaystackScript() {
-  if (window.PaystackPop) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://js.paystack.co/v2/inline.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Couldn't load Paystack. Check your connection and try again."));
-    document.body.appendChild(script);
-  });
 }
 
 export function CheckoutPage() {

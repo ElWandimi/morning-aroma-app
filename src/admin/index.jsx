@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { SignInModal, SignUpModal, ShareButtons } from "../components";
-import { useAdmin, useAuth, useRoute, useToast } from "../context";
-import { ADMIN_SECTIONS, COUNTRIES, COURSES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
+import { useAdmin, useAuth, useCurrency, useRoute, useToast } from "../context";
+import { ADMIN_SECTIONS, COUNTRIES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
 import { exportToCSV, fmtPrice, resizeImageFile, storage } from "../utils/helpers";
 import { useClickOutside, useEscapeKey } from "../hooks";
 import { generateInvoicePDF } from "../utils/pdf";
@@ -410,12 +410,12 @@ export function AdminSubscriptions() {
   const [query, setQuery] = useState("");
   const filtered = allSubsSorted.filter((s) => {
     const q = query.toLowerCase();
-    return !q || s.userEmail.toLowerCase().includes(q) || s.userName.toLowerCase().includes(q) || s.productName.toLowerCase().includes(q) || s.status.toLowerCase().includes(q);
+    return !q || s.userEmail.toLowerCase().includes(q) || s.userName.toLowerCase().includes(q) || s.targetName.toLowerCase().includes(q) || s.status.toLowerCase().includes(q);
   });
   const subscriptions = [...filtered].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   const { page, setPage, pageItems, totalPages } = usePagination(subscriptions, 10);
-  const exportSubscriptions = () => exportToCSV("subscriptions", ["Customer", "Email", "Product", "Interval", "Amount (USD)", "Status", "Next payment", "Started"], subscriptions.map((s) => [
-    s.userName, s.userEmail, s.productName, s.interval, (s.amountUsdCents / 100).toFixed(2), s.status,
+  const exportSubscriptions = () => exportToCSV("subscriptions", ["Customer", "Email", "Type", "Item", "Interval", "Amount (USD)", "Status", "Next payment", "Started"], subscriptions.map((s) => [
+    s.userName, s.userEmail, s.targetType, s.targetName, s.interval, (s.amountUsdCents / 100).toFixed(2), s.status,
     s.nextPaymentDate ? s.nextPaymentDate.slice(0, 10) : "", s.createdAt.slice(0, 10),
   ]));
 
@@ -436,7 +436,7 @@ export function AdminSubscriptions() {
         Read-only — customers manage their own subscriptions (pause, resume, cancel) from My Aroma Journey. This is for
         support visibility only.
       </p>
-      <AdminTableToolbar query={query} setQuery={setQuery} onExport={allSubsSorted.length > 0 ? exportSubscriptions : null} placeholder="Search by customer, product, or status…" />
+      <AdminTableToolbar query={query} setQuery={setQuery} onExport={allSubsSorted.length > 0 ? exportSubscriptions : null} placeholder="Search by customer, item, or status…" />
       {allSubsSorted.length === 0 ? (
         <p className="hint">No subscriptions yet.</p>
       ) : subscriptions.length === 0 ? (
@@ -444,12 +444,12 @@ export function AdminSubscriptions() {
       ) : (
         <div className="admin-table admin-table-orders">
           <div className="admin-row admin-header">
-            <span>Customer</span><span>Product</span><span>Interval</span><span>Amount</span><span>Next payment</span><span>Status</span>
+            <span>Customer</span><span>Item</span><span>Interval</span><span>Amount</span><span>Next payment</span><span>Status</span>
           </div>
           {pageItems.map((s) => (
             <div key={s.id} className="admin-row">
               <span>{s.userName} <span className="hint">({s.userEmail})</span></span>
-              <span>{s.productName}</span>
+              <span>{s.targetName} <span className="hint">({s.targetType})</span></span>
               <span>{s.interval === "monthly" ? "Monthly" : "Annually"}</span>
               <span>{fmtPrice(s.amountUsdCents)}</span>
               <span>{s.nextPaymentDate ? s.nextPaymentDate.slice(0, 10) : "—"}</span>
@@ -457,6 +457,48 @@ export function AdminSubscriptions() {
             </div>
           ))}
           <AdminPager page={page} setPage={setPage} totalPages={totalPages} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AdminAcademyLifetimeAccess() {
+  const { realLifetimeAccess, realLifetimeAccessLoading, realLifetimeAccessError, refetchRealLifetimeAccess } = useAdmin();
+  const [query, setQuery] = useState("");
+  const filtered = realLifetimeAccess.filter((l) => {
+    const q = query.toLowerCase();
+    return !q || l.userEmail.toLowerCase().includes(q) || l.userName.toLowerCase().includes(q);
+  });
+
+  if (realLifetimeAccessLoading) return <p className="hint">Loading lifetime access purchases…</p>;
+  if (realLifetimeAccessError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load lifetime access purchases: {realLifetimeAccessError}</p>
+        <button className="btn-outline" onClick={refetchRealLifetimeAccess}>Try again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="matched-head">Academy lifetime access ({filtered.length}{query ? ` of ${realLifetimeAccess.length}` : ""})</h3>
+      <AdminTableToolbar query={query} setQuery={setQuery} placeholder="Search by customer…" />
+      {realLifetimeAccess.length === 0 ? (
+        <p className="hint">Nobody has purchased lifetime access yet.</p>
+      ) : (
+        <div className="admin-table admin-table-orders">
+          <div className="admin-row admin-header">
+            <span>Customer</span><span>Amount paid</span><span>Purchased</span>
+          </div>
+          {filtered.map((l) => (
+            <div key={l.id} className="admin-row">
+              <span>{l.userName} <span className="hint">({l.userEmail})</span></span>
+              <span>{fmtPrice(l.amountUsdCents)}</span>
+              <span>{l.purchasedAt.slice(0, 10)}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -1600,21 +1642,26 @@ export function AdminAuditLog() {
 }
 
 export function AdminContent() {
-  const { getMomentContent, setMomentContent, getCourseContent, setCourseContent, getCountryHistory, setCountryHistory } = useAdmin();
+  const { getMomentContent, setMomentContent, getAllCourses, updateCourseDetails, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
+  const { format } = useCurrency();
   const { addToast } = useToast();
   const [tab, setTab] = useState("Moments");
   const [editingMoment, setEditingMoment] = useState(null);
   const [momentDraft, setMomentDraft] = useState({ benefit: "", description: "" });
   const [editingCourse, setEditingCourse] = useState(null);
-  const [courseDraft, setCourseDraft] = useState({ blurb: "" });
+  const [courseDraft, setCourseDraft] = useState({ blurb: "", monthlyPriceCents: 0, instructor: "", lessons: 1 });
   const [editingCountry, setEditingCountry] = useState(null);
   const [countryDraft, setCountryDraft] = useState("");
 
   const startMomentEdit = (m) => { setEditingMoment(m.id); setMomentDraft({ benefit: m.benefit, description: m.description }); };
   const saveMoment = (id) => { setMomentContent(id, momentDraft); setEditingMoment(null); addToast("Moment content updated"); };
 
-  const startCourseEdit = (c) => { setEditingCourse(c.name); setCourseDraft({ blurb: c.blurb }); };
-  const saveCourse = (name) => { setCourseContent(name, courseDraft); setEditingCourse(null); addToast("Course content updated"); };
+  const startCourseEdit = (c) => { setEditingCourse(c.id); setCourseDraft({ blurb: c.blurb, monthlyPriceCents: c.monthlyPriceCents, instructor: c.instructor, lessons: c.lessons }); };
+  const saveCourse = async (id) => {
+    const result = await updateCourseDetails(id, courseDraft);
+    setEditingCourse(null);
+    addToast(result.ok ? "Course updated" : result.error);
+  };
 
   const startCountryEdit = (name) => { setEditingCountry(name); setCountryDraft(getCountryHistory(name)); };
   const saveCountry = (name) => { setCountryHistory(name, countryDraft); setEditingCountry(null); addToast("Country history updated"); };
@@ -1658,30 +1705,40 @@ export function AdminContent() {
       )}
 
       {tab === "Courses" && (
-        <div className="admin-card-list">
-          {COURSES.map((raw) => {
-            const c = getCourseContent(raw);
-            const editing = editingCourse === c.name;
-            return (
-              <div key={c.name} className="admin-card">
-                <div className="admin-card-head"><strong>{c.name}</strong><span className="hint">{c.category}</span></div>
-                {editing ? (
-                  <>
-                    <label className="filter-label">Blurb</label>
-                    <textarea className="admin-message-edit" rows={3} value={courseDraft.blurb} onChange={(e) => setCourseDraft({ ...courseDraft, blurb: e.target.value })} maxLength={400} />
-                    <button className="link-btn" onClick={() => saveCourse(c.name)}>Save</button>
-                    <button className="link-btn" onClick={() => setEditingCourse(null)}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{c.blurb}</p>
-                    <button className="link-btn" onClick={() => startCourseEdit(c)}>Edit</button>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        realCoursesLoading ? (
+          <p className="hint">Loading courses…</p>
+        ) : (
+          <div className="admin-card-list">
+            {getAllCourses().map((c) => {
+              const editing = editingCourse === c.id;
+              return (
+                <div key={c.id} className="admin-card">
+                  <div className="admin-card-head"><strong>{c.name}</strong><span className="hint">{c.category}</span></div>
+                  {editing ? (
+                    <>
+                      <label className="filter-label">Instructor</label>
+                      <input className="admin-content-input" value={courseDraft.instructor} onChange={(e) => setCourseDraft({ ...courseDraft, instructor: e.target.value })} maxLength={200} />
+                      <label className="filter-label">Lessons</label>
+                      <input className="admin-content-input" type="number" min={1} value={courseDraft.lessons} onChange={(e) => setCourseDraft({ ...courseDraft, lessons: Number(e.target.value) })} />
+                      <label className="filter-label">Monthly price (USD cents) — annual is always 20% off 12 months, computed automatically</label>
+                      <input className="admin-content-input" type="number" min={0} value={courseDraft.monthlyPriceCents} onChange={(e) => setCourseDraft({ ...courseDraft, monthlyPriceCents: Number(e.target.value) })} />
+                      <label className="filter-label">Blurb</label>
+                      <textarea className="admin-message-edit" rows={3} value={courseDraft.blurb} onChange={(e) => setCourseDraft({ ...courseDraft, blurb: e.target.value })} maxLength={400} />
+                      <button className="link-btn" onClick={() => saveCourse(c.id)}>Save</button>
+                      <button className="link-btn" onClick={() => setEditingCourse(null)}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{c.blurb}</p>
+                      <p className="hint">{c.instructor} · {c.lessons} lessons · {format(c.monthlyPriceCents)}/mo · {format(c.annualPriceCents)}/yr</p>
+                      <button className="link-btn" onClick={() => startCourseEdit(c)}>Edit</button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
 
       {tab === "Countries" && (
@@ -1833,6 +1890,10 @@ function AdminSettingsForm() {
       <textarea id="set-invoicenotes" value={draft.invoiceNotes} onChange={(e) => setDraft({ ...draft, invoiceNotes: e.target.value })} rows={3} maxLength={400} />
       <p className="hint" style={{ marginTop: 4 }}>Shown at the bottom of an invoice only when that specific order/inquiry has no note of its own.</p>
 
+      <label className="filter-label" htmlFor="set-lifetimeprice" style={{ marginTop: 16 }}>Academy lifetime access price (USD cents)</label>
+      <input id="set-lifetimeprice" type="number" min="0" value={draft.academyLifetimePriceCents} onChange={(e) => setDraft({ ...draft, academyLifetimePriceCents: Math.max(0, Number(e.target.value) || 0) })} style={{ maxWidth: 160 }} />
+      <p className="hint" style={{ marginTop: 4 }}>One-time payment for permanent access to every Academy course, including ones added later. Individual course monthly/annual prices are set per-course under Content → Courses.</p>
+
       <h4 className="admin-subhead">Social links</h4>
       <label className="filter-label" htmlFor="set-instagram">Instagram handle (optional)</label>
       <input id="set-instagram" value={draft.instagramHandle} onChange={(e) => setDraft({ ...draft, instagramHandle: e.target.value.replace(/^@/, "") })} maxLength={60} placeholder="morningaroma (without the @)" />
@@ -1958,7 +2019,7 @@ export function AdminDashboard() {
   // Not its own independently-grantable staff permission -- bundled with Orders access, matching
   // the backend's own requirePermission("Orders") decision for GET /subscriptions (subscriptions
   // are treated as a kind of recurring order, not a separate admin capability).
-  const visibleSections = baseSections.includes("Orders") ? [...baseSections, "Subscriptions"] : baseSections;
+  const visibleSections = baseSections.includes("Orders") ? [...baseSections, "Subscriptions", "Academy Lifetime"] : baseSections;
   useEffect(() => {
     // Guards against a staff member's permission being revoked while a restricted section was
     // still selected — falls back to Overview instead of rendering a section they can no longer see.
@@ -2005,6 +2066,7 @@ export function AdminDashboard() {
         {section === "Analytics" && <AdminAnalytics />}
         {section === "Orders" && <AdminOrders />}
         {section === "Subscriptions" && <AdminSubscriptions />}
+        {section === "Academy Lifetime" && <AdminAcademyLifetimeAccess />}
         {section === "Invoices" && <AdminInvoices />}
         {section === "Customers" && <AdminCustomers />}
         {section === "Products" && <AdminProducts />}

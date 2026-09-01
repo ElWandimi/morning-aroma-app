@@ -574,8 +574,40 @@ export function SubscriptionsProvider({ children }) {
     }
   };
 
+  // Real one-time lifetime Academy access -- fundamentally not a subscription (no recurring
+  // charge, no pause/resume/cancel), so this is its own separate piece of state, not folded into
+  // mySubscriptions above.
+  const [hasLifetimeAccess, setHasLifetimeAccess] = useState(false);
+  const [lifetimeAccessLoading, setLifetimeAccessLoading] = useState(true);
+  const refetchLifetimeAccess = () => {
+    if (!token) { setLifetimeAccessLoading(false); return; }
+    setLifetimeAccessLoading(true);
+    api.getMyLifetimeAccess(token)
+      .then((body) => setHasLifetimeAccess(!!body.hasLifetimeAccess))
+      .catch(() => {})
+      .finally(() => setLifetimeAccessLoading(false));
+  };
+  useEffect(() => {
+    if (user) refetchLifetimeAccess();
+    else { setHasLifetimeAccess(false); setLifetimeAccessLoading(false); }
+  }, [token, user && user.email]);
+  const purchaseLifetimeAccess = async (reference) => {
+    try {
+      await api.purchaseLifetimeAccess(token, reference);
+      setHasLifetimeAccess(true);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   return (
-    <SubscriptionsCtx.Provider value={{ mySubscriptions, mySubscriptionsLoading, mySubscriptionsError, refetchMySubscriptions, createSubscription, pauseSubscription, resumeSubscription, cancelSubscription }}>
+    <SubscriptionsCtx.Provider
+      value={{
+        mySubscriptions, mySubscriptionsLoading, mySubscriptionsError, refetchMySubscriptions, createSubscription, pauseSubscription, resumeSubscription, cancelSubscription,
+        hasLifetimeAccess, lifetimeAccessLoading, refetchLifetimeAccess, purchaseLifetimeAccess,
+      }}
+    >
       {children}
     </SubscriptionsCtx.Provider>
   );
@@ -646,6 +678,23 @@ export function AdminDataProvider({ children }) {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealSubscriptions();
     else setRealSubscriptionsLoading(false);
   }, [token, user && user.role]);
+
+  const [realLifetimeAccess, setRealLifetimeAccess] = useState([]);
+  const [realLifetimeAccessLoading, setRealLifetimeAccessLoading] = useState(true);
+  const [realLifetimeAccessError, setRealLifetimeAccessError] = useState("");
+  const refetchRealLifetimeAccess = () => {
+    if (!token) { setRealLifetimeAccessLoading(false); return; }
+    setRealLifetimeAccessLoading(true);
+    setRealLifetimeAccessError("");
+    api.getAllLifetimeAccess(token)
+      .then((body) => setRealLifetimeAccess(pluck(body, "lifetimeAccess", { array: true })))
+      .catch((e) => { if (e.status !== 403) setRealLifetimeAccessError(e.message); })
+      .finally(() => setRealLifetimeAccessLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealLifetimeAccess();
+    else setRealLifetimeAccessLoading(false);
+  }, [token, user && user.role]);
   const updateOrderStatus = async (orderId, status) => {
     try {
       await api.updateOrderStatus(token, orderId, status);
@@ -686,6 +735,22 @@ export function AdminDataProvider({ children }) {
       .finally(() => setRealProductsLoading(false));
   };
   useEffect(() => { refetchRealProducts(); }, []);
+
+  // Real Academy courses, fetched the same way as realProducts above -- replacing courseOverrides
+  // (a purely local, in-memory patch that never persisted past a page refresh, the same
+  // pre-migration pattern products themselves used to have) with real, backend-persisted data.
+  const [realCourses, setRealCourses] = useState([]);
+  const [realCoursesLoading, setRealCoursesLoading] = useState(true);
+  const [realCoursesError, setRealCoursesError] = useState("");
+  const refetchRealCourses = () => {
+    setRealCoursesLoading(true);
+    setRealCoursesError("");
+    api.getCourses()
+      .then((body) => setRealCourses(pluck(body, "courses", { array: true })))
+      .catch((e) => setRealCoursesError(e.message))
+      .finally(() => setRealCoursesLoading(false));
+  };
+  useEffect(() => { refetchRealCourses(); }, []);
 
   // Real green coffee (wholesale) catalog, fetched the same way as realProducts above --
   // unconditionally on app load, since the Green Coffee page is public-facing too, not admin-only.
@@ -847,6 +912,39 @@ export function AdminDataProvider({ children }) {
       await api.deleteProduct(token, id);
       refetchRealProducts();
       logAction("Product discontinued", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  // Real Academy course admin actions, mirroring the equivalent product functions exactly.
+  const getAllCourses = () => realCourses;
+  const addCourse = async (data) => {
+    try {
+      const { course } = await api.createCourse(token, data);
+      refetchRealCourses();
+      logAction("Course added", data.name);
+      return { course };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  const updateCourseDetails = async (id, patch) => {
+    try {
+      await api.updateCourse(token, id, patch);
+      refetchRealCourses();
+      logAction("Course details updated", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const removeCourse = async (id) => {
+    try {
+      await api.deleteCourse(token, id);
+      refetchRealCourses();
+      logAction("Course discontinued", id);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -1017,9 +1115,12 @@ export function AdminDataProvider({ children }) {
         realUsers, realUsersLoading, realUsersError, refetchRealUsers,
         realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus, refundOrder,
         realSubscriptions, realSubscriptionsLoading, realSubscriptionsError, refetchRealSubscriptions,
+        realLifetimeAccess, realLifetimeAccessLoading, realLifetimeAccessError, refetchRealLifetimeAccess,
         getStock, setStock,
         getAllProducts, addProduct, removeProduct, setProductPhoto,
         realProductsLoading, realProductsError, refetchRealProducts,
+        getAllCourses, addCourse, updateCourseDetails, removeCourse,
+        realCoursesLoading, realCoursesError, refetchRealCourses,
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,
         realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans,

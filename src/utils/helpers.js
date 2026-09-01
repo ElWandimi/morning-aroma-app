@@ -193,3 +193,19 @@ export function setStorageConsent(value) {
     /* storage unavailable — consent banner will just reappear next visit, harmless */
   }
 }
+
+// Loads Paystack's real InlineJS v2 script on demand -- only when someone actually reaches a real
+// payment step, not on every page load site-wide. Safe to call more than once; only loads the
+// script the first time, since window.PaystackPop existing already means it's already loaded.
+// Shared between Checkout (cart/order payments) and Academy (course subscriptions, lifetime
+// access) rather than duplicated in both.
+export function loadPaystackScript() {
+  if (window.PaystackPop) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://js.paystack.co/v2/inline.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Couldn't load Paystack. Check your connection and try again."));
+    document.body.appendChild(script);
+  });
+}

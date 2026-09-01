@@ -370,6 +370,13 @@ a { color: inherit; text-decoration: none; }
 .course-card:hover { transform: translateY(-4px); }
 .course-card p { color: #6b5647; font-size: 0.88rem; margin: 6px 0 12px; }
 .course-meta { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--almond-text); font-weight: 700; }
+.course-price { margin-top: 12px; font-weight: 700; color: var(--chestnut); font-size: 0.95rem; }
+.academy-lifetime-banner { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; background: var(--espresso); color: var(--cream); border-radius: 16px; padding: 24px 28px; max-width: 1100px; margin: 0 auto 30px; }
+.academy-lifetime-banner.unlocked { background: var(--green); text-align: center; justify-content: center; }
+.academy-lifetime-title { font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; margin: 0 0 4px; color: var(--cream); }
+.academy-lifetime-banner .hint { color: var(--beige-text); }
+.academy-lifetime-cta { display: flex; align-items: center; gap: 14px; }
+.academy-lifetime-price { font-weight: 700; font-size: 1.2rem; }
 .course-top { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: start; }
 @media (max-width: 760px) { .course-top { grid-template-columns: 1fr; } }
 .course-hero-photo { height: 300px; border-radius: 16px; background: linear-gradient(rgba(62,44,35,0.15), rgba(62,44,35,0.35)), url('https://images.unsplash.com/photo-1761271046396-97d231b59dd7?auto=format&fit=crop&w=1200&q=70') center/cover; }

@@ -804,6 +804,16 @@ async function main() {
   const lifetimeMineOther = await get("/subscriptions/lifetime/mine", secondCourseSubReg.body.token);
   check("correctly reports no lifetime access for a customer who never purchased it", lifetimeMineOther.body.hasLifetimeAccess === false);
 
+  console.log("\nGET /subscriptions/lifetime as a non-admin:");
+  const lifetimeAdminAsCustomer = await get("/subscriptions/lifetime", customerToken);
+  check("returns 403", lifetimeAdminAsCustomer.status === 403);
+
+  console.log("\nGET /subscriptions/lifetime as the real admin:");
+  const lifetimeAdminList = await get("/subscriptions/lifetime", token);
+  check("returns 200", lifetimeAdminList.status === 200);
+  const lifetimeEntry = lifetimeAdminList.body.lifetimeAccess.find((l) => l.userEmail === "second@morningaroma.local");
+  check("includes the real purchase, with the real customer's email and name joined in", !!lifetimeEntry && lifetimeEntry.amountUsdCents === 24900);
+
   console.log("\nGET /products — public, no auth needed:");
   const productsNoAuth = await get("/products");
   check("returns 200 without any token", productsNoAuth.status === 200);

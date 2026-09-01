@@ -100,6 +100,19 @@ export const api = {
     request(`/subscriptions/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
   getAllSubscriptions: (token) =>
     request("/subscriptions", { headers: { Authorization: `Bearer ${token}` } }),
+  purchaseLifetimeAccess: (token, reference) =>
+    request("/subscriptions/lifetime", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reference }) }),
+  getMyLifetimeAccess: (token) =>
+    request("/subscriptions/lifetime/mine", { headers: { Authorization: `Bearer ${token}` } }),
+  getAllLifetimeAccess: (token) =>
+    request("/subscriptions/lifetime", { headers: { Authorization: `Bearer ${token}` } }),
+  getCourses: () => request("/courses"),
+  createCourse: (token, course) =>
+    request("/courses", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(course) }),
+  updateCourse: (token, id, updates) =>
+    request(`/courses/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
+  deleteCourse: (token, id) =>
+    request(`/courses/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
   getProducts: () => request("/products"),
   createProduct: (token, product) =>
     request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),

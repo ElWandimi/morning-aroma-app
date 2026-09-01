@@ -282,6 +282,27 @@ router.get("/lifetime/mine", requireAuth, async (req, res) => {
   res.json({ hasLifetimeAccess: !!result.rows[0], purchasedAt: result.rows[0] ? result.rows[0].purchased_at : null });
 });
 
+// Read-only admin visibility, same reasoning and same permission as the regular subscriptions
+// list below -- support staff need to see who's actually purchased lifetime access.
+router.get("/lifetime", requireAuth, requirePermission("Orders"), async (req, res) => {
+  const result = await query(
+    `SELECT a.*, u.email as user_email, u.name as user_name
+     FROM academy_lifetime_access a
+     JOIN users u ON u.id = a.user_id
+     ORDER BY a.purchased_at DESC`,
+    []
+  );
+  res.json({
+    lifetimeAccess: result.rows.map((row) => ({
+      id: row.id,
+      userEmail: row.user_email,
+      userName: row.user_name,
+      amountUsdCents: row.amount_usd_cents,
+      purchasedAt: row.purchased_at,
+    })),
+  });
+});
+
 // Read-only admin visibility -- per the real scope decision for this feature, customers
 // self-manage their own subscriptions; admin just needs to see what's happening for support
 // purposes, not a separate management surface.
