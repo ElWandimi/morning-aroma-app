@@ -1,0 +1,31 @@
+diff --git a/index.html b/index.html
+index ca321b8..218fcfa 100644
+--- a/index.html
++++ b/index.html
+@@ -6,22 +6,23 @@
+     <title>Morning Aroma — Where quality meets its scent.</title>
+     <meta name="description" content="Morning Aroma — traceable, fairly-priced specialty coffee. Shop by variety, learn to brew, and explore where every bag comes from." />
+     <meta name="theme-color" content="#3E2C23" />
++    <meta name="google-site-verification" content="2ENbP26O-owYpsqPPFv7X5hxRgVBnEmzG6OShw49wqo" />
+     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+     <link rel="manifest" href="/manifest.json" />
+     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+     <meta property="og:title" content="Morning Aroma" />
+     <meta property="og:description" content="Traceable, fairly-priced specialty coffee — shop by variety, learn to brew, and explore where every bag comes from." />
+-    <meta property="og:image" content="https://www.morningaroma.com/og-image.jpg" />
++    <meta property="og:image" content="https://morning-aroma.com/og-image.jpg" />
+     <meta property="og:image:width" content="1200" />
+     <meta property="og:image:height" content="630" />
+     <meta property="og:type" content="website" />
+-    <meta property="og:url" content="https://www.morningaroma.com/" />
++    <meta property="og:url" content="https://morning-aroma.com/" />
+     <meta property="og:site_name" content="Morning Aroma" />
+     <meta name="twitter:card" content="summary_large_image" />
+     <meta name="twitter:title" content="Morning Aroma" />
+     <meta name="twitter:description" content="Traceable, fairly-priced specialty coffee — shop by variety, learn to brew, and explore where every bag comes from." />
+-    <meta name="twitter:image" content="https://www.morningaroma.com/og-image.jpg" />
++    <meta name="twitter:image" content="https://morning-aroma.com/og-image.jpg" />
+     <!-- Preconnect + preload the same fonts the app applies at runtime, so the browser's preload
+          scanner starts fetching them immediately during HTML parse, in parallel with the JS
+          bundle download, rather than only starting after React mounts and a useEffect fires. -->
