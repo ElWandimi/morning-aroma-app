@@ -1580,20 +1580,51 @@ export function AdminLiveMessages() {
   const { kenyaMessages, addKenyaMessage, updateKenyaMessage, removeKenyaMessage } = useAdmin();
   const { addToast } = useToast();
   const [draft, setDraft] = useState("");
+  // Typing only updates this local draft -- updateKenyaMessage is a real, backend-persisted call
+  // now (see ROADMAP.md), so it only actually fires once, on Save, not on every keystroke the way
+  // a direct onChange={() => updateKenyaMessage(...)} would (which would mean one real API call
+  // per character typed, and a real risk of an older keystroke's request resolving after a newer
+  // one and briefly reverting the visible text).
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (i, current) => { setEditingIndex(i); setEditDraft(current); };
+  const saveEdit = async (i) => {
+    setSaving(true);
+    const result = await updateKenyaMessage(i, editDraft);
+    setSaving(false);
+    setEditingIndex(null);
+    addToast(result && result.ok === false ? result.error : "Live message updated");
+  };
+
   return (
     <div>
       <h3 className="matched-head">Kenya "Auction Beat" — live on homepage &amp; Kenya's country page</h3>
       <div className="admin-card-list">
         {kenyaMessages.map((m, i) => (
           <div key={i} className="admin-card">
-            <textarea
-              className="admin-message-edit"
-              value={m}
-              onChange={(e) => updateKenyaMessage(i, e.target.value)}
-              rows={2}
-              maxLength={200}
-            />
-            <button className="link-btn" onClick={() => { removeKenyaMessage(i); addToast("Message removed"); }}>Remove</button>
+            {editingIndex === i ? (
+              <>
+                <textarea className="admin-message-edit" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} rows={2} maxLength={200} autoFocus />
+                <button className="link-btn" onClick={() => saveEdit(i)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+                <button className="link-btn" onClick={() => setEditingIndex(null)} disabled={saving}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{m}</p>
+                <button className="link-btn" onClick={() => startEdit(i, m)}>Edit</button>
+                <button
+                  className="link-btn"
+                  onClick={async () => {
+                    const result = await removeKenyaMessage(i);
+                    addToast(result && result.ok === false ? result.error : "Message removed");
+                  }}
+                >
+                  Remove
+                </button>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -1601,7 +1632,12 @@ export function AdminLiveMessages() {
         <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="New live message…" maxLength={200} />
         <button
           className="btn-outline small"
-          onClick={() => { if (draft.trim()) { addKenyaMessage(draft.trim()); setDraft(""); addToast("Live message added"); } }}
+          onClick={async () => {
+            if (!draft.trim()) return;
+            const result = await addKenyaMessage(draft.trim());
+            setDraft("");
+            addToast(result && result.ok === false ? result.error : "Live message added");
+          }}
         >
           Add message
         </button>

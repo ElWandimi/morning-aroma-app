@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, GREEN_BEANS, KENYA_LIVE_MESSAGES_SEED, KNOWN_ROUTES, PAGE_TO_SLUG, PRODUCTS, SLUG_TO_PAGE } from "../data";
+import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, GREEN_BEANS, KNOWN_ROUTES, PAGE_TO_SLUG, PRODUCTS, SLUG_TO_PAGE } from "../data";
 import { fmtPrice, getStorageConsent, logPageView, slugify, storage } from "../utils/helpers";
 import { api } from "../utils/api";
 
@@ -769,7 +769,6 @@ export function AdminDataProvider({ children }) {
 
   const [greenOrders, setGreenOrders] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
-  const [kenyaMessages, setKenyaMessages] = useState(KENYA_LIVE_MESSAGES_SEED);
   const [quotations, setQuotations] = useState([]);
   const [serviceInquiries, setServiceInquiries] = useState([]);
   const [liveChats, setLiveChats] = useState([]);
@@ -999,9 +998,28 @@ export function AdminDataProvider({ children }) {
   const updateGreenOrderStatus = (id, status) =>
     setGreenOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
 
-  const addKenyaMessage = (msg) => { setKenyaMessages((prev) => [...prev, msg]); logAction("Live message added", msg); };
-  const updateKenyaMessage = (i, msg) => { setKenyaMessages((prev) => prev.map((m, idx) => (idx === i ? msg : m))); logAction("Live message edited", msg); };
-  const removeKenyaMessage = (i) => { setKenyaMessages((prev) => prev.filter((_, idx) => idx !== i)); logAction("Live message removed", `index ${i}`); };
+  // Real, backend-persisted now -- these three used to only update local React state (see
+  // ROADMAP.md), meaning an edit looked like it worked in the same tab but never actually reached
+  // any other visitor, or even the same admin after a page refresh. Now genuinely part of
+  // settings, the same real, shared value the homepage and Kenya's country page both read.
+  const addKenyaMessage = async (msg) => {
+    const updated = [...(settings.kenyaLiveMessages || []), msg];
+    const result = await setSettings({ kenyaLiveMessages: updated });
+    logAction("Live message added", msg);
+    return result;
+  };
+  const updateKenyaMessage = async (i, msg) => {
+    const updated = (settings.kenyaLiveMessages || []).map((m, idx) => (idx === i ? msg : m));
+    const result = await setSettings({ kenyaLiveMessages: updated });
+    logAction("Live message edited", msg);
+    return result;
+  };
+  const removeKenyaMessage = async (i) => {
+    const updated = (settings.kenyaLiveMessages || []).filter((_, idx) => idx !== i);
+    const result = await setSettings({ kenyaLiveMessages: updated });
+    logAction("Live message removed", `index ${i}`);
+    return result;
+  };
 
   const addQuotation = (q) =>
     setQuotations((prev) => [
@@ -1086,7 +1104,7 @@ export function AdminDataProvider({ children }) {
   // real backup strategy (Railway's own database backups), not an ad-hoc JSON download.
   const exportAdminData = () => ({
     greenOrders,
-    auditLog, kenyaMessages, quotations, serviceInquiries, liveChats, feedbackList,
+    auditLog, quotations, serviceInquiries, liveChats, feedbackList,
     momentOverrides, courseOverrides, countryHistoryOverrides,
   });
   // Restores each piece independently rather than one big setState -- if the uploaded file is
@@ -1096,7 +1114,6 @@ export function AdminDataProvider({ children }) {
     if (!data || typeof data !== "object") return;
     if (Array.isArray(data.greenOrders)) setGreenOrders(data.greenOrders);
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
-    if (Array.isArray(data.kenyaMessages)) setKenyaMessages(data.kenyaMessages);
     if (Array.isArray(data.quotations)) setQuotations(data.quotations);
     if (Array.isArray(data.serviceInquiries)) setServiceInquiries(data.serviceInquiries);
     if (Array.isArray(data.liveChats)) setLiveChats(data.liveChats);
@@ -1126,7 +1143,7 @@ export function AdminDataProvider({ children }) {
         realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans,
         greenOrders, addGreenOrder, updateGreenOrderStatus,
         auditLog,
-        kenyaMessages, addKenyaMessage, updateKenyaMessage, removeKenyaMessage,
+        kenyaMessages: settings.kenyaLiveMessages || [], addKenyaMessage, updateKenyaMessage, removeKenyaMessage,
         quotations, addQuotation, updateQuotationStatus,
         serviceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
         liveChats, startChat, sendChatMessage, updateChatStatus,

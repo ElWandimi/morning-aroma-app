@@ -13,6 +13,7 @@ const VALID_KEYS = new Set([
   "tagline", "announcementEnabled", "announcementText", "contactEmail", "whatsappNumber",
   "phoneNumber", "businessName", "businessAddress", "taxId", "taxRatePercent", "invoiceNotes",
   "instagramHandle", "facebookUrl", "notificationTypes", "academyLifetimePriceCents",
+  "kenyaLiveMessages",
 ]);
 
 // Mirrors DEFAULT_SETTINGS in src/data/index.js -- duplicated here (the backend can't import
@@ -40,6 +41,15 @@ const FALLBACK_SETTINGS = {
   // would cost combined, making lifetime access a genuine value proposition rather than an
   // arbitrary placeholder. Admin-editable from here on, same as every other setting.
   academyLifetimePriceCents: 24900,
+  // Same real content this setting used to only exist as a static, seed-only starting point for
+  // (KENYA_LIVE_MESSAGES_SEED in src/data/index.js) -- now the actual, live, admin-editable
+  // fallback for this real setting.
+  kenyaLiveMessages: [
+    "Nyeri lot #204 crossed the floor at $6.80/kg — the week's top price.",
+    "Kirinyaga's Thursday auction opens 9:00am EAT.",
+    "This week's standout: AA Nyeri, cupping score 87.5.",
+    "Auction volume up 12% versus last week's floor.",
+  ],
 };
 
 // Public -- the announcement banner and structured data (business name, contact info) are shown

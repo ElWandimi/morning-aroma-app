@@ -1006,5 +1006,6 @@ export const DEFAULT_SETTINGS = {
   // just that one off without losing the others.
   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
   academyLifetimePriceCents: 24900,
+  kenyaLiveMessages: KENYA_LIVE_MESSAGES_SEED,
 };
 

@@ -998,6 +998,13 @@ async function main() {
   check("the newly patched field changed", settingsSecondPatch.body.settings && settingsSecondPatch.body.settings.businessName === "A Renamed Business");
   check("the field patched in the PREVIOUS request is still there too -- confirms real accumulation across multiple saves, not each save wiping the last", settingsSecondPatch.body.settings && settingsSecondPatch.body.settings.announcementText === "A real, updated announcement");
 
+  console.log("\nPATCH /settings — kenyaLiveMessages specifically, the real fix for a real bug (editing a live message previously only updated local React state and never actually persisted anywhere real):");
+  const kenyaMessagesPatch = await patch("/settings", { kenyaLiveMessages: ["A real, edited live message", "A second real live message"] }, token);
+  check("returns 200", kenyaMessagesPatch.status === 200);
+  check("the real edit genuinely persisted", kenyaMessagesPatch.body.settings && kenyaMessagesPatch.body.settings.kenyaLiveMessages.length === 2 && kenyaMessagesPatch.body.settings.kenyaLiveMessages[0] === "A real, edited live message");
+  const kenyaMessagesAfterPatch = await get("/settings");
+  check("a fresh, independent GET confirms it -- not just trusting the PATCH response, and confirms this is genuinely shared, not local to one session", kenyaMessagesAfterPatch.body.settings && kenyaMessagesAfterPatch.body.settings.kenyaLiveMessages[1] === "A second real live message");
+
   console.log("\nGET /green-beans — public, no auth needed:");
   const greenNoAuth = await get("/green-beans");
   check("returns 200 without any token", greenNoAuth.status === 200);
