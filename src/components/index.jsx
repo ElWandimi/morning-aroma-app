@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
 import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, TRANSLATE_LANGUAGES } from "../data";
 import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTranslate } from "../hooks";
-import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent } from "../utils/helpers";
+import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, activateOnEnterOrSpace } from "../utils/helpers";
 import { api } from "../utils/api";
 
 export function Steam({ className = "" }) {
@@ -1031,7 +1031,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
   return (
     <header className="nav">
       <div className="nav-inner">
-        <div className="brand" onClick={() => go("home")} style={{ cursor: "pointer" }}>
+        <div className="brand" onClick={() => go("home")} onKeyDown={activateOnEnterOrSpace(() => go("home"))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>
           <img src="/logo-mark.png" alt="" className="brand-mark-img" />
           <span className="brand-name">Morning Aroma</span>
         </div>
@@ -1588,9 +1588,15 @@ export function WishlistDrawer() {
               if (!p) return null;
               return (
                 <div key={id} className="drawer-item">
-                  <div className="drawer-thumb" onClick={() => { setOpen(false); go("product", { id: p.id }); }} style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} />
+                  <div
+                    className="drawer-thumb"
+                    onClick={() => { setOpen(false); go("product", { id: p.id }); }}
+                    onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })}
+                    role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+                    style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
+                  />
                   <div className="drawer-item-info">
-                    <p className="drawer-item-name" onClick={() => { setOpen(false); go("product", { id: p.id }); }} style={{ cursor: "pointer" }}>{p.name} — {p.country}</p>
+                    <p className="drawer-item-name" onClick={() => { setOpen(false); go("product", { id: p.id }); }} onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</p>
                     <p className="drawer-item-price">{format(getPrice(p.id))}</p>
                     <div className="qty-row small">
                       <button className="link-btn" style={{ marginLeft: 0 }} onClick={() => { addToCart(p.id); addToast("Added to cart"); }}>Add to cart</button>

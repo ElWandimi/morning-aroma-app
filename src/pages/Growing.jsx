@@ -3,7 +3,7 @@ import { BarRow, MiniCalendar } from "../components";
 import { useAdmin, useCurrency, useRoute } from "../context";
 import { COUNTRIES, GROWING_FACTORS, GROWING_PATHS, GROWING_PROFILES, PRODUCTS } from "../data";
 import { LiveMessageBar } from "./Home";
-import { slugify } from "../utils/helpers";
+import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
 
 export function GrowingHubPage() {
   const { go } = useRoute();
@@ -37,8 +37,14 @@ export function GrowingHubPage() {
         <div className="grid4">
           {PRODUCTS.map((p) => (
             <div key={p.id} className="everyday-card">
-              <div className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`} onClick={() => go("growingprofile", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
-              <h3 onClick={() => go("growingprofile", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+              <div
+                className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
+                onClick={() => go("growingprofile", { id: p.id })}
+                onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))}
+                role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+                style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
+              />
+              <h3 onClick={() => go("growingprofile", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
               <p>{GROWING_PROFILES[p.id].altitude} · {GROWING_PROFILES[p.id].soilType}</p>
               <button className="btn-outline small" onClick={() => go("growingprofile", { id: p.id })}>View profile</button>
             </div>
@@ -54,7 +60,7 @@ export function GrowingHubPage() {
           </div>
           <div className="guide-grid">
             {COUNTRIES.map((c) => (
-              <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })}>
+              <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })} onKeyDown={activateOnEnterOrSpace(() => go("country", { id: slugify(c.name) }))} role="link" tabIndex={0}>
                 <span className="guide-icon">{c.flag}</span>
                 <h3>{c.name}</h3>
                 <p>{c.climate}</p>
@@ -69,7 +75,7 @@ export function GrowingHubPage() {
       {path === "Growing Factor" && (
         <div className="guide-grid">
           {GROWING_FACTORS.map((f) => (
-            <div key={f.name} className="guide-card" onClick={() => go("growingfactor", { id: slugify(f.name) })}>
+            <div key={f.name} className="guide-card" onClick={() => go("growingfactor", { id: slugify(f.name) })} onKeyDown={activateOnEnterOrSpace(() => go("growingfactor", { id: slugify(f.name) }))} role="link" tabIndex={0}>
               <span className="guide-icon">{f.icon}</span>
               <h3>{f.name}</h3>
               <p>{f.explain.slice(0, 80)}…</p>
@@ -195,8 +201,14 @@ export function CountryPage({ id }) {
           <div className="grid4">
             {varieties.map((p) => (
               <div key={p.id} className="everyday-card">
-                <div className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`} onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
-                <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name}</h3>
+                <div
+                  className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
+                  onClick={() => go("product", { id: p.id })}
+                  onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+                  role="link" tabIndex={0} aria-label={`${p.name} coffee bag`}
+                  style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
+                />
+                <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name}</h3>
                 <p>{p.note}</p>
                 <span>{format(getPrice(p.id))}</span>
               </div>
@@ -315,7 +327,7 @@ export function SeasonsPage() {
           </div>
         </div>
         {COUNTRIES.map((c) => (
-          <div key={c.name} className="calendar-row" onClick={() => go("country", { id: slugify(c.name) })}>
+          <div key={c.name} className="calendar-row" onClick={() => go("country", { id: slugify(c.name) })} onKeyDown={activateOnEnterOrSpace(() => go("country", { id: slugify(c.name) }))} role="link" tabIndex={0}>
             <span className="calendar-country">{c.flag} {c.name}</span>
             <MiniCalendar start={c.harvestStart} end={c.harvestEnd} />
           </div>

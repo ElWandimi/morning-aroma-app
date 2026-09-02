@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } from "../context";
 import { RECIPE_CARDS } from "../data";
-import { loadPaystackScript } from "../utils/helpers";
+import { loadPaystackScript, activateOnEnterOrSpace } from "../utils/helpers";
 import { generateRecipeCardPDF } from "../utils/pdf";
 import { useStructuredData } from "../hooks";
 
@@ -106,7 +106,7 @@ export function AcademyHubPage() {
       ) : (
         <div className="course-grid">
           {filtered.map((c) => (
-            <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })}>
+            <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("course", { id: c.id }))} role="link" tabIndex={0}>
               <p className="eyebrow">{c.category}</p>
               <h3>{c.name}</h3>
               <p>{c.blurb}</p>
@@ -301,7 +301,7 @@ export function CoursePage({ id }) {
           <h3>More in {course.category}</h3>
           <div className="course-grid">
             {related.map((c) => (
-              <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })}>
+              <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("course", { id: c.id }))} role="link" tabIndex={0}>
                 <p className="eyebrow">{c.category}</p>
                 <h3>{c.name}</h3>
                 <p>{c.blurb}</p>

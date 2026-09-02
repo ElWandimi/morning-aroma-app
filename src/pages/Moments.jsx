@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
 import { MOMENTS, PRODUCTS } from "../data";
-import { slugify } from "../utils/helpers";
+import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
 
 const MOMENT_PHOTOS = {
   "first-light": "/photos/moment-first-light.jpg",
@@ -96,8 +96,14 @@ export function MomentPage({ id }) {
         <div className="grid4">
           {matched.map((p) => (
             <div key={p.id} className="everyday-card">
-              <div className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`} onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
-              <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+              <div
+                className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
+                onClick={() => go("product", { id: p.id })}
+                onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+                role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+                style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
+              />
+              <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
               <p>{p.note}</p>
               <div className="premium-foot">
                 <span>{format(getPrice(p.id))}</span>

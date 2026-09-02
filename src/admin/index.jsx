@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 import { SignInModal, SignUpModal, ShareButtons } from "../components";
 import { useAdmin, useAuth, useCurrency, useRoute, useToast } from "../context";
 import { ADMIN_SECTIONS, COUNTRIES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
-import { exportToCSV, fmtPrice, resizeImageFile, storage } from "../utils/helpers";
+import { exportToCSV, fmtPrice, resizeImageFile, storage, activateOnEnterOrSpace } from "../utils/helpers";
 import { useClickOutside, useEscapeKey } from "../hooks";
 import { generateInvoicePDF } from "../utils/pdf";
 import { api } from "../utils/api";
@@ -369,9 +369,9 @@ export function AdminOrders() {
         <div className="admin-table admin-table-orders">
           <div className="admin-row admin-header">
             <span>Order</span><span>Customer</span>
-            <span className="admin-sortable" onClick={() => toggleSort("date")}>Date{sortArrow("date")}</span>
+            <span className="admin-sortable" onClick={() => toggleSort("date")} onKeyDown={activateOnEnterOrSpace(() => toggleSort("date"))} role="button" tabIndex={0}>Date{sortArrow("date")}</span>
             <span>Items</span>
-            <span className="admin-sortable" onClick={() => toggleSort("total")}>Total{sortArrow("total")}</span>
+            <span className="admin-sortable" onClick={() => toggleSort("total")} onKeyDown={activateOnEnterOrSpace(() => toggleSort("total"))} role="button" tabIndex={0}>Total{sortArrow("total")}</span>
             <span>Payment</span>
             <span>Status</span>
           </div>
@@ -1249,7 +1249,7 @@ export function AdminInventory() {
         <button className="link-btn" onClick={() => saveStock(id)}>Save</button>
       </span>
     ) : (
-      <span onClick={() => startStockEdit(id, current)} style={{ cursor: "pointer" }} title="Click to edit">
+      <span onClick={() => startStockEdit(id, current)} onKeyDown={activateOnEnterOrSpace(() => startStockEdit(id, current))} role="button" tabIndex={0} style={{ cursor: "pointer" }} title="Click to edit">
         {current}{unit} {current === 0 && <span className="role-badge admin-badge-sold-out">sold out</span>}
       </span>
     );

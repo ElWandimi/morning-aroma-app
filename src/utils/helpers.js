@@ -110,6 +110,22 @@ export const fmtPrice = (cents) => `$${(cents / 100).toFixed(2)}`;
 
 export const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+// A non-interactive element (a <div>) used as a click target for navigation has no built-in
+// keyboard support at all -- no tab stop, no Enter/Space activation, unlike a real <button> or
+// <a>. This is the standard, established WCAG pattern for making one operable without changing
+// its element type: add tabIndex={0} and role="button" (or "link") directly on the element, plus
+// this onKeyDown handler, which fires the same callback the onClick already does. preventDefault
+// on Space specifically matters -- without it, the browser's default behavior is to scroll the
+// page, which is not what a keyboard user activating a card expects to happen.
+export function activateOnEnterOrSpace(callback) {
+  return (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      callback(e);
+    }
+  };
+}
+
 export function levenshtein(a, b) {
   const m = a.length, n = b.length;
   if (m === 0) return n;

@@ -1,0 +1,375 @@
+diff --git a/src/admin/index.jsx b/src/admin/index.jsx
+index 6bc1326..80b59c4 100644
+--- a/src/admin/index.jsx
++++ b/src/admin/index.jsx
+@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
+ import { SignInModal, SignUpModal, ShareButtons } from "../components";
+ import { useAdmin, useAuth, useCurrency, useRoute, useToast } from "../context";
+ import { ADMIN_SECTIONS, COUNTRIES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
+-import { exportToCSV, fmtPrice, resizeImageFile, storage } from "../utils/helpers";
++import { exportToCSV, fmtPrice, resizeImageFile, storage, activateOnEnterOrSpace } from "../utils/helpers";
+ import { useClickOutside, useEscapeKey } from "../hooks";
+ import { generateInvoicePDF } from "../utils/pdf";
+ import { api } from "../utils/api";
+@@ -369,9 +369,9 @@ export function AdminOrders() {
+         <div className="admin-table admin-table-orders">
+           <div className="admin-row admin-header">
+             <span>Order</span><span>Customer</span>
+-            <span className="admin-sortable" onClick={() => toggleSort("date")}>Date{sortArrow("date")}</span>
++            <span className="admin-sortable" onClick={() => toggleSort("date")} onKeyDown={activateOnEnterOrSpace(() => toggleSort("date"))} role="button" tabIndex={0}>Date{sortArrow("date")}</span>
+             <span>Items</span>
+-            <span className="admin-sortable" onClick={() => toggleSort("total")}>Total{sortArrow("total")}</span>
++            <span className="admin-sortable" onClick={() => toggleSort("total")} onKeyDown={activateOnEnterOrSpace(() => toggleSort("total"))} role="button" tabIndex={0}>Total{sortArrow("total")}</span>
+             <span>Payment</span>
+             <span>Status</span>
+           </div>
+@@ -1249,7 +1249,7 @@ export function AdminInventory() {
+         <button className="link-btn" onClick={() => saveStock(id)}>Save</button>
+       </span>
+     ) : (
+-      <span onClick={() => startStockEdit(id, current)} style={{ cursor: "pointer" }} title="Click to edit">
++      <span onClick={() => startStockEdit(id, current)} onKeyDown={activateOnEnterOrSpace(() => startStockEdit(id, current))} role="button" tabIndex={0} style={{ cursor: "pointer" }} title="Click to edit">
+         {current}{unit} {current === 0 && <span className="role-badge admin-badge-sold-out">sold out</span>}
+       </span>
+     );
+diff --git a/src/components/index.jsx b/src/components/index.jsx
+index 7b37cc5..928e8c1 100644
+--- a/src/components/index.jsx
++++ b/src/components/index.jsx
+@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
+ import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
+ import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, TRANSLATE_LANGUAGES } from "../data";
+ import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTranslate } from "../hooks";
+-import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent } from "../utils/helpers";
++import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, activateOnEnterOrSpace } from "../utils/helpers";
+ import { api } from "../utils/api";
+ 
+ export function Steam({ className = "" }) {
+@@ -1031,7 +1031,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
+   return (
+     <header className="nav">
+       <div className="nav-inner">
+-        <div className="brand" onClick={() => go("home")} style={{ cursor: "pointer" }}>
++        <div className="brand" onClick={() => go("home")} onKeyDown={activateOnEnterOrSpace(() => go("home"))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>
+           <img src="/logo-mark.png" alt="" className="brand-mark-img" />
+           <span className="brand-name">Morning Aroma</span>
+         </div>
+@@ -1588,9 +1588,15 @@ export function WishlistDrawer() {
+               if (!p) return null;
+               return (
+                 <div key={id} className="drawer-item">
+-                  <div className="drawer-thumb" onClick={() => { setOpen(false); go("product", { id: p.id }); }} style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} />
++                  <div
++                    className="drawer-thumb"
++                    onClick={() => { setOpen(false); go("product", { id: p.id }); }}
++                    onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })}
++                    role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
++                    style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++                  />
+                   <div className="drawer-item-info">
+-                    <p className="drawer-item-name" onClick={() => { setOpen(false); go("product", { id: p.id }); }} style={{ cursor: "pointer" }}>{p.name} — {p.country}</p>
++                    <p className="drawer-item-name" onClick={() => { setOpen(false); go("product", { id: p.id }); }} onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</p>
+                     <p className="drawer-item-price">{format(getPrice(p.id))}</p>
+                     <div className="qty-row small">
+                       <button className="link-btn" style={{ marginLeft: 0 }} onClick={() => { addToCart(p.id); addToast("Added to cart"); }}>Add to cart</button>
+diff --git a/src/pages/Academy.jsx b/src/pages/Academy.jsx
+index 7ec4e0c..4aaebac 100644
+--- a/src/pages/Academy.jsx
++++ b/src/pages/Academy.jsx
+@@ -1,7 +1,7 @@
+ import React, { useState } from "react";
+ import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } from "../context";
+ import { RECIPE_CARDS } from "../data";
+-import { loadPaystackScript } from "../utils/helpers";
++import { loadPaystackScript, activateOnEnterOrSpace } from "../utils/helpers";
+ import { generateRecipeCardPDF } from "../utils/pdf";
+ import { useStructuredData } from "../hooks";
+ 
+@@ -106,7 +106,7 @@ export function AcademyHubPage() {
+       ) : (
+         <div className="course-grid">
+           {filtered.map((c) => (
+-            <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })}>
++            <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("course", { id: c.id }))} role="link" tabIndex={0}>
+               <p className="eyebrow">{c.category}</p>
+               <h3>{c.name}</h3>
+               <p>{c.blurb}</p>
+@@ -301,7 +301,7 @@ export function CoursePage({ id }) {
+           <h3>More in {course.category}</h3>
+           <div className="course-grid">
+             {related.map((c) => (
+-              <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })}>
++              <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("course", { id: c.id }))} role="link" tabIndex={0}>
+                 <p className="eyebrow">{c.category}</p>
+                 <h3>{c.name}</h3>
+                 <p>{c.blurb}</p>
+diff --git a/src/pages/BrewGuides.jsx b/src/pages/BrewGuides.jsx
+index 8490227..293fe02 100644
+--- a/src/pages/BrewGuides.jsx
++++ b/src/pages/BrewGuides.jsx
+@@ -1,7 +1,7 @@
+ import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+ import { useAdmin, useCart, useCurrency, useRoute } from "../context";
+ import { BREW_GUIDES } from "../data";
+-import { slugify } from "../utils/helpers";
++import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
+ import { useStructuredData } from "../hooks";
+ 
+ // Hub-page photography (sourced from Pexels) — a distinct, complete set covering all 6 methods,
+@@ -162,8 +162,14 @@ export function BrewGuidePage({ id }) {
+       <div className="hscroll light">
+         {matched.map((p) => (
+           <div key={p.id} className="premium-card light-card">
+-            <div className={`premium-photo ${p.tier === "premium" ? "" : "everyday-tone"}`} onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
+-            <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
++            <div
++              className={`premium-photo ${p.tier === "premium" ? "" : "everyday-tone"}`}
++              onClick={() => go("product", { id: p.id })}
++              onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
++              role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
++              style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
++            />
++            <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+             <p className="note">{p.note}</p>
+             <div className="premium-foot">
+               <span>{format(getPrice(p.id))}</span>
+diff --git a/src/pages/Growing.jsx b/src/pages/Growing.jsx
+index 741f506..1fcfbb9 100644
+--- a/src/pages/Growing.jsx
++++ b/src/pages/Growing.jsx
+@@ -3,7 +3,7 @@ import { BarRow, MiniCalendar } from "../components";
+ import { useAdmin, useCurrency, useRoute } from "../context";
+ import { COUNTRIES, GROWING_FACTORS, GROWING_PATHS, GROWING_PROFILES, PRODUCTS } from "../data";
+ import { LiveMessageBar } from "./Home";
+-import { slugify } from "../utils/helpers";
++import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
+ 
+ export function GrowingHubPage() {
+   const { go } = useRoute();
+@@ -37,8 +37,14 @@ export function GrowingHubPage() {
+         <div className="grid4">
+           {PRODUCTS.map((p) => (
+             <div key={p.id} className="everyday-card">
+-              <div className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`} onClick={() => go("growingprofile", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
+-              <h3 onClick={() => go("growingprofile", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
++              <div
++                className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
++                onClick={() => go("growingprofile", { id: p.id })}
++                onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))}
++                role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
++                style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
++              />
++              <h3 onClick={() => go("growingprofile", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+               <p>{GROWING_PROFILES[p.id].altitude} · {GROWING_PROFILES[p.id].soilType}</p>
+               <button className="btn-outline small" onClick={() => go("growingprofile", { id: p.id })}>View profile</button>
+             </div>
+@@ -54,7 +60,7 @@ export function GrowingHubPage() {
+           </div>
+           <div className="guide-grid">
+             {COUNTRIES.map((c) => (
+-              <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })}>
++              <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })} onKeyDown={activateOnEnterOrSpace(() => go("country", { id: slugify(c.name) }))} role="link" tabIndex={0}>
+                 <span className="guide-icon">{c.flag}</span>
+                 <h3>{c.name}</h3>
+                 <p>{c.climate}</p>
+@@ -69,7 +75,7 @@ export function GrowingHubPage() {
+       {path === "Growing Factor" && (
+         <div className="guide-grid">
+           {GROWING_FACTORS.map((f) => (
+-            <div key={f.name} className="guide-card" onClick={() => go("growingfactor", { id: slugify(f.name) })}>
++            <div key={f.name} className="guide-card" onClick={() => go("growingfactor", { id: slugify(f.name) })} onKeyDown={activateOnEnterOrSpace(() => go("growingfactor", { id: slugify(f.name) }))} role="link" tabIndex={0}>
+               <span className="guide-icon">{f.icon}</span>
+               <h3>{f.name}</h3>
+               <p>{f.explain.slice(0, 80)}…</p>
+@@ -195,8 +201,14 @@ export function CountryPage({ id }) {
+           <div className="grid4">
+             {varieties.map((p) => (
+               <div key={p.id} className="everyday-card">
+-                <div className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`} onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
+-                <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name}</h3>
++                <div
++                  className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
++                  onClick={() => go("product", { id: p.id })}
++                  onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
++                  role="link" tabIndex={0} aria-label={`${p.name} coffee bag`}
++                  style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
++                />
++                <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name}</h3>
+                 <p>{p.note}</p>
+                 <span>{format(getPrice(p.id))}</span>
+               </div>
+@@ -315,7 +327,7 @@ export function SeasonsPage() {
+           </div>
+         </div>
+         {COUNTRIES.map((c) => (
+-          <div key={c.name} className="calendar-row" onClick={() => go("country", { id: slugify(c.name) })}>
++          <div key={c.name} className="calendar-row" onClick={() => go("country", { id: slugify(c.name) })} onKeyDown={activateOnEnterOrSpace(() => go("country", { id: slugify(c.name) }))} role="link" tabIndex={0}>
+             <span className="calendar-country">{c.flag} {c.name}</span>
+             <MiniCalendar start={c.harvestStart} end={c.harvestEnd} />
+           </div>
+diff --git a/src/pages/Home.jsx b/src/pages/Home.jsx
+index 42316e7..958d816 100644
+--- a/src/pages/Home.jsx
++++ b/src/pages/Home.jsx
+@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
+ import { Glass, PhotoMarquee, Steam, WaveDivider } from "../components";
+ import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
+ import { EVERYDAY, MOMENTS, PREMIUM } from "../data";
+-import { slugify } from "../utils/helpers";
++import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
+ import { usePrefersReducedMotion } from "../hooks";
+ 
+ export function Hero() {
+@@ -99,8 +99,14 @@ export function EverydayTier() {
+       <div className="grid4">
+         {EVERYDAY.map((c) => (
+           <div key={c.id} className="everyday-card">
+-            <div className="everyday-photo" onClick={() => go("product", { id: c.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${c.id}.png')` }} />
+-            <h3 onClick={() => go("product", { id: c.id })} style={{ cursor: "pointer" }}>{c.name} — {c.country}</h3>
++            <div
++              className="everyday-photo"
++              onClick={() => go("product", { id: c.id })}
++              onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
++              role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
++              style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${c.id}.png')` }}
++            />
++            <h3 onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</h3>
+             <p>{c.note}</p>
+             <div className="premium-foot">
+               <span>{format(getPrice(c.id))}</span>
+diff --git a/src/pages/Misc.jsx b/src/pages/Misc.jsx
+index adb9970..623d775 100644
+--- a/src/pages/Misc.jsx
++++ b/src/pages/Misc.jsx
+@@ -1,7 +1,7 @@
+ import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+ import { useAdmin, useAuth, useRoute } from "../context";
+ import { COUNTRIES, FAQ_ITEMS, PROCESSING_METHODS } from "../data";
+-import { fmtPrice, slugify } from "../utils/helpers";
++import { fmtPrice, slugify, activateOnEnterOrSpace } from "../utils/helpers";
+ import { useStructuredData } from "../hooks";
+ 
+ export function PrivacyPolicyPage() {
+@@ -234,7 +234,7 @@ export function SourceLibraryPage() {
+       <h3 className="matched-head">Origin map</h3>
+       <div className="guide-grid" style={{ marginBottom: 40 }}>
+         {COUNTRIES.map((c) => (
+-          <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })}>
++          <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })} onKeyDown={activateOnEnterOrSpace(() => go("country", { id: slugify(c.name) }))} role="link" tabIndex={0}>
+             <span className="guide-icon">{c.flag}</span>
+             <h3>{c.name}</h3>
+             <p>{c.regions.map((r) => r.name).join(" · ")}</p>
+@@ -260,7 +260,7 @@ export function SourceLibraryPage() {
+           <span>Variety</span><span>Country</span><span>Retail</span><span>Paid to farmer (FOB)</span>
+         </div>
+         {products.map((p) => (
+-          <div key={p.id} className="fob-row" onClick={() => go("product", { id: p.id })}>
++          <div key={p.id} className="fob-row" onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0}>
+             <span>{p.name}</span>
+             <span>{p.country}</span>
+             <span>{fmtPrice(getPrice(p.id))}</span>
+diff --git a/src/pages/Moments.jsx b/src/pages/Moments.jsx
+index 8683f5e..e47b5f4 100644
+--- a/src/pages/Moments.jsx
++++ b/src/pages/Moments.jsx
+@@ -1,7 +1,7 @@
+ import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+ import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
+ import { MOMENTS, PRODUCTS } from "../data";
+-import { slugify } from "../utils/helpers";
++import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
+ 
+ const MOMENT_PHOTOS = {
+   "first-light": "/photos/moment-first-light.jpg",
+@@ -96,8 +96,14 @@ export function MomentPage({ id }) {
+         <div className="grid4">
+           {matched.map((p) => (
+             <div key={p.id} className="everyday-card">
+-              <div className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`} onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
+-              <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
++              <div
++                className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
++                onClick={() => go("product", { id: p.id })}
++                onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
++                role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
++                style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
++              />
++              <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+               <p>{p.note}</p>
+               <div className="premium-foot">
+                 <span>{format(getPrice(p.id))}</span>
+diff --git a/src/pages/Shop.jsx b/src/pages/Shop.jsx
+index 1bd9423..0d81215 100644
+--- a/src/pages/Shop.jsx
++++ b/src/pages/Shop.jsx
+@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
+ import { BarRow, ImgWithSkeleton, ShareButtons } from "../components";
+ import { useAdmin, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
+ import { FILTER_DEFS, COUNTRY_JOURNEY_PHOTO } from "../data";
+-import { getProductPhotoUrl, slugify } from "../utils/helpers";
++import { getProductPhotoUrl, slugify, activateOnEnterOrSpace } from "../utils/helpers";
+ import { useStructuredData } from "../hooks";
+ 
+ export function ShopPage() {
+@@ -123,7 +123,7 @@ export function ShopPage() {
+                   <div key={p.id} className={`origin-row ${reverse ? "origin-row-reverse" : ""} ${soldOut ? "sold-out-card" : ""}`}>
+                     <div className="origin-row-text">
+                       <p className="eyebrow" style={{ marginBottom: 2 }}>{p.tier === "premium" ? "premium" : "everyday"} · {p.country}</p>
+-                      <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
++                      <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+                       <p className="handwritten origin-tasting-note">{p.note}</p>
+                       <p className="origin-growing-note">{p.growing}</p>
+                       <div className="premium-foot">
+@@ -133,7 +133,7 @@ export function ShopPage() {
+                         </button>
+                       </div>
+                     </div>
+-                    <div className="origin-row-photo" onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>
++                    <div className="origin-row-photo" onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>
+                       <ImgWithSkeleton wrapClassName="origin-row-photo-wrap" src={getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)} alt={`${p.name} — ${p.country} coffee bag`} loading="lazy" />
+                       <button
+                         className={`wishlist-heart ${hasWishlist(p.id) ? "saved" : ""}`}
+@@ -371,8 +371,14 @@ export function ProductPage({ id }) {
+           <div className="grid4">
+             {related.map((p) => (
+               <div key={p.id} className="everyday-card">
+-                <div className="everyday-photo" onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} role="img" aria-label={`${p.name} — ${p.country} coffee bag`} />
+-                <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
++                <div
++                  className="everyday-photo"
++                  onClick={() => go("product", { id: p.id })}
++                  onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
++                  role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
++                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++                />
++                <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+                 <p>{p.note}</p>
+                 <div className="premium-foot">
+                   <span>{format(getPrice(p.id))}</span>
+diff --git a/src/utils/helpers.js b/src/utils/helpers.js
+index 4143ebc..ac509ec 100644
+--- a/src/utils/helpers.js
++++ b/src/utils/helpers.js
+@@ -110,6 +110,22 @@ export const fmtPrice = (cents) => `$${(cents / 100).toFixed(2)}`;
+ 
+ export const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+ 
++// A non-interactive element (a <div>) used as a click target for navigation has no built-in
++// keyboard support at all -- no tab stop, no Enter/Space activation, unlike a real <button> or
++// <a>. This is the standard, established WCAG pattern for making one operable without changing
++// its element type: add tabIndex={0} and role="button" (or "link") directly on the element, plus
++// this onKeyDown handler, which fires the same callback the onClick already does. preventDefault
++// on Space specifically matters -- without it, the browser's default behavior is to scroll the
++// page, which is not what a keyboard user activating a card expects to happen.
++export function activateOnEnterOrSpace(callback) {
++  return (e) => {
++    if (e.key === "Enter" || e.key === " ") {
++      e.preventDefault();
++      callback(e);
++    }
++  };
++}
++
+ export function levenshtein(a, b) {
+   const m = a.length, n = b.length;
+   if (m === 0) return n;

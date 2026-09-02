@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useCart, useCurrency, useRoute } from "../context";
 import { BREW_GUIDES } from "../data";
-import { slugify } from "../utils/helpers";
+import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
 
 // Hub-page photography (sourced from Pexels) — a distinct, complete set covering all 6 methods,
@@ -162,8 +162,14 @@ export function BrewGuidePage({ id }) {
       <div className="hscroll light">
         {matched.map((p) => (
           <div key={p.id} className="premium-card light-card">
-            <div className={`premium-photo ${p.tier === "premium" ? "" : "everyday-tone"}`} onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }} />
-            <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+            <div
+              className={`premium-photo ${p.tier === "premium" ? "" : "everyday-tone"}`}
+              onClick={() => go("product", { id: p.id })}
+              onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+              role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+              style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
+            />
+            <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
             <p className="note">{p.note}</p>
             <div className="premium-foot">
               <span>{format(getPrice(p.id))}</span>

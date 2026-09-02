@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useAuth, useRoute } from "../context";
 import { COUNTRIES, FAQ_ITEMS, PROCESSING_METHODS } from "../data";
-import { fmtPrice, slugify } from "../utils/helpers";
+import { fmtPrice, slugify, activateOnEnterOrSpace } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
 
 export function PrivacyPolicyPage() {
@@ -234,7 +234,7 @@ export function SourceLibraryPage() {
       <h3 className="matched-head">Origin map</h3>
       <div className="guide-grid" style={{ marginBottom: 40 }}>
         {COUNTRIES.map((c) => (
-          <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })}>
+          <div key={c.name} className="guide-card" onClick={() => go("country", { id: slugify(c.name) })} onKeyDown={activateOnEnterOrSpace(() => go("country", { id: slugify(c.name) }))} role="link" tabIndex={0}>
             <span className="guide-icon">{c.flag}</span>
             <h3>{c.name}</h3>
             <p>{c.regions.map((r) => r.name).join(" · ")}</p>
@@ -260,7 +260,7 @@ export function SourceLibraryPage() {
           <span>Variety</span><span>Country</span><span>Retail</span><span>Paid to farmer (FOB)</span>
         </div>
         {products.map((p) => (
-          <div key={p.id} className="fob-row" onClick={() => go("product", { id: p.id })}>
+          <div key={p.id} className="fob-row" onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0}>
             <span>{p.name}</span>
             <span>{p.country}</span>
             <span>{fmtPrice(getPrice(p.id))}</span>

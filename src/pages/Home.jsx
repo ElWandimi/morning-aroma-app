@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 import { Glass, PhotoMarquee, Steam, WaveDivider } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
 import { EVERYDAY, MOMENTS, PREMIUM } from "../data";
-import { slugify } from "../utils/helpers";
+import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
 import { usePrefersReducedMotion } from "../hooks";
 
 export function Hero() {
@@ -99,8 +99,14 @@ export function EverydayTier() {
       <div className="grid4">
         {EVERYDAY.map((c) => (
           <div key={c.id} className="everyday-card">
-            <div className="everyday-photo" onClick={() => go("product", { id: c.id })} style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${c.id}.png')` }} />
-            <h3 onClick={() => go("product", { id: c.id })} style={{ cursor: "pointer" }}>{c.name} — {c.country}</h3>
+            <div
+              className="everyday-photo"
+              onClick={() => go("product", { id: c.id })}
+              onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
+              role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
+              style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${c.id}.png')` }}
+            />
+            <h3 onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</h3>
             <p>{c.note}</p>
             <div className="premium-foot">
               <span>{format(getPrice(c.id))}</span>

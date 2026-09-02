@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 import { BarRow, ImgWithSkeleton, ShareButtons } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
 import { FILTER_DEFS, COUNTRY_JOURNEY_PHOTO } from "../data";
-import { getProductPhotoUrl, slugify } from "../utils/helpers";
+import { getProductPhotoUrl, slugify, activateOnEnterOrSpace } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
 
 export function ShopPage() {
@@ -123,7 +123,7 @@ export function ShopPage() {
                   <div key={p.id} className={`origin-row ${reverse ? "origin-row-reverse" : ""} ${soldOut ? "sold-out-card" : ""}`}>
                     <div className="origin-row-text">
                       <p className="eyebrow" style={{ marginBottom: 2 }}>{p.tier === "premium" ? "premium" : "everyday"} · {p.country}</p>
-                      <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+                      <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
                       <p className="handwritten origin-tasting-note">{p.note}</p>
                       <p className="origin-growing-note">{p.growing}</p>
                       <div className="premium-foot">
@@ -133,7 +133,7 @@ export function ShopPage() {
                         </button>
                       </div>
                     </div>
-                    <div className="origin-row-photo" onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>
+                    <div className="origin-row-photo" onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>
                       <ImgWithSkeleton wrapClassName="origin-row-photo-wrap" src={getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)} alt={`${p.name} — ${p.country} coffee bag`} loading="lazy" />
                       <button
                         className={`wishlist-heart ${hasWishlist(p.id) ? "saved" : ""}`}
@@ -371,8 +371,14 @@ export function ProductPage({ id }) {
           <div className="grid4">
             {related.map((p) => (
               <div key={p.id} className="everyday-card">
-                <div className="everyday-photo" onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} role="img" aria-label={`${p.name} — ${p.country} coffee bag`} />
-                <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+                <div
+                  className="everyday-photo"
+                  onClick={() => go("product", { id: p.id })}
+                  onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+                  role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
+                />
+                <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
                 <p>{p.note}</p>
                 <div className="premium-foot">
                   <span>{format(getPrice(p.id))}</span>
