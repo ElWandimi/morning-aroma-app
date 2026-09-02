@@ -2,8 +2,7 @@
 // implementation for the network call itself (this sandbox can't reach api.cloudinary.com any
 // more than it could reach api.paystack.co, Resend, Railway, or Postgres directly earlier this
 // project -- confirmed, not assumed, the same network restriction hit repeatedly this session)
-// while still exercising the real upload-resolution logic in routes/products.js and
-// routes/greenBeans.js unmodified.
+// while still exercising the real upload-resolution logic in routes/products.js unmodified.
 
 const cloudinary = require("cloudinary").v2;
 
@@ -40,9 +39,20 @@ async function uploadImage(dataUrl, folder) {
 // Cloudinary's hosted URL. Anything else (already a real URL, e.g. unchanged from a previous save,
 // or null/undefined) passes through untouched -- avoids re-uploading an image that's already real
 // every time an unrelated field on the same product gets edited.
+// Real image types only -- previously any data: URL was accepted and forwarded to Cloudinary
+// unchecked. Lower severity than a public upload endpoint (this is admin/staff-only, gated by
+// requireAuth + requirePermission in routes/products.js and routes/greenBeans.js), but still a
+// real, previously-missing check: a compromised or malicious admin session could otherwise submit
+// arbitrary file content disguised as a photo upload.
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
 async function resolvePhotoUrl(photoUrl, folder) {
   if (!photoUrl || typeof photoUrl !== "string") return photoUrl;
   if (!photoUrl.startsWith("data:")) return photoUrl;
+  const mimeMatch = photoUrl.match(/^data:([^;]+);/);
+  if (!mimeMatch || !ALLOWED_IMAGE_TYPES.includes(mimeMatch[1])) {
+    throw new Error(`Unsupported image type. Please use JPEG, PNG, WebP, or GIF.`);
+  }
   return uploadImage(photoUrl, folder);
 }
 

@@ -245,6 +245,8 @@ export function ProductPage({ id }) {
         <div
           className={`product-hero-photo ${getTier(product.id) === "premium" ? "premium-photo-sm" : ""} ${soldOut ? "sold-out-photo" : ""}`}
           style={{ backgroundImage: `url('${getProductPhotoUrl(product, COUNTRY_JOURNEY_PHOTO)}')` }}
+          role="img"
+          aria-label={`${product.name} — ${product.country} coffee bag`}
         >
           <button
             className={`wishlist-heart ${saved ? "saved" : ""}`}
@@ -369,7 +371,7 @@ export function ProductPage({ id }) {
           <div className="grid4">
             {related.map((p) => (
               <div key={p.id} className="everyday-card">
-                <div className="everyday-photo" onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} />
+                <div className="everyday-photo" onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} role="img" aria-label={`${p.name} — ${p.country} coffee bag`} />
                 <h3 onClick={() => go("product", { id: p.id })} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
                 <p>{p.note}</p>
                 <div className="premium-foot">

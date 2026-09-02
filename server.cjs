@@ -18,7 +18,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { PAGE_META, SLUG_TO_PAGE, KNOWN_ROUTES, PRODUCTS } = require("./dist-data/routeMeta.cjs");
+const { PAGE_META, SLUG_TO_PAGE, KNOWN_ROUTES, PRODUCTS, MOMENTS, BREW_GUIDES, COUNTRIES, GROWING_FACTORS } = require("./dist-data/routeMeta.cjs");
 
 const app = express();
 const DIST_DIR = path.join(__dirname, "dist");
@@ -28,15 +28,44 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// Mirrors App.jsx's getPageMeta for the id-based routes crawlers are most likely to actually hit
-// via a shared link (product pages) -- not a full reimplementation of every route's dynamic
-// title logic, which would mean keeping three copies (client, here, and the data itself) in sync
-// instead of two. Static pages (PAGE_META directly) cover everything else, same table as the client.
+// Same simple slugify as src/utils/helpers.js -- inlined rather than required directly, since
+// that file is an ES module bundled by Vite for the browser, the same reason routeMeta.cjs itself
+// exists rather than this script requiring src/data/index.js directly.
+function slugify(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+const suffix = " | Morning Aroma";
+
+// Mirrors App.jsx's getPageMeta exactly, for every route type that data is actually available
+// for at build time -- product, moment, brewguide, country, growingfactor, and growingprofile
+// (which shares product's own data). "course" is the one deliberate exception: courses now live
+// in the real database (see ROADMAP.md), not static data this script can read without adding a
+// real network dependency to every build -- same real limitation already documented in
+// scripts/generate-sitemap.mjs. A shared link to a course page still falls back to the generic
+// Academy hub's title/description for a crawler that doesn't execute JS, same as before this fix.
 function resolveMeta(pageRoute) {
   const { page, id } = pageRoute;
-  if (page === "product" && id) {
+  if ((page === "product" || page === "growingprofile") && id) {
     const p = PRODUCTS.find((p) => p.id === id);
-    if (p) return { title: `${p.name} — ${p.country} | Morning Aroma`, description: p.note };
+    if (p) return { title: `${p.name} — ${p.country}${suffix}`, description: p.note };
+    return PAGE_META[page === "product" ? "shop" : "growing"];
+  }
+  if (page === "moment" && id) {
+    const m = MOMENTS.find((m) => m.id === id);
+    return m ? { title: `${m.name}${suffix}`, description: m.benefit } : PAGE_META.moments;
+  }
+  if (page === "brewguide" && id) {
+    const b = BREW_GUIDES.find((b) => slugify(b.name) === id);
+    return b ? { title: `${b.name} Brew Guide${suffix}`, description: b.flavor } : PAGE_META.brewguides;
+  }
+  if (page === "country" && id) {
+    const c = COUNTRIES.find((c) => slugify(c.name) === id);
+    return c ? { title: `${c.name}${suffix}`, description: c.climate } : PAGE_META.growing;
+  }
+  if (page === "growingfactor" && id) {
+    const f = GROWING_FACTORS.find((f) => slugify(f.name) === id);
+    return f ? { title: `${f.name}${suffix}`, description: f.explain } : PAGE_META.growing;
   }
   return PAGE_META[page] || PAGE_META.home;
 }
@@ -50,15 +79,26 @@ function parseRoutePath(urlPath) {
   return rawId ? { page, id: decodeURIComponent(rawId) } : { page };
 }
 
+// Real, live production domain by default -- matches the same SITE_ORIGIN pattern and fallback
+// already established in scripts/generate-sitemap.mjs, not a placeholder or a wrong domain.
+const SITE_ORIGIN = process.env.SITE_ORIGIN || "https://morning-aroma.com";
+
 function renderIndexWithMeta(urlPath) {
   const meta = resolveMeta(parseRoutePath(urlPath));
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description || "");
+  // The real, current page's own URL -- was missing from this replacement list entirely before
+  // this, meaning any crawler that doesn't execute JS (many social media link-preview bots: a
+  // real, separate audience from Googlebot, which does run JS and would see the client-side fix
+  // in useDocumentMeta) always saw the homepage's URL here, regardless of which page was actually
+  // being shared. urlPath already excludes any query string (see parseRoutePath above).
+  const realUrl = `${SITE_ORIGIN}${urlPath.split("?")[0]}`;
   return INDEX_HTML
     .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
     .replace(/<meta name="description" content=".*?"\s*\/?>/, `<meta name="description" content="${description}" />`)
     .replace(/<meta property="og:title" content=".*?"\s*\/?>/, `<meta property="og:title" content="${title}" />`)
     .replace(/<meta property="og:description" content=".*?"\s*\/?>/, `<meta property="og:description" content="${description}" />`)
+    .replace(/<meta property="og:url" content=".*?"\s*\/?>/, `<meta property="og:url" content="${realUrl}" />`)
     .replace(/<meta name="twitter:title" content=".*?"\s*\/?>/, `<meta name="twitter:title" content="${title}" />`)
     .replace(/<meta name="twitter:description" content=".*?"\s*\/?>/, `<meta name="twitter:description" content="${description}" />`);
 }
