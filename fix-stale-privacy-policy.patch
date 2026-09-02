@@ -1,0 +1,112 @@
+diff --git a/src/pages/Misc.jsx b/src/pages/Misc.jsx
+index c58f0eb..adb9970 100644
+--- a/src/pages/Misc.jsx
++++ b/src/pages/Misc.jsx
+@@ -8,59 +8,75 @@ export function PrivacyPolicyPage() {
+   return (
+     <div className="legal-page">
+       <div className="shop-head">
+-        <p className="eyebrow">last updated August 2026</p>
++        <p className="eyebrow">last updated September 2026</p>
+         <h1>Privacy Policy</h1>
+       </div>
+       <div className="legal-body">
+         <p className="hint" style={{ marginBottom: 24 }}>
+-          This is a working prototype, and this policy is written to reflect what a real Morning Aroma
+-          deployment would need — see the "What this prototype actually does" note at the end for the
+-          honest, current state of data handling in this build specifically.
++          This page describes what Morning Aroma actually does with your information, as the site
++          is genuinely built today. It is not a substitute for legal advice — if you need this
++          policy reviewed for your specific regulatory situation, please have a qualified
++          professional review it.
+         </p>
+ 
+         <h3>What we collect</h3>
+-        <p>When you use Morning Aroma, we collect information you give us directly: your name and email
+-        when you create an account or sign in; shipping details at checkout; the notes, ratings, and
+-        varieties you log in My Aroma Journey; messages you send through the contact form, the footer
+-        quotation form, the Our Services inquiry form, the Green Coffee wholesale order form, or live
+-        chat; and reviews submitted through "Leave Your Aroma."</p>
++        <p>When you use Morning Aroma, we collect information you give us directly: your name and
++        email when you create an account or sign in (including, if you choose, via "Sign in with
++        Google" — see below); shipping details at checkout; the notes, ratings, and varieties you
++        log in My Aroma Journey; messages you send through the contact form, the footer quotation
++        form, the Our Services inquiry form, the Green Coffee wholesale order form, or live chat;
++        and reviews submitted through "Leave Your Aroma," which are anonymous and not linked to
++        your account.</p>
++        <p>We do not collect or store your full payment card details ourselves — payment is
++        processed directly by Paystack (see below), and we only receive confirmation of whether a
++        payment succeeded.</p>
+ 
+         <h3>How we use it</h3>
+-        <p>We use this information to fulfil orders, respond to inquiries, personalize recommendations
+-        based on your tasting history, and improve the site. We do not sell your personal information
+-        to third parties.</p>
++        <p>We use this information to fulfil orders, respond to inquiries, personalize
++        recommendations based on your tasting history, and improve the site. We do not sell your
++        personal information to third parties.</p>
++
++        <h3>Third-party services we use</h3>
++        <p>Morning Aroma is built on a real backend that relies on a small number of trusted
++        third-party services to actually operate:</p>
++        <ul>
++          <li><strong>Paystack</strong> processes all real payments and subscriptions. Your card
++          details are sent directly to Paystack, not to us — we receive only a confirmation and a
++          transaction reference.</li>
++          <li><strong>Resend</strong> sends our transactional emails — account verification,
++          password resets, and order confirmations.</li>
++          <li><strong>Cloudinary</strong> hosts product and content photos uploaded by our team.</li>
++          <li><strong>Google</strong> provides the optional "Sign in with Google" button, if you
++          choose to use it instead of a password, and, separately, real analytics (see below).</li>
++        </ul>
+ 
+-        <h3>Local storage and cookies</h3>
+-        <p>Your shopping cart and wishlist are saved in your browser's local storage so they survive a
+-        page refresh — this data stays on your device and is not transmitted to us or any third party.
+-        We do not currently use tracking cookies or third-party analytics; if that changes, this policy
+-        will be updated first.</p>
++        <h3>Local storage, cookies, and analytics</h3>
++        <p>Your shopping cart and wishlist are saved in your browser's local storage so they
++        survive a page refresh — this specific data stays on your device and is not transmitted to
++        us or any third party.</p>
++        <p>We use Google Analytics to understand how the site is used, but only after you've
++        explicitly accepted our cookie consent banner — it never loads before that, and you can
++        decline it entirely. When active, Google Analytics may set its own cookies and receive
++        your IP address and the pages you visit; Google's own privacy policy governs how they
++        handle that data.</p>
+ 
+         <h3>Data retention and your rights</h3>
+         <p>You can request a copy of the data we hold about you, ask us to correct it, or ask us to
+-        delete your account and associated data, by contacting us at the email address below. We retain
+-        order records as required for accounting and legal purposes; other data is kept only as long as
+-        your account is active or as needed to provide the service.</p>
++        delete your account and associated data, by contacting us at the email address below. We
++        retain order records as required for accounting and legal purposes; other data is kept only
++        as long as your account is active or as needed to provide the service.</p>
+ 
+         <h3>Children's privacy</h3>
+         <p>Morning Aroma is not directed at children under 16, and we do not knowingly collect
+         information from them.</p>
+ 
+         <h3>Changes to this policy</h3>
+-        <p>If we make material changes to how we handle your data, we'll update this page and, where
+-        appropriate, notify account holders directly.</p>
++        <p>If we make material changes to how we handle your data, we'll update this page and,
++        where appropriate, notify account holders directly.</p>
+ 
+         <h3>Contact</h3>
+-        <p>Questions about this policy can be sent to the contact details in our footer.</p>
+-
+-        <div className="legal-callout">
+-          <p className="filter-label" style={{ marginTop: 0 }}>What this prototype actually does, specifically</p>
+-          <p>This build has no real backend or database. Accounts, orders, journal entries, and admin
+-          edits exist only in your browser's memory for the current session and are lost on refresh —
+-          only the cart and wishlist persist, via local storage, exactly as described above. Nothing
+-          you enter anywhere on this site is transmitted to a real server. See <code>SECURITY.md</code> in
+-          the project repository for the full technical detail.</p>
+-        </div>
++        <p>Questions about this policy can be sent to the contact details in our footer, or
++        directly to hello@morning-aroma.com.</p>
+       </div>
+     </div>
+   );
