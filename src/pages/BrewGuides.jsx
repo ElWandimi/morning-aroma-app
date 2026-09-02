@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 import { useAdmin, useCart, useCurrency, useRoute } from "../context";
 import { BREW_GUIDES } from "../data";
 import { slugify } from "../utils/helpers";
+import { useStructuredData } from "../hooks";
 
 // Hub-page photography (sourced from Pexels) — a distinct, complete set covering all 6 methods,
 // separate from BREW_GUIDE_PHOTOS below (which only covers the 2 guides with a matching detail-page photo).
@@ -82,6 +83,25 @@ export function BrewGuidePage({ id }) {
   const { getPrice, getAllProducts } = useAdmin();
   const { format } = useCurrency();
   const guide = BREW_GUIDES.find((g) => slugify(g.name) === id);
+
+  // Real HowTo structured data -- a brew guide is a literal, numbered, step-by-step recipe, a
+  // genuine match for this schema type (Google can show step-by-step cards directly in search
+  // results for it, unlike a page with no structured data at all). Called unconditionally, before
+  // the early return below, for the same Rules of Hooks reason established elsewhere in this app
+  // (see ROADMAP.md): skipping this hook when guide isn't known yet would mean a different number
+  // of hooks called between renders once it is.
+  useStructuredData(
+    guide
+      ? {
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          name: `How to Brew ${guide.name}`,
+          description: guide.flavor,
+          step: guide.steps.map((s, i) => ({ "@type": "HowToStep", position: i + 1, text: s })),
+        }
+      : null
+  );
+
   if (!guide) {
     return (
       <div className="empty-state" style={{ padding: 80 }}>

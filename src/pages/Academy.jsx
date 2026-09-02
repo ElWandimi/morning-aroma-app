@@ -3,6 +3,7 @@ import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } 
 import { RECIPE_CARDS } from "../data";
 import { loadPaystackScript } from "../utils/helpers";
 import { generateRecipeCardPDF } from "../utils/pdf";
+import { useStructuredData } from "../hooks";
 
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
@@ -136,6 +137,31 @@ export function CoursePage({ id }) {
 
   const courses = getAllCourses();
   const course = courses.find((c) => c.id === id);
+
+  // Real Course structured data -- called unconditionally, before either early return below,
+  // same Rules of Hooks reasoning established elsewhere in this app (see ROADMAP.md).
+  useStructuredData(
+    course
+      ? {
+          "@context": "https://schema.org",
+          "@type": "Course",
+          name: course.name,
+          description: course.blurb,
+          provider: { "@type": "Organization", name: "Morning Aroma", sameAs: `${window.location.origin}/` },
+          hasCourseInstance: {
+            "@type": "CourseInstance",
+            courseMode: "online",
+            instructor: { "@type": "Person", name: course.instructor },
+          },
+          offers: {
+            "@type": "Offer",
+            priceCurrency: "USD",
+            price: (course.monthlyPriceCents / 100).toFixed(2),
+            category: "subscription",
+          },
+        }
+      : null
+  );
 
   if (realCoursesLoading) {
     return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading course…</p>;
