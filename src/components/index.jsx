@@ -1032,7 +1032,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
     <header className="nav">
       <div className="nav-inner">
         <div className="brand" onClick={() => go("home")} onKeyDown={activateOnEnterOrSpace(() => go("home"))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>
-          <img src="/logo-mark.png" alt="" className="brand-mark-img" />
+          <img src="/logo-mark.png" alt="" className="brand-mark-img" width="613" height="400" />
           <span className="brand-name">Morning Aroma</span>
         </div>
         <nav className="nav-links">
@@ -1107,7 +1107,7 @@ export function Footer() {
       <div className="footer-grid">
         <div>
           <div className="brand">
-            <img src="/logo-mark.png" alt="" className="brand-mark-img" />
+            <img src="/logo-mark.png" alt="" className="brand-mark-img" width="613" height="400" />
             <span className="brand-name light">Morning Aroma</span>
           </div>
           <p className="tagline handwritten">{settings.tagline}</p>

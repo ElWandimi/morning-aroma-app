@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useCart, useCurrency, useRoute } from "../context";
-import { BREW_GUIDES } from "../data";
-import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
+import { BREW_GUIDES, COUNTRY_JOURNEY_PHOTO } from "../data";
+import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
 
 // Hub-page photography (sourced from Pexels) — a distinct, complete set covering all 6 methods,
@@ -167,9 +167,9 @@ export function BrewGuidePage({ id }) {
               onClick={() => go("product", { id: p.id })}
               onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
               role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
-              style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
+              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
             />
-            <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+            <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
             <p className="note">{p.note}</p>
             <div className="premium-foot">
               <span>{format(getPrice(p.id))}</span>

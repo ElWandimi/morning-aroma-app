@@ -123,7 +123,7 @@ export function ShopPage() {
                   <div key={p.id} className={`origin-row ${reverse ? "origin-row-reverse" : ""} ${soldOut ? "sold-out-card" : ""}`}>
                     <div className="origin-row-text">
                       <p className="eyebrow" style={{ marginBottom: 2 }}>{p.tier === "premium" ? "premium" : "everyday"} · {p.country}</p>
-                      <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+                      <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
                       <p className="handwritten origin-tasting-note">{p.note}</p>
                       <p className="origin-growing-note">{p.growing}</p>
                       <div className="premium-foot">
@@ -378,7 +378,7 @@ export function ProductPage({ id }) {
                   role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
                   style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
                 />
-                <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+                <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
                 <p>{p.note}</p>
                 <div className="premium-foot">
                   <span>{format(getPrice(p.id))}</span>

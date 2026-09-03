@@ -36,8 +36,18 @@ const PRODUCTS_WITH_BUNDLED_PHOTOS = [
   "geisha-panama", "laurina-brazil", "sl28-kenya", "pacamara-elsalvador", "bourbon-rwanda",
   "typica-guatemala", "caturra-colombia", "catuai-honduras", "yirgacheffe-ethiopia",
 ];
+// Real Cloudinary format+quality auto-optimization, applied here so every existing call site
+// benefits automatically -- confirmed via Cloudinary's own current documentation that f_auto/q_auto
+// (forward-slash separated) is the correct, current syntax, not the comma-separated form seen in
+// most older examples online. A country-fallback or bundled static photo isn't a Cloudinary URL at
+// all, so this only ever touches a URL that's actually real Cloudinary content.
+function withCloudinaryOptimization(url) {
+  if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) return url;
+  return url.replace("/upload/", "/upload/f_auto/q_auto/");
+}
+
 export const getProductPhotoUrl = (p, countryPhotoMap) => {
-  if (p.photoUrl) return p.photoUrl;
+  if (p.photoUrl) return withCloudinaryOptimization(p.photoUrl);
   return PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id) ? `/photos/products/${p.id}.png` : countryPhotoMap[p.country];
 };
 

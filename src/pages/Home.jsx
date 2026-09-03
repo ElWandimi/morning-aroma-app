@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { Glass, PhotoMarquee, Steam, WaveDivider } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
-import { EVERYDAY, MOMENTS, PREMIUM } from "../data";
-import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
+import { COUNTRY_JOURNEY_PHOTO, EVERYDAY, MOMENTS, PREMIUM } from "../data";
+import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 import { usePrefersReducedMotion } from "../hooks";
 
 export function Hero() {
@@ -55,7 +55,7 @@ export function PremiumTier() {
       <div className="hscroll">
         {PREMIUM.map((c) => (
           <div key={c.id} className="premium-card">
-            <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('/photos/products/${c.id}.png')` }} />
+            <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO)}')` }} />
             <h3>{c.name} — {c.country}</h3>
             <p className="note handwritten">{c.note}</p>
             <div className="premium-foot">
@@ -104,9 +104,9 @@ export function EverydayTier() {
               onClick={() => go("product", { id: c.id })}
               onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
               role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
-              style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${c.id}.png')` }}
+              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO)}')` }}
             />
-            <h3 onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</h3>
+            <h3><span onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</span></h3>
             <p>{c.note}</p>
             <div className="premium-foot">
               <span>{format(getPrice(c.id))}</span>
@@ -132,7 +132,7 @@ export function MomentsSnapshot() {
           <div key={m.id} className="moment-card" onClick={() => go("moment", { id: m.id })} style={{ cursor: "pointer" }}>
             <span className="moment-icon">{m.icon}</span>
             <h4>{m.name}</h4>
-            <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }}>Explore →</a>
+            <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }} aria-label={`Explore ${m.name}`}>Explore →</a>
           </div>
         ))}
       </div>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { BarRow, MiniCalendar } from "../components";
 import { useAdmin, useCurrency, useRoute } from "../context";
-import { COUNTRIES, GROWING_FACTORS, GROWING_PATHS, GROWING_PROFILES, PRODUCTS } from "../data";
+import { COUNTRIES, COUNTRY_JOURNEY_PHOTO, GROWING_FACTORS, GROWING_PATHS, GROWING_PROFILES, PRODUCTS } from "../data";
 import { LiveMessageBar } from "./Home";
-import { slugify, activateOnEnterOrSpace } from "../utils/helpers";
+import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 
 export function GrowingHubPage() {
   const { go } = useRoute();
@@ -42,9 +42,9 @@ export function GrowingHubPage() {
                 onClick={() => go("growingprofile", { id: p.id })}
                 onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))}
                 role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
-                style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
+                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
               />
-              <h3 onClick={() => go("growingprofile", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</h3>
+              <h3><span onClick={() => go("growingprofile", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
               <p>{GROWING_PROFILES[p.id].altitude} · {GROWING_PROFILES[p.id].soilType}</p>
               <button className="btn-outline small" onClick={() => go("growingprofile", { id: p.id })}>View profile</button>
             </div>
@@ -206,9 +206,9 @@ export function CountryPage({ id }) {
                   onClick={() => go("product", { id: p.id })}
                   onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
                   role="link" tabIndex={0} aria-label={`${p.name} coffee bag`}
-                  style={{ cursor: "pointer", backgroundImage: `url('/photos/products/${p.id}.png')` }}
+                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
                 />
-                <h3 onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name}</h3>
+                <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name}</span></h3>
                 <p>{p.note}</p>
                 <span>{format(getPrice(p.id))}</span>
               </div>

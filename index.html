@@ -36,7 +36,8 @@
          forcing every visitor to fetch it before knowing whether they'll stay on the page isn't a
          clear win the way a ~37KB poster image is. -->
     <link rel="preload" as="image" href="/video/hero-poster.jpg" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" /></noscript>
     <style>
       /* Inline and self-contained on purpose — this must render before the app's own stylesheet
          (bundled into the JS) has loaded, so it can't depend on anything external. Removed
