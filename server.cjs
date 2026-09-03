@@ -121,6 +121,13 @@ app.use(express.static(DIST_DIR, { index: false }));
 // handle, which is exactly the fallback behavior this needs.
 app.use((req, res) => {
   res.set("Content-Type", "text/html");
+  // Must never be cached, by the browser or by Cloudflare (this domain is proxied through it) --
+  // it references hashed JS filenames that change on every deploy, and those old files are gone
+  // from the server the moment a new build replaces dist/. A stale cached copy of this exact page
+  // pointing at now-deleted assets is what leaves a visitor stuck on the static loading screen
+  // forever after a deploy, since the failed script load happens before any of the app's own code
+  // -- including its own error handling -- ever gets a chance to run.
+  res.set("Cache-Control", "no-store, must-revalidate");
   res.send(renderIndexWithMeta(req.path));
 });
 
