@@ -9,8 +9,6 @@ export const REVEAL_SELECTOR =
 
 export function useScrollReveal(dep) {
   useEffect(() => {
-    const els = Array.from(document.querySelectorAll(REVEAL_SELECTOR)).filter((el) => !el.classList.contains("revealed"));
-    if (!els.length) return;
     const obs = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
@@ -22,8 +20,38 @@ export function useScrollReveal(dep) {
       },
       { threshold: 0.12 }
     );
-    els.forEach((el) => obs.observe(el));
-    return () => obs.disconnect();
+
+    const observe = (el) => {
+      if (!el.classList.contains("revealed")) obs.observe(el);
+    };
+
+    // Elements already in the DOM at the moment this effect runs.
+    document.querySelectorAll(REVEAL_SELECTOR).forEach(observe);
+
+    // Elements that mount *after* this effect has already run -- e.g. this effect is keyed to
+    // `dep` (the current route) and lives in a component above the lazy-loaded route's Suspense
+    // boundary, so on a fresh page load this effect can fire before that route's chunk has
+    // finished fetching/evaluating. Without watching for later arrivals, a section that isn't in
+    // the DOM yet at that moment is queried for once, found missing, and then never observed
+    // again for the life of this effect (routeKey doesn't change just because the lazy chunk
+    // finally resolved) -- leaving it permanently hidden by whatever CSS gates on `.revealed`.
+    // Navigating away and back "fixes" it only because the chunk is cached by then and resolves
+    // fast enough to already be in the DOM the next time this effect runs.
+    const mo = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes.forEach((node) => {
+          if (node.nodeType !== 1) return;
+          if (node.matches?.(REVEAL_SELECTOR)) observe(node);
+          node.querySelectorAll?.(REVEAL_SELECTOR).forEach(observe);
+        });
+      }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      obs.disconnect();
+      mo.disconnect();
+    };
   }, [dep]);
 }
 
