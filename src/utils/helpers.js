@@ -46,9 +46,31 @@ function withCloudinaryOptimization(url) {
   return url.replace("/upload/", "/upload/f_auto/q_auto/");
 }
 
-export const getProductPhotoUrl = (p, countryPhotoMap) => {
-  if (p.photoUrl) return withCloudinaryOptimization(p.photoUrl);
-  return PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id) ? `/photos/products/${p.id}.png` : countryPhotoMap[p.country];
+// Real, targeted resizing for both Unsplash and Cloudinary URLs -- found via a direct user report
+// that small, ~100-260px-tall product-grid cards were requesting the full 1600px-wide source image
+// (confirmed against the actual CSS: a 5-7x dimensional over-fetch, ~25-50x in actual bytes). Only
+// ever narrows an existing size, never used to make an image larger than its real source, and only
+// touches URLs from these two known services -- a bundled static photo passes through unchanged.
+export function withTargetWidth(url, targetWidth) {
+  if (!url || !targetWidth) return url;
+  if (url.includes("images.unsplash.com")) {
+    return url.includes("w=") ? url.replace(/w=\d+/, `w=${targetWidth}`) : `${url}&w=${targetWidth}`;
+  }
+  if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
+    return url.replace("/upload/", `/upload/w_${targetWidth}/`);
+  }
+  return url;
+}
+
+// targetWidth is optional and deliberately opt-in -- omitting it keeps every existing call site's
+// behavior exactly as it was, so this can be adopted gradually at each real display context's own
+// actual size, rather than a single global change risking degraded quality somewhere it wasn't
+// tested (e.g. WorldJourney.jsx's full-bleed hero background, which genuinely needs the full size
+// and is deliberately left untouched).
+export const getProductPhotoUrl = (p, countryPhotoMap, targetWidth) => {
+  if (p.photoUrl) return withTargetWidth(withCloudinaryOptimization(p.photoUrl), targetWidth);
+  if (PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id)) return `/photos/products/${p.id}.png`;
+  return withTargetWidth(countryPhotoMap[p.country], targetWidth);
 };
 
 // Reads an uploaded image file, downscales it on a canvas to a sensible max width (matching the

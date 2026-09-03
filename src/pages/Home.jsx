@@ -55,7 +55,7 @@ export function PremiumTier() {
       <div className="hscroll">
         {PREMIUM.map((c) => (
           <div key={c.id} className="premium-card">
-            <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO)}')` }} />
+            <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }} />
             <h3>{c.name} — {c.country}</h3>
             <p className="note handwritten">{c.note}</p>
             <div className="premium-foot">
@@ -104,7 +104,7 @@ export function EverydayTier() {
               onClick={() => go("product", { id: c.id })}
               onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
               role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
-              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO)}')` }}
+              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
             />
             <h3><span onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</span></h3>
             <p>{c.note}</p>

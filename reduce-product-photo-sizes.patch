@@ -1,0 +1,196 @@
+diff --git a/src/components/index.jsx b/src/components/index.jsx
+index 0b5e6c8..9ebb6c5 100644
+--- a/src/components/index.jsx
++++ b/src/components/index.jsx
+@@ -1533,7 +1533,7 @@ export function CartDrawer() {
+                 const stock = getStock(p.id);
+                 return (
+                   <div key={i.id} className="drawer-item">
+-                    <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} />
++                    <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }} />
+                     <div className="drawer-item-info">
+                       <p className="drawer-item-name">{p.name} — {p.country}</p>
+                       <p className="drawer-item-price">{format(getPrice(p.id))}</p>
+@@ -1593,7 +1593,7 @@ export function WishlistDrawer() {
+                     onClick={() => { setOpen(false); go("product", { id: p.id }); }}
+                     onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })}
+                     role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+-                    style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++                    style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }}
+                   />
+                   <div className="drawer-item-info">
+                     <p className="drawer-item-name" onClick={() => { setOpen(false); go("product", { id: p.id }); }} onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</p>
+diff --git a/src/pages/BrewGuides.jsx b/src/pages/BrewGuides.jsx
+index b34ee23..a042ece 100644
+--- a/src/pages/BrewGuides.jsx
++++ b/src/pages/BrewGuides.jsx
+@@ -167,7 +167,7 @@ export function BrewGuidePage({ id }) {
+               onClick={() => go("product", { id: p.id })}
+               onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+               role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+-              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
+             />
+             <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
+             <p className="note">{p.note}</p>
+diff --git a/src/pages/Checkout.jsx b/src/pages/Checkout.jsx
+index 3f74f2d..db2a29b 100644
+--- a/src/pages/Checkout.jsx
++++ b/src/pages/Checkout.jsx
+@@ -163,7 +163,7 @@ export function CheckoutPage() {
+               if (!p) return null;
+               return (
+                 <div key={i.id} className="checkout-item">
+-                  <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} />
++                  <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }} />
+                   <div className="drawer-item-info">
+                     <p className="drawer-item-name">{p.name} — {p.country}</p>
+                     <p className="drawer-item-price">{format(getPrice(p.id))}</p>
+diff --git a/src/pages/GreenBeans.jsx b/src/pages/GreenBeans.jsx
+index 4b87f3f..5e757d8 100644
+--- a/src/pages/GreenBeans.jsx
++++ b/src/pages/GreenBeans.jsx
+@@ -2,6 +2,7 @@ import React, { useState } from "react";
+ import { ShareButtons } from "../components";
+ import { useAdmin, useAuth, useCurrency, useToast } from "../context";
+ import { COUNTRY_JOURNEY_PHOTO } from "../data";
++import { withTargetWidth } from "../utils/helpers";
+ 
+ export function GreenBeansPage() {
+   const { user } = useAuth();
+@@ -94,7 +95,7 @@ export function GreenBeansPage() {
+             className={`green-bean-card ${selectedId === g.id ? "selected" : ""}`}
+             onClick={() => selectBean(g.id)}
+           >
+-            <div className="green-bean-photo" style={{ backgroundImage: `url('${COUNTRY_JOURNEY_PHOTO[g.country]}')` }} />
++            <div className="green-bean-photo" style={{ backgroundImage: `url('${withTargetWidth(COUNTRY_JOURNEY_PHOTO[g.country], 450)}')` }} />
+             <div className="green-bean-info">
+               <p className="eyebrow" style={{ marginBottom: 2 }}>{g.country}</p>
+               <h3>{g.name}</h3>
+diff --git a/src/pages/Growing.jsx b/src/pages/Growing.jsx
+index 8d2ade8..ea35bb6 100644
+--- a/src/pages/Growing.jsx
++++ b/src/pages/Growing.jsx
+@@ -42,7 +42,7 @@ export function GrowingHubPage() {
+                 onClick={() => go("growingprofile", { id: p.id })}
+                 onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))}
+                 role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+-                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
+               />
+               <h3><span onClick={() => go("growingprofile", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
+               <p>{GROWING_PROFILES[p.id].altitude} · {GROWING_PROFILES[p.id].soilType}</p>
+@@ -206,7 +206,7 @@ export function CountryPage({ id }) {
+                   onClick={() => go("product", { id: p.id })}
+                   onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+                   role="link" tabIndex={0} aria-label={`${p.name} coffee bag`}
+-                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
+                 />
+                 <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name}</span></h3>
+                 <p>{p.note}</p>
+diff --git a/src/pages/Home.jsx b/src/pages/Home.jsx
+index 395ce13..4f7ed3d 100644
+--- a/src/pages/Home.jsx
++++ b/src/pages/Home.jsx
+@@ -55,7 +55,7 @@ export function PremiumTier() {
+       <div className="hscroll">
+         {PREMIUM.map((c) => (
+           <div key={c.id} className="premium-card">
+-            <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO)}')` }} />
++            <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }} />
+             <h3>{c.name} — {c.country}</h3>
+             <p className="note handwritten">{c.note}</p>
+             <div className="premium-foot">
+@@ -104,7 +104,7 @@ export function EverydayTier() {
+               onClick={() => go("product", { id: c.id })}
+               onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
+               role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
+-              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO)}')` }}
++              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
+             />
+             <h3><span onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</span></h3>
+             <p>{c.note}</p>
+diff --git a/src/pages/Moments.jsx b/src/pages/Moments.jsx
+index f336700..18109db 100644
+--- a/src/pages/Moments.jsx
++++ b/src/pages/Moments.jsx
+@@ -101,7 +101,7 @@ export function MomentPage({ id }) {
+                 onClick={() => go("product", { id: p.id })}
+                 onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+                 role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+-                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
+               />
+               <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
+               <p>{p.note}</p>
+diff --git a/src/pages/Shop.jsx b/src/pages/Shop.jsx
+index 1e7ca8c..376063c 100644
+--- a/src/pages/Shop.jsx
++++ b/src/pages/Shop.jsx
+@@ -134,7 +134,7 @@ export function ShopPage() {
+                       </div>
+                     </div>
+                     <div className="origin-row-photo" onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>
+-                      <ImgWithSkeleton wrapClassName="origin-row-photo-wrap" src={getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)} alt={`${p.name} — ${p.country} coffee bag`} loading="lazy" />
++                      <ImgWithSkeleton wrapClassName="origin-row-photo-wrap" src={getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)} alt={`${p.name} — ${p.country} coffee bag`} loading="lazy" />
+                       <button
+                         className={`wishlist-heart ${hasWishlist(p.id) ? "saved" : ""}`}
+                         onClick={(e) => { e.stopPropagation(); toggleWishlist(p.id); }}
+@@ -244,7 +244,7 @@ export function ProductPage({ id }) {
+       <div className="product-top">
+         <div
+           className={`product-hero-photo ${getTier(product.id) === "premium" ? "premium-photo-sm" : ""} ${soldOut ? "sold-out-photo" : ""}`}
+-          style={{ backgroundImage: `url('${getProductPhotoUrl(product, COUNTRY_JOURNEY_PHOTO)}')` }}
++          style={{ backgroundImage: `url('${getProductPhotoUrl(product, COUNTRY_JOURNEY_PHOTO, 900)}')` }}
+           role="img"
+           aria-label={`${product.name} — ${product.country} coffee bag`}
+         >
+@@ -376,7 +376,7 @@ export function ProductPage({ id }) {
+                   onClick={() => go("product", { id: p.id })}
+                   onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
+                   role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
+-                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
++                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
+                 />
+                 <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
+                 <p>{p.note}</p>
+diff --git a/src/utils/helpers.js b/src/utils/helpers.js
+index 1b70eb4..60fb7b7 100644
+--- a/src/utils/helpers.js
++++ b/src/utils/helpers.js
+@@ -46,9 +46,31 @@ function withCloudinaryOptimization(url) {
+   return url.replace("/upload/", "/upload/f_auto/q_auto/");
+ }
+ 
+-export const getProductPhotoUrl = (p, countryPhotoMap) => {
+-  if (p.photoUrl) return withCloudinaryOptimization(p.photoUrl);
+-  return PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id) ? `/photos/products/${p.id}.png` : countryPhotoMap[p.country];
++// Real, targeted resizing for both Unsplash and Cloudinary URLs -- found via a direct user report
++// that small, ~100-260px-tall product-grid cards were requesting the full 1600px-wide source image
++// (confirmed against the actual CSS: a 5-7x dimensional over-fetch, ~25-50x in actual bytes). Only
++// ever narrows an existing size, never used to make an image larger than its real source, and only
++// touches URLs from these two known services -- a bundled static photo passes through unchanged.
++export function withTargetWidth(url, targetWidth) {
++  if (!url || !targetWidth) return url;
++  if (url.includes("images.unsplash.com")) {
++    return url.includes("w=") ? url.replace(/w=\d+/, `w=${targetWidth}`) : `${url}&w=${targetWidth}`;
++  }
++  if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
++    return url.replace("/upload/", `/upload/w_${targetWidth}/`);
++  }
++  return url;
++}
++
++// targetWidth is optional and deliberately opt-in -- omitting it keeps every existing call site's
++// behavior exactly as it was, so this can be adopted gradually at each real display context's own
++// actual size, rather than a single global change risking degraded quality somewhere it wasn't
++// tested (e.g. WorldJourney.jsx's full-bleed hero background, which genuinely needs the full size
++// and is deliberately left untouched).
++export const getProductPhotoUrl = (p, countryPhotoMap, targetWidth) => {
++  if (p.photoUrl) return withTargetWidth(withCloudinaryOptimization(p.photoUrl), targetWidth);
++  if (PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id)) return `/photos/products/${p.id}.png`;
++  return withTargetWidth(countryPhotoMap[p.country], targetWidth);
+ };
+ 
+ // Reads an uploaded image file, downscales it on a canvas to a sensible max width (matching the

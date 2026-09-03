@@ -42,7 +42,7 @@ export function GrowingHubPage() {
                 onClick={() => go("growingprofile", { id: p.id })}
                 onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))}
                 role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
-                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
+                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
               />
               <h3><span onClick={() => go("growingprofile", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("growingprofile", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
               <p>{GROWING_PROFILES[p.id].altitude} · {GROWING_PROFILES[p.id].soilType}</p>
@@ -206,7 +206,7 @@ export function CountryPage({ id }) {
                   onClick={() => go("product", { id: p.id })}
                   onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
                   role="link" tabIndex={0} aria-label={`${p.name} coffee bag`}
-                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
+                  style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
                 />
                 <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name}</span></h3>
                 <p>{p.note}</p>

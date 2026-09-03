@@ -4,6 +4,7 @@ import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURR
 import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTranslate } from "../hooks";
 import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, activateOnEnterOrSpace } from "../utils/helpers";
 import { api } from "../utils/api";
+import { initSentry, reportError } from "../utils/sentry.js";
 
 export function Steam({ className = "" }) {
   return (
@@ -898,13 +899,16 @@ export function ConsentBanner() {
   if (choice) return null;
   const decide = (value) => {
     setStorageConsent(value);
+    if (value === "accepted") initSentry();
     setChoice(value);
   };
   return (
-    <div className="consent-banner" role="dialog" aria-label="Local storage preferences">
+    <div className="consent-banner" role="dialog" aria-label="Local storage and error monitoring preferences">
       <p>
         We use your browser's local storage to remember your cart and wishlist between visits —
-        nothing is sent to us or any third party. No tracking cookies, no analytics.{" "}
+        that part stays on your device and isn't sent anywhere. If you accept, we also enable
+        error monitoring (Sentry) to help us catch and fix real bugs; it doesn't collect your IP
+        address or track you for marketing.{" "}
         <a href={pathFor("privacy")} onClick={(e) => { e.preventDefault(); go("privacy"); }}>Read more</a>
       </p>
       <div className="consent-actions">
@@ -1533,7 +1537,7 @@ export function CartDrawer() {
                 const stock = getStock(p.id);
                 return (
                   <div key={i.id} className="drawer-item">
-                    <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} />
+                    <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }} />
                     <div className="drawer-item-info">
                       <p className="drawer-item-name">{p.name} — {p.country}</p>
                       <p className="drawer-item-price">{format(getPrice(p.id))}</p>
@@ -1593,7 +1597,7 @@ export function WishlistDrawer() {
                     onClick={() => { setOpen(false); go("product", { id: p.id }); }}
                     onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })}
                     role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
-                    style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
+                    style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }}
                   />
                   <div className="drawer-item-info">
                     <p className="drawer-item-name" onClick={() => { setOpen(false); go("product", { id: p.id }); }} onKeyDown={activateOnEnterOrSpace(() => { setOpen(false); go("product", { id: p.id }); })} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</p>
@@ -1680,6 +1684,7 @@ export class ErrorBoundary extends React.Component {
   }
   componentDidCatch(error, info) {
     console.error("Morning Aroma — unexpected error:", error, info);
+    reportError(error, { componentStack: info.componentStack });
   }
   render() {
     if (this.state.hasError) {

@@ -1,0 +1,284 @@
+diff --git a/package-lock.json b/package-lock.json
+index e44dca5..6b3b158 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -8,6 +8,7 @@
+       "name": "morning-aroma",
+       "version": "0.1.0",
+       "dependencies": {
++        "@sentry/react": "^10.73.0",
+         "express": "^5.2.1",
+         "jspdf": "^4.2.1",
+         "react": "^18.3.1",
+@@ -1192,6 +1193,112 @@
+         "win32"
+       ]
+     },
++    "node_modules/@sentry/browser": {
++      "version": "10.73.0",
++      "resolved": "https://registry.npmjs.org/@sentry/browser/-/browser-10.73.0.tgz",
++      "integrity": "sha512-HqTe1S5RrWLufhX2LaFP3yNoMxfNDroh120bq1zdGHZfFDBMJQ0CDXxHO+L4UJfQ5dWdCCzWbXIAiZuWGa/DFQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@sentry/browser-utils": "10.73.0",
++        "@sentry/conventions": "^0.16.0",
++        "@sentry/core": "10.73.0",
++        "@sentry/feedback": "10.73.0",
++        "@sentry/replay": "10.73.0",
++        "@sentry/replay-canvas": "10.73.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@sentry/browser-utils": {
++      "version": "10.73.0",
++      "resolved": "https://registry.npmjs.org/@sentry/browser-utils/-/browser-utils-10.73.0.tgz",
++      "integrity": "sha512-qQygxJZ+RV779+iL1+lrJ4f4sZLgbgW0/JWPNp0YlcEAE62yCsdKbqoTEjB/EugdS4mSjBMX0chZC6rblu2Ycw==",
++      "license": "MIT",
++      "dependencies": {
++        "@sentry/conventions": "^0.16.0",
++        "@sentry/core": "10.73.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@sentry/conventions": {
++      "version": "0.16.0",
++      "resolved": "https://registry.npmjs.org/@sentry/conventions/-/conventions-0.16.0.tgz",
++      "integrity": "sha512-fO9PLmHdVURcSPUpWCItWAtgKiMwGdJHbovoSEyLplX5sxs2ugvI4CBPTrkkgqhObnZOD0CnWBKDzSVQYBKEyQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=14"
++      }
++    },
++    "node_modules/@sentry/core": {
++      "version": "10.73.0",
++      "resolved": "https://registry.npmjs.org/@sentry/core/-/core-10.73.0.tgz",
++      "integrity": "sha512-FLO1UgH19RyasVpofu612WCOgb2nEH0dZy+R72d7p65XU9i0wxlMKm3+sgfwKmiSJp1Qhilaaxs4Jg6BbiM5HA==",
++      "license": "MIT",
++      "dependencies": {
++        "@sentry/conventions": "^0.16.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@sentry/feedback": {
++      "version": "10.73.0",
++      "resolved": "https://registry.npmjs.org/@sentry/feedback/-/feedback-10.73.0.tgz",
++      "integrity": "sha512-D6nSngX+e46Mae2/oh2bxBvxNK1z2NERbuMAhB5sx9x4xMBWIyGnYYTECehvEqV9+AqGAgxxhOZoYIG3AmRwww==",
++      "license": "MIT",
++      "dependencies": {
++        "@sentry/core": "10.73.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@sentry/react": {
++      "version": "10.73.0",
++      "resolved": "https://registry.npmjs.org/@sentry/react/-/react-10.73.0.tgz",
++      "integrity": "sha512-wJrzS98ddPvhGS/MKNHZyE8X7ecd4KwKdz7fHino2qkqBBrF4cxWr+q/uLTIk5PYWMkeJ4oKMjHAjOqmzGR4tg==",
++      "license": "MIT",
++      "dependencies": {
++        "@sentry/browser": "10.73.0",
++        "@sentry/conventions": "^0.16.0",
++        "@sentry/core": "10.73.0"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "peerDependencies": {
++        "react": "^16.14.0 || 17.x || 18.x || 19.x"
++      }
++    },
++    "node_modules/@sentry/replay": {
++      "version": "10.73.0",
++      "resolved": "https://registry.npmjs.org/@sentry/replay/-/replay-10.73.0.tgz",
++      "integrity": "sha512-nN2wjN/Y0J5BOJV5hqRHUEBfxwUsipp1PKjcDHh6Fpxnrtfldu3Y99E8cQInseo5heFdzEvrOHBBrqWZXOHVKQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@sentry/browser-utils": "10.73.0",
++        "@sentry/core": "10.73.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@sentry/replay-canvas": {
++      "version": "10.73.0",
++      "resolved": "https://registry.npmjs.org/@sentry/replay-canvas/-/replay-canvas-10.73.0.tgz",
++      "integrity": "sha512-sxa2lKkHPfF/j5xFpW7gocthWXRqyoHz8KCPy6yGc8plT477nl57iGSKhQDYsx1Ny10TLjs7YkIuPP1GY/Ax2Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@sentry/core": "10.73.0",
++        "@sentry/replay": "10.73.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/@types/babel__core": {
+       "version": "7.20.5",
+       "resolved": "https://registry.npmjs.org/@types/babel__core/-/babel__core-7.20.5.tgz",
+diff --git a/package.json b/package.json
+index e7fb497..1b8f766 100644
+--- a/package.json
++++ b/package.json
+@@ -20,6 +20,7 @@
+     "not IE 11"
+   ],
+   "dependencies": {
++    "@sentry/react": "^10.73.0",
+     "express": "^5.2.1",
+     "jspdf": "^4.2.1",
+     "react": "^18.3.1",
+diff --git a/src/components/index.jsx b/src/components/index.jsx
+index 0b5e6c8..a63577f 100644
+--- a/src/components/index.jsx
++++ b/src/components/index.jsx
+@@ -4,6 +4,7 @@ import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURR
+ import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTranslate } from "../hooks";
+ import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, activateOnEnterOrSpace } from "../utils/helpers";
+ import { api } from "../utils/api";
++import { initSentry, reportError } from "../utils/sentry.js";
+ 
+ export function Steam({ className = "" }) {
+   return (
+@@ -898,13 +899,16 @@ export function ConsentBanner() {
+   if (choice) return null;
+   const decide = (value) => {
+     setStorageConsent(value);
++    if (value === "accepted") initSentry();
+     setChoice(value);
+   };
+   return (
+-    <div className="consent-banner" role="dialog" aria-label="Local storage preferences">
++    <div className="consent-banner" role="dialog" aria-label="Local storage and error monitoring preferences">
+       <p>
+         We use your browser's local storage to remember your cart and wishlist between visits —
+-        nothing is sent to us or any third party. No tracking cookies, no analytics.{" "}
++        that part stays on your device and isn't sent anywhere. If you accept, we also enable
++        error monitoring (Sentry) to help us catch and fix real bugs; it doesn't collect your IP
++        address or track you for marketing.{" "}
+         <a href={pathFor("privacy")} onClick={(e) => { e.preventDefault(); go("privacy"); }}>Read more</a>
+       </p>
+       <div className="consent-actions">
+@@ -1680,6 +1684,7 @@ export class ErrorBoundary extends React.Component {
+   }
+   componentDidCatch(error, info) {
+     console.error("Morning Aroma — unexpected error:", error, info);
++    reportError(error, { componentStack: info.componentStack });
+   }
+   render() {
+     if (this.state.hasError) {
+diff --git a/src/main.jsx b/src/main.jsx
+index 569fdf2..21da9d4 100644
+--- a/src/main.jsx
++++ b/src/main.jsx
+@@ -1,6 +1,13 @@
+ import React from "react";
+ import ReactDOM from "react-dom/client";
+ import App from "./App.jsx";
++import { initSentry } from "./utils/sentry.js";
++import { getStorageConsent } from "./utils/helpers.js";
++
++// A returning visitor who already accepted on a previous visit shouldn't have to accept again --
++// ma_consent persists in local storage, so this covers that case. A first-time visitor is covered
++// separately, the moment they click "Accept" in ConsentBanner itself (see components/index.jsx).
++if (getStorageConsent() === "accepted") initSentry();
+ 
+ ReactDOM.createRoot(document.getElementById("root")).render(
+   <React.StrictMode>
+diff --git a/src/pages/Misc.jsx b/src/pages/Misc.jsx
+index 623d775..77e1257 100644
+--- a/src/pages/Misc.jsx
++++ b/src/pages/Misc.jsx
+@@ -47,18 +47,21 @@ export function PrivacyPolicyPage() {
+           password resets, and order confirmations.</li>
+           <li><strong>Cloudinary</strong> hosts product and content photos uploaded by our team.</li>
+           <li><strong>Google</strong> provides the optional "Sign in with Google" button, if you
+-          choose to use it instead of a password, and, separately, real analytics (see below).</li>
++          choose to use it instead of a password.</li>
++          <li><strong>Sentry</strong> receives reports when the site encounters a real bug, so we
++          can find and fix it — but only after you've explicitly accepted our consent banner (see
++          below). It does not receive your IP address, and we strip anything that looks like an
++          email address out of error reports before they're sent.</li>
+         </ul>
+ 
+-        <h3>Local storage, cookies, and analytics</h3>
++        <h3>Local storage and error monitoring</h3>
+         <p>Your shopping cart and wishlist are saved in your browser's local storage so they
+         survive a page refresh — this specific data stays on your device and is not transmitted to
+         us or any third party.</p>
+-        <p>We use Google Analytics to understand how the site is used, but only after you've
+-        explicitly accepted our cookie consent banner — it never loads before that, and you can
+-        decline it entirely. When active, Google Analytics may set its own cookies and receive
+-        your IP address and the pages you visit; Google's own privacy policy governs how they
+-        handle that data.</p>
++        <p>We do not use Google Analytics, advertising cookies, or any marketing/tracking service.
++        The only optional, consent-gated third party is Sentry, used solely for error monitoring
++        as described above — it never loads before you've explicitly accepted our consent banner,
++        and you can decline it entirely with no effect on how the site functions for you.</p>
+ 
+         <h3>Data retention and your rights</h3>
+         <p>You can request a copy of the data we hold about you, ask us to correct it, or ask us to
+diff --git a/src/utils/sentry.js b/src/utils/sentry.js
+new file mode 100644
+index 0000000..cdfbee7
+--- /dev/null
++++ b/src/utils/sentry.js
+@@ -0,0 +1,51 @@
++import * as Sentry from "@sentry/react";
++
++// Real error monitoring, gated behind the same consent the ConsentBanner already collects for
++// cart/wishlist local storage -- Sentry receives the visitor's IP address and browser info by
++// default (see sendDefaultPii below, explicitly left false), which is tracking-adjacent data no
++// different in kind from analytics, so it doesn't get a free pass just because it's for our own
++// bug-fixing rather than marketing. Only ever initialized after explicit "accept", same as every
++// other non-essential thing gated by ma_consent.
++const DSN = import.meta.env.VITE_SENTRY_DSN;
++
++let initialized = false;
++
++export function initSentry() {
++  if (initialized || !DSN) return;
++  initialized = true;
++
++  Sentry.init({
++    dsn: DSN,
++    environment: import.meta.env.PROD ? "production" : "development",
++    // No IP address, cookies, or request headers attached to events by default -- this is error
++    // monitoring for us to fix bugs, not a visitor-tracking profile. Sentry's own default here is
++    // already false; set explicitly so a future SDK version changing its default doesn't silently
++    // change what we send.
++    sendDefaultPii: false,
++    // Tracing and Session Replay were both left off when the Sentry project was created (see the
++    // project setup toggles) -- 0 here matches that choice and keeps this to what it says on the
++    // tin: error monitoring only, not a broader observability platform.
++    tracesSampleRate: 0,
++    replaysSessionSampleRate: 0,
++    replaysOnErrorSampleRate: 0,
++    // Strips anything that looks like it could be a real customer's data out of error reports
++    // before they ever leave the browser -- an error thrown while typing an email into checkout,
++    // for instance, shouldn't put that email in our error dashboard.
++    beforeSend(event) {
++      const scrub = (value) =>
++        typeof value === "string"
++          ? value.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[redacted-email]")
++          : value;
++      if (event.message) event.message = scrub(event.message);
++      event.exception?.values?.forEach((v) => {
++        if (v.value) v.value = scrub(v.value);
++      });
++      return event;
++    },
++  });
++}
++
++export function reportError(error, extra) {
++  if (!initialized) return;
++  Sentry.captureException(error, extra ? { extra } : undefined);
++}

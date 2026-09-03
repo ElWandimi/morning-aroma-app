@@ -163,7 +163,7 @@ export function CheckoutPage() {
               if (!p) return null;
               return (
                 <div key={i.id} className="checkout-item">
-                  <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }} />
+                  <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }} />
                   <div className="drawer-item-info">
                     <p className="drawer-item-name">{p.name} — {p.country}</p>
                     <p className="drawer-item-price">{format(getPrice(p.id))}</p>

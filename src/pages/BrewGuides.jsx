@@ -167,7 +167,7 @@ export function BrewGuidePage({ id }) {
               onClick={() => go("product", { id: p.id })}
               onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))}
               role="link" tabIndex={0} aria-label={`${p.name} — ${p.country} coffee bag`}
-              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO)}')` }}
+              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
             />
             <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
             <p className="note">{p.note}</p>

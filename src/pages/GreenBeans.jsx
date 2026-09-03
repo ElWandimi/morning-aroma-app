@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { ShareButtons } from "../components";
 import { useAdmin, useAuth, useCurrency, useToast } from "../context";
 import { COUNTRY_JOURNEY_PHOTO } from "../data";
+import { withTargetWidth } from "../utils/helpers";
 
 export function GreenBeansPage() {
   const { user } = useAuth();
@@ -94,7 +95,7 @@ export function GreenBeansPage() {
             className={`green-bean-card ${selectedId === g.id ? "selected" : ""}`}
             onClick={() => selectBean(g.id)}
           >
-            <div className="green-bean-photo" style={{ backgroundImage: `url('${COUNTRY_JOURNEY_PHOTO[g.country]}')` }} />
+            <div className="green-bean-photo" style={{ backgroundImage: `url('${withTargetWidth(COUNTRY_JOURNEY_PHOTO[g.country], 450)}')` }} />
             <div className="green-bean-info">
               <p className="eyebrow" style={{ marginBottom: 2 }}>{g.country}</p>
               <h3>{g.name}</h3>

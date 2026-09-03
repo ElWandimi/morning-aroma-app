@@ -47,18 +47,21 @@ export function PrivacyPolicyPage() {
           password resets, and order confirmations.</li>
           <li><strong>Cloudinary</strong> hosts product and content photos uploaded by our team.</li>
           <li><strong>Google</strong> provides the optional "Sign in with Google" button, if you
-          choose to use it instead of a password, and, separately, real analytics (see below).</li>
+          choose to use it instead of a password.</li>
+          <li><strong>Sentry</strong> receives reports when the site encounters a real bug, so we
+          can find and fix it — but only after you've explicitly accepted our consent banner (see
+          below). It does not receive your IP address, and we strip anything that looks like an
+          email address out of error reports before they're sent.</li>
         </ul>
 
-        <h3>Local storage, cookies, and analytics</h3>
+        <h3>Local storage and error monitoring</h3>
         <p>Your shopping cart and wishlist are saved in your browser's local storage so they
         survive a page refresh — this specific data stays on your device and is not transmitted to
         us or any third party.</p>
-        <p>We use Google Analytics to understand how the site is used, but only after you've
-        explicitly accepted our cookie consent banner — it never loads before that, and you can
-        decline it entirely. When active, Google Analytics may set its own cookies and receive
-        your IP address and the pages you visit; Google's own privacy policy governs how they
-        handle that data.</p>
+        <p>We do not use Google Analytics, advertising cookies, or any marketing/tracking service.
+        The only optional, consent-gated third party is Sentry, used solely for error monitoring
+        as described above — it never loads before you've explicitly accepted our consent banner,
+        and you can decline it entirely with no effect on how the site functions for you.</p>
 
         <h3>Data retention and your rights</h3>
         <p>You can request a copy of the data we hold about you, ask us to correct it, or ask us to
