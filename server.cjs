@@ -83,6 +83,52 @@ function parseRoutePath(urlPath) {
 // already established in scripts/generate-sitemap.mjs, not a placeholder or a wrong domain.
 const SITE_ORIGIN = process.env.SITE_ORIGIN || "https://morning-aroma.com";
 
+// Mirrors the real content of src/pages/Misc.jsx's PrivacyPolicyPage -- kept here as plain HTML
+// specifically so it can be injected server-side for /privacy (see renderIndexWithMeta below).
+// /privacy is otherwise a client-side-only React route, meaning any crawler that doesn't execute
+// JavaScript -- including, per Google's own documented verification requirements, their OAuth
+// consent screen homepage/privacy-policy checker -- would see the exact same empty loading shell
+// for /privacy as for every other route, and never see the Google user data disclosure Google
+// specifically scans for. If the policy text in Misc.jsx changes, update this to match.
+const PRIVACY_POLICY_STATIC_HTML = `
+  <div style="text-align:left; max-width: 640px; font-size: 0.85rem; line-height: 1.6; margin-top: 12px;">
+    <h2>Privacy Policy</h2>
+    <h3>What we collect</h3>
+    <p>When you use Morning Aroma, we collect information you give us directly: your name and
+    email when you create an account or sign in (including, if you choose, via "Sign in with
+    Google" -- see below); shipping details at checkout; the notes, ratings, and varieties you log
+    in My Aroma Journey; messages you send through our contact and inquiry forms or live chat; and
+    reviews submitted through "Leave Your Aroma," which are anonymous and not linked to your
+    account. We do not collect or store your full payment card details ourselves -- payment is
+    processed directly by Paystack, and we only receive confirmation of whether a payment
+    succeeded.</p>
+    <h3>How we use it</h3>
+    <p>We use this information to fulfil orders, respond to inquiries, personalize recommendations
+    based on your tasting history, and improve the site. We do not sell your personal information
+    to third parties.</p>
+    <h3>Third-party services we use</h3>
+    <p>Paystack processes all real payments and subscriptions. Resend sends our transactional
+    emails. Cloudinary hosts product and content photos. Sentry receives error reports, only after
+    explicit consent, and never receives your IP address.</p>
+    <p><strong>Google</strong> provides the optional "Sign in with Google" button. If you use it,
+    our application accesses your name, email address, and profile photo from your Google account,
+    so we can create or sign you into your Morning Aroma account. We do not access your contacts,
+    files, or any other Google data, and we never post to your Google account on your behalf. Our
+    use of information received from Google APIs adheres to the Google API Services User Data
+    Policy, including the Limited Use requirements.</p>
+    <h3>Data retention and your rights</h3>
+    <p>You can request a copy of the data we hold about you, ask us to correct it, or ask us to
+    delete your account and associated data, by contacting hello@morning-aroma.com. We retain order
+    records as required for accounting and legal purposes; other data is kept only as long as your
+    account is active or as needed to provide the service.</p>
+    <h3>Children's privacy</h3>
+    <p>Morning Aroma is not directed at children under 16, and we do not knowingly collect
+    information from them.</p>
+    <h3>Contact</h3>
+    <p>Questions about this policy: hello@morning-aroma.com.</p>
+  </div>
+`;
+
 function renderIndexWithMeta(urlPath) {
   const meta = resolveMeta(parseRoutePath(urlPath));
   const title = escapeHtml(meta.title);
@@ -93,7 +139,7 @@ function renderIndexWithMeta(urlPath) {
   // in useDocumentMeta) always saw the homepage's URL here, regardless of which page was actually
   // being shared. urlPath already excludes any query string (see parseRoutePath above).
   const realUrl = `${SITE_ORIGIN}${urlPath.split("?")[0]}`;
-  return INDEX_HTML
+  let html = INDEX_HTML
     .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
     .replace(/<meta name="description" content=".*?"\s*\/?>/, `<meta name="description" content="${description}" />`)
     .replace(/<meta property="og:title" content=".*?"\s*\/?>/, `<meta property="og:title" content="${title}" />`)
@@ -101,6 +147,13 @@ function renderIndexWithMeta(urlPath) {
     .replace(/<meta property="og:url" content=".*?"\s*\/?>/, `<meta property="og:url" content="${realUrl}" />`)
     .replace(/<meta name="twitter:title" content=".*?"\s*\/?>/, `<meta name="twitter:title" content="${title}" />`)
     .replace(/<meta name="twitter:description" content=".*?"\s*\/?>/, `<meta name="twitter:description" content="${description}" />`);
+  if (urlPath.split("?")[0] === "/privacy") {
+    html = html.replace(
+      /(Privacy Policy<\/a>\s*<\/p>)/,
+      `$1${PRIVACY_POLICY_STATIC_HTML}`
+    );
+  }
+  return html;
 }
 
 // Railway's own health check -- kept ahead of the SPA fallback so it always gets a real response

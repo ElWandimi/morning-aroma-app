@@ -98,11 +98,29 @@
           </svg>
         </div>
         <p>Morning Aroma</p>
+        <!-- Real, crawlable description of what this app is -- genuinely present in the raw HTML
+             response the instant the page loads, not something that only exists after React
+             mounts. React clears this automatically the moment it takes over #root, so a real
+             visitor with JavaScript enabled never sees it linger past the loading screen; a
+             crawler or automated check that reads the raw response (or a headless browser that
+             errors/times out before hydration finishes) sees real content either way. -->
+        <p style="max-width: 420px; font-size: 0.95rem; line-height: 1.5; margin-top: 4px;">
+          Morning Aroma is an online store for specialty, ethically-sourced coffee beans and green
+          coffee, offering direct-trade coffee from Kenya, Rwanda, Colombia, and other origins,
+          along with brewing guides and a coffee education academy.
+          <a href="/privacy" style="color: inherit;">Privacy Policy</a>
+        </p>
       </div>
     </div>
     <noscript>
       <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#FDF8F0;color:#3E2C23;font-family:Georgia,serif;text-align:center;padding:24px;">
-        <p>Morning Aroma needs JavaScript enabled to run. Please enable it in your browser settings and reload the page.</p>
+        <div style="max-width: 480px;">
+          <p><strong>Morning Aroma</strong> is an online store for specialty, ethically-sourced
+          coffee beans and green coffee, offering direct-trade coffee from Kenya, Rwanda, Colombia,
+          and other origins, along with brewing guides and a coffee education academy.</p>
+          <p>This site needs JavaScript enabled to run. Please enable it in your browser settings
+          and reload the page. <a href="/privacy" style="color: inherit;">Privacy Policy</a></p>
+        </div>
       </div>
     </noscript>
     <script type="module" src="/src/main.jsx"></script>

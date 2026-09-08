@@ -47,7 +47,13 @@ export function PrivacyPolicyPage() {
           password resets, and order confirmations.</li>
           <li><strong>Cloudinary</strong> hosts product and content photos uploaded by our team.</li>
           <li><strong>Google</strong> provides the optional "Sign in with Google" button, if you
-          choose to use it instead of a password.</li>
+          choose to use it instead of a password. If you use it, our application accesses your
+          name, email address, and profile photo from your Google account, so we can create or
+          sign you into your Morning Aroma account. We do not access your contacts, files, or any
+          other Google data, and we never post to your Google account on your behalf. Our use of
+          information received from Google APIs adheres to the
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer"> Google API Services User Data Policy</a>,
+          including the Limited Use requirements.</li>
           <li><strong>Sentry</strong> receives reports when the site encounters a real bug, so we
           can find and fix it — but only after you've explicitly accepted our consent banner (see
           below). It does not receive your IP address, and we strip anything that looks like an
