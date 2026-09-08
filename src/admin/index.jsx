@@ -1697,7 +1697,7 @@ export function AdminAuditLog() {
 }
 
 export function AdminContent() {
-  const { getMomentContent, setMomentContent, getAllCourses, updateCourseDetails, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
+  const { getMomentContent, setMomentContent, getAllCourses, addCourse, updateCourseDetails, removeCourse, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
   const { format } = useCurrency();
   const { addToast } = useToast();
   const [tab, setTab] = useState("Moments");
@@ -1705,6 +1705,11 @@ export function AdminContent() {
   const [momentDraft, setMomentDraft] = useState({ benefit: "", description: "" });
   const [editingCourse, setEditingCourse] = useState(null);
   const [courseDraft, setCourseDraft] = useState({ blurb: "", monthlyPriceCents: 0, instructor: "", lessons: 1 });
+  const [showAddCourseForm, setShowAddCourseForm] = useState(false);
+  const emptyNewCourse = { name: "", category: "", blurb: "", instructor: "", lessons: 1, monthlyPriceCents: 0 };
+  const [newCourseDraft, setNewCourseDraft] = useState(emptyNewCourse);
+  const [newCourseError, setNewCourseError] = useState("");
+  const [addingCourse, setAddingCourse] = useState(false);
   const [editingCountry, setEditingCountry] = useState(null);
   const [countryDraft, setCountryDraft] = useState("");
 
@@ -1716,6 +1721,21 @@ export function AdminContent() {
     const result = await updateCourseDetails(id, courseDraft);
     setEditingCourse(null);
     addToast(result.ok ? "Course updated" : result.error);
+  };
+
+  const submitNewCourse = async () => {
+    if (!newCourseDraft.name.trim()) { setNewCourseError("Course name is required."); return; }
+    if (!newCourseDraft.category.trim()) { setNewCourseError("Category is required."); return; }
+    if (!newCourseDraft.blurb.trim()) { setNewCourseError("A blurb is required."); return; }
+    if (!newCourseDraft.instructor.trim()) { setNewCourseError("Instructor is required."); return; }
+    setNewCourseError("");
+    setAddingCourse(true);
+    const result = await addCourse(newCourseDraft);
+    setAddingCourse(false);
+    if (result.error) { setNewCourseError(result.error); return; }
+    addToast(`${newCourseDraft.name} added`);
+    setNewCourseDraft(emptyNewCourse);
+    setShowAddCourseForm(false);
   };
 
   const startCountryEdit = (name) => { setEditingCountry(name); setCountryDraft(getCountryHistory(name)); };
@@ -1764,6 +1784,34 @@ export function AdminContent() {
           <p className="hint">Loading courses…</p>
         ) : (
           <div className="admin-card-list">
+            <button className="btn-outline small" style={{ marginBottom: 14 }} onClick={() => { setShowAddCourseForm((v) => !v); setNewCourseError(""); }}>
+              {showAddCourseForm ? "Cancel" : "+ Add new course"}
+            </button>
+
+            {showAddCourseForm && (
+              <div className="admin-card">
+                <div className="admin-card-head"><strong>New course</strong></div>
+                <label className="filter-label">Name</label>
+                <input className="admin-content-input" value={newCourseDraft.name} onChange={(e) => setNewCourseDraft({ ...newCourseDraft, name: e.target.value })} maxLength={200} />
+                <label className="filter-label">Category</label>
+                <input className="admin-content-input" list="course-categories" value={newCourseDraft.category} onChange={(e) => setNewCourseDraft({ ...newCourseDraft, category: e.target.value })} maxLength={100} />
+                <datalist id="course-categories">
+                  {[...new Set(getAllCourses().map((c) => c.category))].map((cat) => <option key={cat} value={cat} />)}
+                </datalist>
+                <label className="filter-label">Instructor</label>
+                <input className="admin-content-input" value={newCourseDraft.instructor} onChange={(e) => setNewCourseDraft({ ...newCourseDraft, instructor: e.target.value })} maxLength={200} />
+                <label className="filter-label">Lessons</label>
+                <input className="admin-content-input" type="number" min={1} value={newCourseDraft.lessons} onChange={(e) => setNewCourseDraft({ ...newCourseDraft, lessons: Number(e.target.value) })} />
+                <label className="filter-label">Monthly price (USD cents) — annual is always 20% off 12 months, computed automatically</label>
+                <input className="admin-content-input" type="number" min={0} value={newCourseDraft.monthlyPriceCents} onChange={(e) => setNewCourseDraft({ ...newCourseDraft, monthlyPriceCents: Number(e.target.value) })} />
+                <label className="filter-label">Blurb</label>
+                <textarea className="admin-message-edit" rows={3} value={newCourseDraft.blurb} onChange={(e) => setNewCourseDraft({ ...newCourseDraft, blurb: e.target.value })} maxLength={400} />
+                {newCourseError && <p className="form-error">{newCourseError}</p>}
+                <button className="link-btn" onClick={submitNewCourse} disabled={addingCourse}>{addingCourse ? "Adding…" : "Add course"}</button>
+                <button className="link-btn" onClick={() => { setShowAddCourseForm(false); setNewCourseDraft(emptyNewCourse); setNewCourseError(""); }}>Cancel</button>
+              </div>
+            )}
+
             {getAllCourses().map((c) => {
               const editing = editingCourse === c.id;
               return (
@@ -1787,6 +1835,7 @@ export function AdminContent() {
                       <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{c.blurb}</p>
                       <p className="hint">{c.instructor} · {c.lessons} lessons · {format(c.monthlyPriceCents)}/mo · {format(c.annualPriceCents)}/yr</p>
                       <button className="link-btn" onClick={() => startCourseEdit(c)}>Edit</button>
+                      <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${c.name}? Unlike products, this removes it entirely -- including for anyone with an active subscription, who would lose access to the course page while still being billed by Paystack underneath. Cancel their subscriptions first if any exist.`)) { removeCourse(c.id).then((result) => addToast(result.ok ? `${c.name} discontinued` : result.error)); } }}>Discontinue</button>
                     </>
                   )}
                 </div>
