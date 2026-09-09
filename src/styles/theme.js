@@ -391,6 +391,22 @@ a { color: inherit; text-decoration: none; }
 .lesson-num { font-weight: 700; color: var(--almond-text); }
 .lesson-lock { text-align: right; }
 
+/* Chapter action row (Read lesson / Take quiz / Download PDF, and the sign-in prompt) -- real
+   flex layout with a real gap, replacing per-instance inline marginLeft offsets that only ever
+   worked at one specific width and overlapped or wrapped unpredictably below it. Three distinct
+   visual weights so the actions read as different things, not identical underlined text: a solid
+   pill for the primary reading action, an outlined pill for the quiz, and a plain text-button
+   for the lower-priority download. */
+.lesson-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 16px 14px 60px; }
+.lesson-actions .btn-primary.small, .lesson-actions .btn-outline.small { white-space: nowrap; }
+.lesson-actions .link-btn { margin-left: 0; white-space: nowrap; }
+.lesson-signin-prompt { padding: 0 16px 14px 60px; }
+.lesson-signin-prompt .link-btn { margin-left: 0; }
+.lesson-detail-panel { margin: 0 16px 16px 60px; max-width: 640px; background: var(--cream); padding: 16px; border-radius: 8px; }
+@media (max-width: 560px) {
+  .lesson-actions, .lesson-signin-prompt, .lesson-detail-panel { padding-left: 16px; margin-left: 0; }
+}
+
 /* live message bar */
 .live-bar { display: flex; align-items: center; gap: 10px; background: var(--espresso); color: var(--steam); padding: 10px 24px; font-size: 0.85rem; flex-wrap: wrap; }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #7fbf7f; flex-shrink: 0; animation: pulse 2s infinite; }

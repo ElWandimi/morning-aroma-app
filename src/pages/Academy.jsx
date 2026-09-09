@@ -500,32 +500,29 @@ export function CoursePage({ id }) {
                 </button>
               </div>
               {lessonUnlocked && !user && (
-                <p className="hint" style={{ marginLeft: 32 }}>
+                <p className="hint lesson-signin-prompt">
                   <button type="button" className="link-btn" onClick={() => { go("home"); addToast("Sign in free to preview this lesson"); }}>Sign in free</button> to read this lesson, take the quiz, or download it.
                 </p>
               )}
               {lessonUnlocked && user && (
-                <button className="link-btn" style={{ marginLeft: 32 }} onClick={() => readingChapterId === ch.id ? closeReading() : openReading(ch.id)}>
+                <div className="lesson-actions">
+                <button className="btn-primary small" onClick={() => readingChapterId === ch.id ? closeReading() : openReading(ch.id)}>
                   {readingChapterId === ch.id ? "Hide lesson" : "Read lesson"}
                 </button>
-              )}
-              {lessonUnlocked && user && (
-                <button className="link-btn" style={{ marginLeft: 12 }} onClick={() => openQuiz(ch.id)}>
+                <button className="btn-outline small" onClick={() => openQuiz(ch.id)}>
                   {activeQuizChapterId === ch.id ? "Hide quiz" : "Take quiz"}
                 </button>
-              )}
-              {lessonUnlocked && user && (
                 <button
                   className="link-btn"
-                  style={{ marginLeft: 12 }}
                   disabled={downloadingLessonId === ch.id}
                   onClick={() => downloadLesson(ch)}
                 >
                   {downloadingLessonId === ch.id ? "Preparing…" : "📄 Download (PDF)"}
                 </button>
+                </div>
               )}
               {readingChapterId === ch.id && (
-                <div style={{ marginLeft: 32, marginBottom: 16, maxWidth: 640, background: "#faf6f0", padding: 16, borderRadius: 8 }}>
+                <div className="lesson-detail-panel">
                   {readingLoading ? (
                     <p className="hint">Loading lesson…</p>
                   ) : readingError ? (
@@ -559,7 +556,7 @@ export function CoursePage({ id }) {
                 </div>
               )}
               {activeQuizChapterId === ch.id && (
-                <div style={{ marginLeft: 32, marginBottom: 16 }}>
+                <div className="lesson-detail-panel">
                   {quizLoading ? (
                     <p className="hint">Loading quiz…</p>
                   ) : quizQuestions.length === 0 ? (
