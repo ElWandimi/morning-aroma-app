@@ -1783,6 +1783,11 @@ export function AdminContent() {
     if (result.ok) setChapterDraft((prev) => ({ ...prev, content: result.content }));
   };
   const saveChapterEdit = async (id) => {
+    // Guards against a real data-loss risk: chapterDraft.content starts as "" while the real
+    // content is still being fetched (see startChapterEdit above). Without this check, saving
+    // before that fetch resolves -- a slow connection, or just clicking fast -- would silently
+    // overwrite a chapter's real lesson content with an empty string.
+    if (chapterContentLoading) { addToast("Still loading this lesson's content -- please wait a moment before saving."); return; }
     const result = await updateChapterDetails(id, chapterDraft);
     setEditingChapter(null);
     addToast(result.ok ? "Lesson updated" : result.error);
@@ -2019,7 +2024,7 @@ export function AdminContent() {
                                     ) : (
                                       <textarea className="admin-message-edit" rows={10} value={chapterDraft.content} onChange={(e) => setChapterDraft({ ...chapterDraft, content: e.target.value })} maxLength={20000} />
                                     )}
-                                    <button className="link-btn" onClick={() => saveChapterEdit(ch.id)}>Save</button>
+                                    <button className="link-btn" onClick={() => saveChapterEdit(ch.id)} disabled={chapterContentLoading}>Save</button>
                                     <button className="link-btn" onClick={() => setEditingChapter(null)}>Cancel</button>
                                   </>
                                 ) : (
