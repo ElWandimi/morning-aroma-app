@@ -286,3 +286,80 @@ export async function generateRecipeCardPDF(course, recipe) {
 
   doc.save(`${slugify(course.name)}-recipe-card.pdf`);
 }
+
+// A real, verifiable certificate -- landscape format, matching the design convention certificates
+// generally use. Everything printed on it (student name, course, date, code) comes from the real
+// certificate record the backend issued (see server/src/routes/certificates.js), not anything the
+// browser made up -- the verification_code specifically is what lets anyone confirm this is
+// genuine via /certificates/verify/:code, independent of the PDF file itself.
+export async function generateCertificatePDF(certificate) {
+  const { default: jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "letter", orientation: "landscape" });
+  const W = 792, H = 612, margin = 40;
+
+  const logoDataUrl = await loadImageAsDataURL(LOGO_URL).catch(() => null);
+
+  doc.setFillColor(253, 248, 240);
+  doc.rect(0, 0, W, H, "F");
+  drawWatermark(doc, logoDataUrl, W, H);
+  doc.setDrawColor(139, 90, 58);
+  doc.setLineWidth(2);
+  doc.rect(margin, margin, W - margin * 2, H - margin * 2);
+  doc.setDrawColor(232, 213, 181);
+  doc.setLineWidth(1);
+  doc.rect(margin + 8, margin + 8, W - (margin + 8) * 2, H - (margin + 8) * 2);
+
+  let y = margin + 56;
+  if (logoDataUrl) {
+    const logoSize = 40;
+    doc.addImage(logoDataUrl, "PNG", (W - logoSize) / 2, y - logoSize + 6, logoSize, logoSize);
+    y += 20;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(197, 161, 129);
+  doc.text("MORNING AROMA ACADEMY", W / 2, y, { align: "center" });
+
+  y += 36;
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(15);
+  doc.setTextColor(139, 90, 58);
+  doc.text("Certificate of Completion", W / 2, y, { align: "center" });
+
+  y += 50;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.setTextColor(62, 44, 35);
+  doc.text("This certifies that", W / 2, y, { align: "center" });
+
+  y += 42;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(28);
+  doc.setTextColor(62, 44, 35);
+  doc.text(certificate.studentName, W / 2, y, { align: "center" });
+
+  y += 36;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.setTextColor(62, 44, 35);
+  doc.text("has successfully completed", W / 2, y, { align: "center" });
+
+  y += 30;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(139, 90, 58);
+  doc.text(certificate.courseName, W / 2, y, { align: "center" });
+
+  const dateStr = new Date(certificate.issuedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  y = H - margin - 56;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(139, 90, 58);
+  doc.text(`Issued ${dateStr}`, margin + 30, y);
+  doc.text(`Verification code: ${certificate.verificationCode}`, W - margin - 30, y, { align: "right" });
+  doc.setFontSize(8);
+  doc.setTextColor(197, 161, 129);
+  doc.text("Verify at morning-aroma.com/verify-certificate", W / 2, H - margin - 20, { align: "center" });
+
+  doc.save(`${slugify(certificate.courseName)}-certificate.pdf`);
+}

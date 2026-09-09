@@ -1071,6 +1071,30 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real certificates -- eligibility and issuance both require a signed-in user (checked
+  // server-side against real quiz attempts and real course access, never trusted from the
+  // client). Verifying a certificate's code, by contrast, is public and doesn't go through this
+  // provider at all -- see api.verifyCertificate, called directly from the public verify page.
+  const getCertificateEligibility = async (courseId) => {
+    try {
+      return await api.getCertificateEligibility(token, courseId);
+    } catch {
+      return { eligible: false, assessedChapterCount: 0, passedChapterCount: 0 };
+    }
+  };
+  const issueCertificate = async (courseId) => {
+    try {
+      const { certificate } = await api.issueCertificate(token, courseId);
+      return { ok: true, certificate };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const getMyCertificates = async () => {
+    const body = await api.getMyCertificates(token);
+    return Array.isArray(body && body.certificates) ? body.certificates : [];
+  };
+
   const getAllGreenBeans = () => realGreenBeans;
   const addGreenBean = async (data) => {
     try {
@@ -1274,6 +1298,7 @@ export function AdminDataProvider({ children }) {
         getAllCourses, addCourse, updateCourseDetails, removeCourse,
         getCourseChapters, addChapter, updateChapterDetails, removeChapter,
         quizExists, getQuiz, submitQuiz, getMyQuizAttempts, getQuizQuestionsAdmin, addQuizQuestion, updateQuizQuestionDetails, removeQuizQuestion,
+        getCertificateEligibility, issueCertificate, getMyCertificates,
         realCoursesLoading, realCoursesError, refetchRealCourses,
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,

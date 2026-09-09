@@ -2,8 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } from "../context";
 import { RECIPE_CARDS } from "../data";
 import { loadPaystackScript, activateOnEnterOrSpace } from "../utils/helpers";
-import { generateRecipeCardPDF } from "../utils/pdf";
+import { generateRecipeCardPDF, generateCertificatePDF } from "../utils/pdf";
 import { useStructuredData } from "../hooks";
+import { api } from "../utils/api";
 
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
@@ -125,7 +126,7 @@ export function AcademyHubPage() {
 
 export function CoursePage({ id }) {
   const { go } = useRoute();
-  const { getAllCourses, getCourseChapters, getQuiz, submitQuiz, realCoursesLoading } = useAdmin();
+  const { getAllCourses, getCourseChapters, getQuiz, submitQuiz, getCertificateEligibility, issueCertificate, realCoursesLoading } = useAdmin();
   const { user } = useAuth();
   const { format, rates } = useCurrency();
   const { mySubscriptions, hasLifetimeAccess, createSubscription } = useSubscriptions();
@@ -142,6 +143,8 @@ export function CoursePage({ id }) {
   const [quizAnswers, setQuizAnswers] = useState([]);
   const [quizResult, setQuizResult] = useState(null);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [certEligibility, setCertEligibility] = useState(null);
+  const [issuingCert, setIssuingCert] = useState(false);
 
   const courses = getAllCourses();
   const course = courses.find((c) => c.id === id);
@@ -158,6 +161,16 @@ export function CoursePage({ id }) {
       .finally(() => { if (!cancelled) setChaptersLoading(false); });
     return () => { cancelled = true; };
   }, [id]);
+
+  // Real certificate eligibility, re-checked server-side -- only meaningful for a signed-in user
+  // (an anonymous visitor has no subscription to check against), so this simply doesn't fetch
+  // anything for one rather than erroring.
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) { setCertEligibility(null); return; }
+    getCertificateEligibility(id).then((result) => { if (!cancelled) setCertEligibility(result); });
+    return () => { cancelled = true; };
+  }, [id, user]);
 
   const openQuiz = async (chapterId) => {
     if (activeQuizChapterId === chapterId) {
@@ -191,8 +204,12 @@ export function CoursePage({ id }) {
     setQuizSubmitting(true);
     const result = await submitQuiz(activeQuizChapterId, quizAnswers);
     setQuizSubmitting(false);
-    if (result.ok) setQuizResult(result);
-    else addToast(result.error);
+    if (result.ok) {
+      setQuizResult(result);
+      getCertificateEligibility(id).then(setCertEligibility);
+    } else {
+      addToast(result.error);
+    }
   };
 
   // Real Course structured data -- called unconditionally, before either early return below,
@@ -417,6 +434,41 @@ export function CoursePage({ id }) {
         <p className="hint">Lesson content for this course is coming soon.</p>
       )}
 
+      {hasAccess && certEligibility && certEligibility.assessedChapterCount > 0 && (
+        <div className="academy-lifetime-banner" style={{ marginTop: 24 }}>
+          {certEligibility.eligible ? (
+            <>
+              <div>
+                <p className="academy-lifetime-title">You've completed every quiz in this course 🎉</p>
+                <p className="hint">Download your certificate, or verify one anytime at /verify-certificate.</p>
+              </div>
+              <button
+                className="btn-primary"
+                disabled={issuingCert}
+                onClick={async () => {
+                  setIssuingCert(true);
+                  const result = await issueCertificate(id);
+                  setIssuingCert(false);
+                  if (result.ok) {
+                    await generateCertificatePDF(result.certificate);
+                    addToast("Certificate downloaded");
+                  } else {
+                    addToast(result.error);
+                  }
+                }}
+              >
+                {issuingCert ? "Preparing…" : "Get your certificate"}
+              </button>
+            </>
+          ) : (
+            <p className="hint">
+              Quiz progress: {certEligibility.passedChapterCount} of {certEligibility.assessedChapterCount} lessons passed.
+              Pass every lesson's quiz to earn a certificate.
+            </p>
+          )}
+        </div>
+      )}
+
       {related.length > 0 && (
         <div className="related">
           <h3>More in {course.category}</h3>
@@ -433,6 +485,68 @@ export function CoursePage({ id }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Public, deliberately -- anyone holding a printed certificate's verification code can confirm
+// it's real here, without needing an account. Calls api.verifyCertificate directly rather than
+// going through AdminDataProvider, since that endpoint needs no auth token at all.
+export function VerifyCertificatePage() {
+  const [code, setCode] = useState("");
+  const [result, setResult] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState("");
+
+  const checkCode = async (e) => {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setChecking(true);
+    setError("");
+    setResult(null);
+    try {
+      const body = await api.verifyCertificate(code.trim());
+      setResult(body);
+    } catch (e) {
+      setError(e.message || "Couldn't check that code right now. Please try again.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="shop-page">
+      <div className="shop-head">
+        <p className="eyebrow">academy</p>
+        <h1>Verify a Certificate</h1>
+        <p className="shop-sub">Enter the verification code printed on a Morning Aroma Academy certificate.</p>
+      </div>
+      <form onSubmit={checkCode} style={{ maxWidth: 420, margin: "0 auto" }}>
+        <input
+          className="admin-content-input"
+          placeholder="MA-XXXXXXXX"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          maxLength={20}
+        />
+        <button className="btn-primary full" type="submit" disabled={checking} style={{ marginTop: 10 }}>
+          {checking ? "Checking…" : "Verify"}
+        </button>
+      </form>
+      {error && <p className="form-error" style={{ textAlign: "center", marginTop: 16 }}>{error}</p>}
+      {result && (
+        <div style={{ maxWidth: 420, margin: "24px auto", textAlign: "center" }}>
+          {result.valid ? (
+            <>
+              <p><strong>✓ Valid certificate</strong></p>
+              <p>{result.studentName} completed <strong>{result.courseName}</strong></p>
+              <p className="hint">Issued {new Date(result.issuedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
+            </>
+          ) : (
+            <p className="form-error">No certificate found with that code.</p>
+          )}
         </div>
       )}
     </div>

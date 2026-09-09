@@ -18,6 +18,7 @@ import { slugify } from "./utils/helpers";
 // detail page for the same real feature, so loading one usually means the other is coming next.
 const AcademyHubPage = lazy(() => import("./pages/Academy").then((m) => ({ default: m.AcademyHubPage })));
 const CoursePage = lazy(() => import("./pages/Academy").then((m) => ({ default: m.CoursePage })));
+const VerifyCertificatePage = lazy(() => import("./pages/Academy").then((m) => ({ default: m.VerifyCertificatePage })));
 const BrewGuidePage = lazy(() => import("./pages/BrewGuides").then((m) => ({ default: m.BrewGuidePage })));
 const BrewGuidesHubPage = lazy(() => import("./pages/BrewGuides").then((m) => ({ default: m.BrewGuidesHubPage })));
 const CheckoutPage = lazy(() => import("./pages/Checkout").then((m) => ({ default: m.CheckoutPage })));
@@ -162,6 +163,7 @@ export function AppShell() {
             {route.page === "sourcelibrary" && <SourceLibraryPage />}
             {route.page === "privacy" && <PrivacyPolicyPage />}
             {route.page === "terms" && <TermsOfServicePage />}
+            {route.page === "verifycertificate" && <VerifyCertificatePage />}
             {route.page === "admin" && <AdminDashboard />}
             {!KNOWN_ROUTES.has(route.page) && <NotFoundPage />}
           </Suspense>

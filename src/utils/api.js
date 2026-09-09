@@ -141,6 +141,12 @@ export const api = {
     request(`/quiz-questions/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
   deleteQuizQuestion: (token, id) =>
     request(`/quiz-questions/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  getCertificateEligibility: (token, courseId) =>
+    request(`/courses/${courseId}/certificate-eligibility`, { headers: { Authorization: `Bearer ${token}` } }),
+  issueCertificate: (token, courseId) =>
+    request(`/courses/${courseId}/certificate`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  getMyCertificates: (token) => request("/users/me/certificates", { headers: { Authorization: `Bearer ${token}` } }),
+  verifyCertificate: (code) => request(`/certificates/verify/${code}`),
   getProducts: () => request("/products"),
   createProduct: (token, product) =>
     request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),

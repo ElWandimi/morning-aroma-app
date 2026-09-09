@@ -940,6 +940,7 @@ export const PAGE_TO_SLUG = {
   quiz: "quiz", rituals: "rituals", faq: "faq", contact: "contact",
   sourcelibrary: "source-library", admin: "admin", worldjourney: "world-journey", services: "services",
   privacy: "privacy", terms: "terms", greenbeans: "green-beans", searchresults: "search-results",
+  verifycertificate: "verify-certificate",
 };
 export const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_TO_SLUG).map(([page, slug]) => [slug, page]));
 
@@ -974,7 +975,7 @@ export const KNOWN_ROUTES = new Set([
   "home", "shop", "product", "moments", "moment", "brewguides", "brewguide", "academy", "course",
   "growing", "growingprofile", "country", "growingfactor", "soilexplorer", "seasons", "history",
   "promise", "journey", "checkout", "quiz", "rituals", "faq", "contact", "sourcelibrary", "admin",
-  "worldjourney", "services", "privacy", "terms", "greenbeans", "searchresults",
+  "worldjourney", "services", "privacy", "terms", "greenbeans", "searchresults", "verifycertificate",
 ]);
 
 export const MARQUEE_IMAGES = [

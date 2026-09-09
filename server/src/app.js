@@ -10,6 +10,7 @@ const subscriptionsRoutes = require("./routes/subscriptions");
 const coursesRoutes = require("./routes/courses");
 const chaptersRoutes = require("./routes/chapters");
 const quizzesRoutes = require("./routes/quizzes");
+const certificatesRoutes = require("./routes/certificates");
 const feedbackRoutes = require("./routes/feedback");
 const webhooksRoutes = require("./routes/webhooks");
 
@@ -64,6 +65,7 @@ app.use("/subscriptions", subscriptionsRoutes);
 app.use("/courses", coursesRoutes);
 app.use("/", chaptersRoutes);
 app.use("/", quizzesRoutes);
+app.use("/", certificatesRoutes);
 app.use("/feedback", feedbackRoutes);
 
 app.use((req, res) => {
