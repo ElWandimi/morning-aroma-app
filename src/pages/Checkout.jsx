@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { Glass, SignInModal, SignUpModal } from "../components";
 import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute, useSubscriptions } from "../context";
-import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO } from "../data";
+import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO, COUNTRY_DIAL_CODES } from "../data";
 import { getProductPhotoUrl, loadPaystackScript } from "../utils/helpers";
 
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
@@ -12,6 +12,35 @@ if (!PAYSTACK_PUBLIC_KEY && import.meta.env.PROD) {
   console.error("VITE_PAYSTACK_PUBLIC_KEY is not set — checkout cannot reach Paystack. Set it in the frontend service's environment variables.");
 }
 
+// Real country names via Intl.DisplayNames -- a built-in, standards-based browser API, not a
+// hand-maintained list or a fetch to a third-party service. Computed once at module load (not
+// per-render) and sorted alphabetically, since COUNTRY_DIAL_CODES itself is ordered by ISO code.
+const countryNamer = new Intl.DisplayNames(["en"], { type: "region" });
+const SHIPPING_COUNTRIES = COUNTRY_DIAL_CODES
+  .map((c) => ({ ...c, name: countryNamer.of(c.code) }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+// A real name needs letters (including accented ones), spaces, or hyphens -- not digits or
+// symbols -- and at least 2 characters, matching how a first or last name actually looks across
+// the languages this site's customers might use.
+const NAME_PATTERN = /^[\p{L}][\p{L}\s'-]{1,}$/u;
+
+function validateShippingForm(shipping) {
+  const errors = {};
+  if (!NAME_PATTERN.test(shipping.firstName.trim())) errors.firstName = "Please enter a valid first name (letters only, at least 2 characters).";
+  if (!NAME_PATTERN.test(shipping.lastName.trim())) errors.lastName = "Please enter a valid last name (letters only, at least 2 characters).";
+  if (!shipping.address.trim()) errors.address = "Please enter your address.";
+  if (!shipping.city.trim()) errors.city = "Please enter your city.";
+  if (!shipping.country) errors.country = "Please select your country.";
+  const digits = shipping.phone.replace(/\D/g, "");
+  // A loose but real sanity check -- real phone numbers (excluding the country code itself) run
+  // roughly 6-12 digits worldwide; this catches obviously wrong input (too short, letters typed
+  // into a number field) without the complexity of full per-country length rules libphonenumber
+  // would require, which isn't worth the added dependency for what this form actually needs.
+  if (digits.length < 6 || digits.length > 12) errors.phone = "Please enter a valid phone number.";
+  return errors;
+}
+
 export function CheckoutPage() {
   const { user } = useAuth();
   const { items, updateQty, remove, totalCents, clearCart } = useCart();
@@ -19,7 +48,7 @@ export function CheckoutPage() {
   const { createOrder, verifyPayment } = useOrders();
   const { createSubscription } = useSubscriptions();
   const { getPrice, getAllProducts } = useAdmin();
-  const { format, rates, ratesLoading } = useCurrency();
+  const { format, rates, ratesLoading, currency } = useCurrency();
   const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
   // Keyed by product id -- tracks the interval chosen and the real submit state for the
   // post-purchase subscribe offer (step 4), independently per item, since a multi-item order can
@@ -36,7 +65,12 @@ export function CheckoutPage() {
   // (see below) rather than snapping cleanly to Review -- rare, and not a dead end, so not worth
   // the extra complexity of an effect just to avoid it.
   const [step, setStep] = useState(() => (user ? 0 : 1)); // index into CHECKOUT_STEPS
-  const [shipping, setShipping] = useState({ name: "", address: "", city: "", country: "", phone: "" });
+  const [shipping, setShipping] = useState(() => ({
+    firstName: "", lastName: "", address: "", city: "", country: "",
+    phoneCode: currency === "KES" ? "254" : "1", // matches this site's real default currency behavior; +1 is a neutral fallback otherwise
+    phone: "",
+  }));
+  const [shippingErrors, setShippingErrors] = useState({});
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   // The order is created once, on the first payment attempt, and reused across retries -- so a
   // cancelled or failed Paystack popup doesn't leave behind multiple duplicate unpaid orders for
@@ -66,7 +100,7 @@ export function CheckoutPage() {
       // charged, rather than the order forever pointing at "whatever this product currently costs".
       const result = await createOrder({
         items: items.map((i) => ({ id: i.id, qty: i.qty, unitPriceCents: getPrice(i.id) })),
-        shippingName: shipping.name,
+        shippingName: `${shipping.firstName} ${shipping.lastName}`.trim(),
         shippingAddress: shipping.address,
         shippingCity: shipping.city,
       });
@@ -136,7 +170,7 @@ export function CheckoutPage() {
       productId: item.id,
       quantity: item.qty,
       interval,
-      shippingName: shipping.name,
+      shippingName: `${shipping.firstName} ${shipping.lastName}`.trim(),
       shippingAddress: shipping.address,
       shippingCity: shipping.city,
     });
@@ -208,25 +242,122 @@ export function CheckoutPage() {
       )}
 
       {step === 2 && (
-        <form className="checkout-form" onSubmit={(e) => { e.preventDefault(); goNext(); }}>
+        <form
+          className="checkout-form"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            const errors = validateShippingForm(shipping);
+            setShippingErrors(errors);
+            if (Object.keys(errors).length > 0) {
+              const firstErrorField = ["firstName", "lastName", "address", "city", "country", "phone"].find((f) => errors[f]);
+              document.getElementById(`ship-${firstErrorField === "phone" ? "phone" : firstErrorField.replace(/([A-Z])/g, "-$1").toLowerCase()}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+              return;
+            }
+            goNext();
+          }}
+        >
           <h3>Shipping details</h3>
-          <label htmlFor="ship-name">Full name</label>
-          <input id="ship-name" autoComplete="name" value={shipping.name} onChange={(e) => setShipping({ ...shipping, name: e.target.value })} required />
+
+          <div className="form-row-2">
+            <div>
+              <label htmlFor="ship-first-name">First name</label>
+              <input
+                id="ship-first-name"
+                autoComplete="given-name"
+                placeholder="First name"
+                value={shipping.firstName}
+                aria-invalid={!!shippingErrors.firstName}
+                onChange={(e) => setShipping({ ...shipping, firstName: e.target.value })}
+              />
+              {shippingErrors.firstName && <p className="form-error">{shippingErrors.firstName}</p>}
+            </div>
+            <div>
+              <label htmlFor="ship-last-name">Last name</label>
+              <input
+                id="ship-last-name"
+                autoComplete="family-name"
+                placeholder="Last name"
+                value={shipping.lastName}
+                aria-invalid={!!shippingErrors.lastName}
+                onChange={(e) => setShipping({ ...shipping, lastName: e.target.value })}
+              />
+              {shippingErrors.lastName && <p className="form-error">{shippingErrors.lastName}</p>}
+            </div>
+          </div>
+
           <label htmlFor="ship-address">Address</label>
-          <input id="ship-address" autoComplete="street-address" value={shipping.address} onChange={(e) => setShipping({ ...shipping, address: e.target.value })} required />
+          <div style={{ position: "relative" }}>
+            <span aria-hidden="true" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}>📍</span>
+            <input
+              id="ship-address"
+              autoComplete="street-address"
+              placeholder="Street address, apartment, etc."
+              value={shipping.address}
+              aria-invalid={!!shippingErrors.address}
+              style={{ paddingLeft: 34 }}
+              onChange={(e) => setShipping({ ...shipping, address: e.target.value })}
+            />
+          </div>
+          {shippingErrors.address && <p className="form-error">{shippingErrors.address}</p>}
+
           <div className="form-row-2">
             <div>
               <label htmlFor="ship-city">City</label>
-              <input id="ship-city" autoComplete="address-level2" value={shipping.city} onChange={(e) => setShipping({ ...shipping, city: e.target.value })} required />
+              <input
+                id="ship-city"
+                autoComplete="address-level2"
+                placeholder="City"
+                value={shipping.city}
+                aria-invalid={!!shippingErrors.city}
+                onChange={(e) => setShipping({ ...shipping, city: e.target.value })}
+              />
+              {shippingErrors.city && <p className="form-error">{shippingErrors.city}</p>}
             </div>
             <div>
               <label htmlFor="ship-country">Country</label>
-              <input id="ship-country" autoComplete="country-name" value={shipping.country} onChange={(e) => setShipping({ ...shipping, country: e.target.value })} required />
+              <select
+                id="ship-country"
+                autoComplete="country"
+                value={shipping.country}
+                aria-invalid={!!shippingErrors.country}
+                onChange={(e) => setShipping({ ...shipping, country: e.target.value })}
+              >
+                <option value="">Select country</option>
+                {SHIPPING_COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.name}>{c.flag} {c.name}</option>
+                ))}
+              </select>
+              {shippingErrors.country && <p className="form-error">{shippingErrors.country}</p>}
             </div>
           </div>
+
           <label htmlFor="ship-phone">Phone</label>
-          <input id="ship-phone" autoComplete="tel" value={shipping.phone} onChange={(e) => setShipping({ ...shipping, phone: e.target.value })} />
+          <div className="form-row-2" style={{ gridTemplateColumns: "auto 1fr" }}>
+            <select
+              aria-label="Phone country code"
+              value={shipping.phoneCode}
+              onChange={(e) => setShipping({ ...shipping, phoneCode: e.target.value })}
+            >
+              {SHIPPING_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.dial}>{c.flag} +{c.dial}</option>
+              ))}
+            </select>
+            <input
+              id="ship-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              placeholder="Phone number"
+              value={shipping.phone}
+              aria-invalid={!!shippingErrors.phone}
+              onChange={(e) => setShipping({ ...shipping, phone: e.target.value })}
+            />
+          </div>
+          {shippingErrors.phone && <p className="form-error">{shippingErrors.phone}</p>}
+
           <button className="btn-primary full" type="submit">Continue to payment</button>
+          <p className="hint" style={{ textAlign: "center", marginTop: 10 }}>Your details are used only for order fulfillment and will never be shared.</p>
         </form>
       )}
 
