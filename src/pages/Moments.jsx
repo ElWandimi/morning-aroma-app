@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
-import { COUNTRY_JOURNEY_PHOTO, MOMENTS, PRODUCTS } from "../data";
+import { COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 
 const MOMENT_PHOTOS = {
@@ -49,7 +49,7 @@ export function MomentsHubPage() {
 export function MomentPage({ id }) {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getTier, getMomentContent } = useAdmin();
+  const { getPrice, getTier, getMomentContent, getAllProducts } = useAdmin();
   const { format } = useCurrency();
   const rawMoment = MOMENTS.find((m) => m.id === id);
   if (!rawMoment) {
@@ -61,7 +61,7 @@ export function MomentPage({ id }) {
     );
   }
   const moment = getMomentContent(rawMoment);
-  const matched = PRODUCTS.filter((p) => p.tags.moment === moment.name);
+  const matched = getAllProducts().filter((p) => p.tags.moment === moment.name);
 
   return (
     <div className="moment-page">

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useAdmin, useCurrency, useRoute } from "../context";
-import { COUNTRIES, COUNTRY_JOURNEY_PHOTO, PRODUCTS } from "../data";
+import { COUNTRIES, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { slugify } from "../utils/helpers";
 
 export function WorldJourneyPage() {
   const { go } = useRoute();
-  const { getPrice, getCountryHistory } = useAdmin();
+  const { getPrice, getCountryHistory, getAllProducts } = useAdmin();
   const { format } = useCurrency();
+  const products = getAllProducts();
   return (
     <div className="world-journey-page">
       <div className="shop-head">
@@ -16,7 +17,7 @@ export function WorldJourneyPage() {
       </div>
 
       {COUNTRIES.map((country) => {
-        const varieties = PRODUCTS.filter((p) => p.country === country.name);
+        const varieties = products.filter((p) => p.country === country.name);
         return (
           <section
             key={country.name}

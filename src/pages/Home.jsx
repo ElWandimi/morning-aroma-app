@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { Glass, PhotoMarquee, Steam, WaveDivider } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
-import { COUNTRY_JOURNEY_PHOTO, EVERYDAY, MOMENTS, PREMIUM } from "../data";
+import { COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 import { usePrefersReducedMotion } from "../hooks";
 
@@ -44,8 +44,9 @@ export function Hero() {
 
 export function PremiumTier() {
   const { go } = useRoute();
-  const { getPrice } = useAdmin();
+  const { getPrice, getAllProducts } = useAdmin();
   const { format } = useCurrency();
+  const premiumProducts = getAllProducts().filter((p) => p.tier === "premium");
   return (
     <section className="premium">
       <div className="section-head dark">
@@ -53,7 +54,7 @@ export function PremiumTier() {
         <h2>The Premium &amp; Rare Tier</h2>
       </div>
       <div className="hscroll">
-        {PREMIUM.map((c) => (
+        {premiumProducts.map((c) => (
           <div key={c.id} className="premium-card">
             <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }} />
             <h3>{c.name} — {c.country}</h3>
@@ -88,8 +89,9 @@ export function QuizPanel() {
 export function EverydayTier() {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice } = useAdmin();
+  const { getPrice, getAllProducts } = useAdmin();
   const { format } = useCurrency();
+  const everydayProducts = getAllProducts().filter((p) => p.tier === "everyday");
   return (
     <section className="everyday">
       <div className="section-head">
@@ -97,7 +99,7 @@ export function EverydayTier() {
         <h2>Most Consumed</h2>
       </div>
       <div className="grid4">
-        {EVERYDAY.map((c) => (
+        {everydayProducts.map((c) => (
           <div key={c.id} className="everyday-card">
             <div
               className="everyday-photo"

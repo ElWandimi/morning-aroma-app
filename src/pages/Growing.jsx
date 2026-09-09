@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { BarRow, MiniCalendar } from "../components";
 import { useAdmin, useCurrency, useRoute } from "../context";
-import { COUNTRIES, COUNTRY_JOURNEY_PHOTO, GROWING_FACTORS, GROWING_PATHS, GROWING_PROFILES, PRODUCTS } from "../data";
+import { COUNTRIES, COUNTRY_JOURNEY_PHOTO, GROWING_FACTORS, GROWING_PATHS, GROWING_PROFILES } from "../data";
 import { LiveMessageBar } from "./Home";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 
 export function GrowingHubPage() {
   const { go } = useRoute();
+  const { getAllProducts, realProductsLoading } = useAdmin();
   const [path, setPath] = useState("Variety");
+  const products = getAllProducts();
   return (
     <div className="shop-page">
       <div className="shop-head">
@@ -35,7 +37,7 @@ export function GrowingHubPage() {
 
       {path === "Variety" && (
         <div className="grid4">
-          {PRODUCTS.map((p) => (
+          {realProductsLoading ? <p className="hint">Loading…</p> : products.map((p) => (
             <div key={p.id} className="everyday-card">
               <div
                 className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
@@ -98,7 +100,9 @@ export function GrowingHubPage() {
 
 export function GrowingProfilePage({ id }) {
   const { go } = useRoute();
-  const product = PRODUCTS.find((p) => p.id === id);
+  const { getAllProducts, realProductsLoading } = useAdmin();
+  if (realProductsLoading) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  const product = getAllProducts().find((p) => p.id === id);
   const gp = GROWING_PROFILES[id];
   if (!product || !gp) {
     return (
@@ -143,7 +147,7 @@ export function GrowingProfilePage({ id }) {
 
 export function CountryPage({ id }) {
   const { go } = useRoute();
-  const { getPrice, getCountryHistory } = useAdmin();
+  const { getPrice, getCountryHistory, getAllProducts } = useAdmin();
   const { format } = useCurrency();
   const { kenyaMessages } = useAdmin();
   const country = COUNTRIES.find((c) => slugify(c.name) === id);
@@ -155,7 +159,7 @@ export function CountryPage({ id }) {
       </div>
     );
   }
-  const varieties = PRODUCTS.filter((p) => p.country === country.name);
+  const varieties = getAllProducts().filter((p) => p.country === country.name);
   const liveMessages = country.name === "Kenya" ? kenyaMessages : country.liveMessages;
   return (
     <div className="product-page">
@@ -222,6 +226,7 @@ export function CountryPage({ id }) {
 
 export function GrowingFactorPage({ id }) {
   const { go } = useRoute();
+  const { getAllProducts, realProductsLoading } = useAdmin();
   const factor = GROWING_FACTORS.find((f) => slugify(f.name) === id);
   if (!factor) {
     return (
@@ -231,8 +236,10 @@ export function GrowingFactorPage({ id }) {
       </div>
     );
   }
-  const low = PRODUCTS.find((p) => p.id === factor.lowId);
-  const high = PRODUCTS.find((p) => p.id === factor.highId);
+  if (realProductsLoading) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  const low = getAllProducts().find((p) => p.id === factor.lowId);
+  const high = getAllProducts().find((p) => p.id === factor.highId);
+  if (!low || !high) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
   return (
     <div className="product-page">
       <button className="link-btn back-link" onClick={() => go("growing")}>← Growing Library</button>
@@ -259,8 +266,15 @@ export function GrowingFactorPage({ id }) {
 
 export function SoilExplorerPage({ id }) {
   const { go } = useRoute();
-  const [selected, setSelected] = useState(id || PRODUCTS[0].id);
-  const product = PRODUCTS.find((p) => p.id === selected);
+  const { getAllProducts, realProductsLoading } = useAdmin();
+  const products = getAllProducts();
+  const [selected, setSelected] = useState(id || null);
+  useEffect(() => {
+    if (!selected && products.length > 0) setSelected(products[0].id);
+  }, [products.length]);
+  if (realProductsLoading || !selected) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  const product = products.find((p) => p.id === selected);
+  if (!product) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
   const gp = GROWING_PROFILES[selected];
   const phPercent = (gp.pH / 14) * 100;
   return (
@@ -274,7 +288,7 @@ export function SoilExplorerPage({ id }) {
       <div className="soil-select-row">
         <label htmlFor="soil-variety">Variety</label>
         <select id="soil-variety" value={selected} onChange={(e) => setSelected(e.target.value)}>
-          {PRODUCTS.map((p) => (
+          {products.map((p) => (
             <option key={p.id} value={p.id}>{p.name} — {p.country}</option>
           ))}
         </select>
