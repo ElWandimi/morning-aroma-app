@@ -386,7 +386,7 @@ export function CoursePage({ id }) {
             </>
           ) : (
             <>
-              <div className="mode-toggle">
+              <div id="subscribe-section" className="mode-toggle">
                 <button type="button" className={interval === "monthly" ? "active" : ""} onClick={() => setInterval("monthly")}>Monthly — {format(course.monthlyPriceCents)}</button>
                 <button type="button" className={interval === "annually" ? "active" : ""} onClick={() => setInterval("annually")}>Annually — {format(course.annualPriceCents)} <span className="hint">(save 20%)</span></button>
               </div>
@@ -433,7 +433,22 @@ export function CoursePage({ id }) {
             const lessonUnlocked = hasAccess || isFreePreview;
             return (
             <div key={ch.id}>
-              <div className="lesson-row">
+              <div
+                className="lesson-row"
+                {...(!lessonUnlocked ? {
+                  role: "button",
+                  tabIndex: 0,
+                  style: { cursor: "pointer" },
+                  onClick: () => {
+                    document.getElementById("subscribe-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    addToast("Subscribe to unlock this lesson");
+                  },
+                  onKeyDown: activateOnEnterOrSpace(() => {
+                    document.getElementById("subscribe-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    addToast("Subscribe to unlock this lesson");
+                  }),
+                } : {})}
+              >
                 <span className="lesson-num">{ch.number}</span>
                 <span>
                   <strong>{ch.title}</strong>{isFreePreview && <span className="eyebrow" style={{ marginLeft: 8 }}>Free preview</span>}
