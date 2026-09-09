@@ -1710,6 +1710,7 @@ export function AdminContent() {
   const [newCourseDraft, setNewCourseDraft] = useState(emptyNewCourse);
   const [newCourseError, setNewCourseError] = useState("");
   const [addingCourse, setAddingCourse] = useState(false);
+  const [uploadingInstructorPhotoFor, setUploadingInstructorPhotoFor] = useState(null);
   // Chapter (lesson) management -- a separate expandable section per course, since it's a
   // distinct concern from the course's own price/blurb fields above and, unlike those, has no
   // preloaded state anywhere: chapters are only ever fetched for whichever one course is
@@ -1718,7 +1719,7 @@ export function AdminContent() {
   const [chapters, setChapters] = useState([]);
   const [chaptersLoading, setChaptersLoading] = useState(false);
   const [editingChapter, setEditingChapter] = useState(null);
-  const [chapterDraft, setChapterDraft] = useState({ title: "", description: "", content: "" });
+  const [chapterDraft, setChapterDraft] = useState({ title: "", description: "", content: "", objectivesText: "" });
   const [chapterContentLoading, setChapterContentLoading] = useState(false);
   const [showAddChapterForm, setShowAddChapterForm] = useState(false);
   const emptyNewChapter = { title: "", description: "" };
@@ -1736,6 +1737,20 @@ export function AdminContent() {
     const result = await updateCourseDetails(id, courseDraft);
     setEditingCourse(null);
     addToast(result.ok ? "Course updated" : result.error);
+  };
+
+  const handleInstructorPhotoChange = async (courseId, e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingInstructorPhotoFor(courseId);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      const result = await updateCourseDetails(courseId, { instructorPhotoUrl: dataUrl });
+      addToast(result.ok ? "Instructor photo updated" : result.error);
+    } catch (err) {
+      addToast(err.message);
+    }
+    setUploadingInstructorPhotoFor(null);
   };
 
   const submitNewCourse = async () => {
@@ -1776,7 +1791,7 @@ export function AdminContent() {
 
   const startChapterEdit = async (ch) => {
     setEditingChapter(ch.id);
-    setChapterDraft({ title: ch.title, description: ch.description, content: "" });
+    setChapterDraft({ title: ch.title, description: ch.description, content: "", objectivesText: (ch.objectives || []).join("\n") });
     setChapterContentLoading(true);
     const result = await getChapterContentAdmin(ch.id);
     setChapterContentLoading(false);
@@ -1788,7 +1803,9 @@ export function AdminContent() {
     // before that fetch resolves -- a slow connection, or just clicking fast -- would silently
     // overwrite a chapter's real lesson content with an empty string.
     if (chapterContentLoading) { addToast("Still loading this lesson's content -- please wait a moment before saving."); return; }
-    const result = await updateChapterDetails(id, chapterDraft);
+    const objectives = chapterDraft.objectivesText.split("\n").map((o) => o.trim()).filter(Boolean);
+    const { objectivesText, ...rest } = chapterDraft;
+    const result = await updateChapterDetails(id, { ...rest, objectives });
     setEditingChapter(null);
     addToast(result.ok ? "Lesson updated" : result.error);
     if (result.ok) refetchExpandedChapters(expandedCourseId);
@@ -1994,6 +2011,10 @@ export function AdminContent() {
                       <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{c.blurb}</p>
                       <p className="hint">{c.instructor} · {c.lessons} lessons · {format(c.monthlyPriceCents)}/mo · {format(c.annualPriceCents)}/yr</p>
                       <button className="link-btn" onClick={() => startCourseEdit(c)}>Edit</button>
+                      <label className="link-btn" style={{ cursor: uploadingInstructorPhotoFor === c.id ? "default" : "pointer" }}>
+                        {uploadingInstructorPhotoFor === c.id ? "Uploading…" : "Change instructor photo"}
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleInstructorPhotoChange(c.id, e)} disabled={uploadingInstructorPhotoFor === c.id} />
+                      </label>
                       <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${c.name}? Unlike products, this removes it entirely -- including for anyone with an active subscription, who would lose access to the course page while still being billed by Paystack underneath. Cancel their subscriptions first if any exist.`)) { removeCourse(c.id).then((result) => addToast(result.ok ? `${c.name} discontinued` : result.error)); } }}>Discontinue</button>
                     </>
                   )}
@@ -2018,6 +2039,8 @@ export function AdminContent() {
                                     <input className="admin-content-input" value={chapterDraft.title} onChange={(e) => setChapterDraft({ ...chapterDraft, title: e.target.value })} maxLength={200} />
                                     <label className="filter-label">Description</label>
                                     <textarea className="admin-message-edit" rows={3} value={chapterDraft.description} onChange={(e) => setChapterDraft({ ...chapterDraft, description: e.target.value })} maxLength={800} />
+                                    <label className="filter-label">Learning objectives (one per line, shown publicly before any paywall)</label>
+                                    <textarea className="admin-message-edit" rows={3} value={chapterDraft.objectivesText} onChange={(e) => setChapterDraft({ ...chapterDraft, objectivesText: e.target.value })} maxLength={1000} />
                                     <label className="filter-label">Full lesson content (used to generate the downloadable PDF -- separate paragraphs with a blank line)</label>
                                     {chapterContentLoading ? (
                                       <p className="hint">Loading content…</p>

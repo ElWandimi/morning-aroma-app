@@ -257,3 +257,24 @@ export function loadPaystackScript() {
     document.body.appendChild(script);
   });
 }
+
+// A deterministic, honest fallback for an instructor without an uploaded photo -- initials on a
+// colored circle, not a stock photo or a placeholder that could be mistaken for a real picture of
+// a specific named person. The color is derived from the name itself so the same instructor
+// always gets the same color across the site, without needing to store one separately.
+const AVATAR_COLORS = ["#8B5A3A", "#5C7A5C", "#7A5C7A", "#5C6E7A", "#A0704A", "#6E5C4A"];
+
+export function initialsFromName(name) {
+  if (!name || typeof name !== "string") return "?";
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] || "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase() || "?";
+}
+
+export function colorFromName(name) {
+  if (!name) return AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}

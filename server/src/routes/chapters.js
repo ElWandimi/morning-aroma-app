@@ -13,16 +13,22 @@ function publicChapter(row) {
     number: row.number,
     title: row.title,
     description: row.description,
+    objectives: row.objectives || [],
   };
 }
 
 function validateChapterInput(body, { partial } = {}) {
-  const { title, description, number } = body || {};
+  const { title, description, number, objectives } = body || {};
   if (!partial || title !== undefined) {
     if (!title || typeof title !== "string" || !title.trim() || title.length > 200) return "A valid title is required.";
   }
   if (!partial || description !== undefined) {
     if (!description || typeof description !== "string" || !description.trim() || description.length > 800) return "A valid description is required.";
+  }
+  if (objectives !== undefined) {
+    if (!Array.isArray(objectives) || objectives.some((o) => typeof o !== "string")) {
+      return "objectives must be an array of strings.";
+    }
   }
   // number is always optional, on create and update alike -- omitted on create means "auto-assign
   // the next number in sequence" (see the POST handler below), so it's only validated when
@@ -76,7 +82,7 @@ router.post("/courses/:courseId/chapters", requireAuth, requirePermission("Conte
   const course = await query("SELECT id FROM courses WHERE id = $1", [courseId]);
   if (!course.rows[0]) return res.status(404).json({ error: "Course not found." });
 
-  const { title, description, number } = req.body;
+  const { title, description, number, objectives } = req.body;
   // A chapter number left unspecified defaults to "one after the current last chapter" -- the
   // common case (adding the next lesson in sequence) shouldn't require calculating that yourself.
   let chapterNumber = number;
@@ -90,8 +96,8 @@ router.post("/courses/:courseId/chapters", requireAuth, requirePermission("Conte
   if (existing.rows[0]) return res.status(409).json({ error: `Chapter ${chapterNumber} already exists for this course.` });
 
   const result = await query(
-    "INSERT INTO chapters (id, course_id, number, title, description) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-    [id, courseId, chapterNumber, title.trim(), description.trim()]
+    "INSERT INTO chapters (id, course_id, number, title, description, objectives) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+    [id, courseId, chapterNumber, title.trim(), description.trim(), objectives || null]
   );
   res.status(201).json({ chapter: publicChapter(result.rows[0]) });
 });
@@ -108,14 +114,15 @@ router.patch("/chapters/:id", requireAuth, requirePermission("Content"), async (
   if (!existing.rows[0]) return res.status(404).json({ error: "Chapter not found." });
 
   const current = existing.rows[0];
-  const { title, description, number, content } = req.body;
+  const { title, description, number, content, objectives } = req.body;
   const result = await query(
-    `UPDATE chapters SET title = $1, description = $2, number = $3, content = $4, updated_at = now() WHERE id = $5 RETURNING *`,
+    `UPDATE chapters SET title = $1, description = $2, number = $3, content = $4, objectives = $5, updated_at = now() WHERE id = $6 RETURNING *`,
     [
       title !== undefined ? title.trim() : current.title,
       description !== undefined ? description.trim() : current.description,
       number !== undefined ? number : current.number,
       content !== undefined ? content.trim() : current.content,
+      objectives !== undefined ? objectives : current.objectives,
       id,
     ]
   );

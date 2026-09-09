@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } from "../context";
 import { RECIPE_CARDS } from "../data";
-import { loadPaystackScript, activateOnEnterOrSpace } from "../utils/helpers";
+import { loadPaystackScript, activateOnEnterOrSpace, initialsFromName, colorFromName } from "../utils/helpers";
 import { generateRecipeCardPDF, generateCertificatePDF, generateLessonPDF } from "../utils/pdf";
 import { useStructuredData } from "../hooks";
 import { api } from "../utils/api";
@@ -362,7 +362,13 @@ export function CoursePage({ id }) {
           <h1>{course.name}</h1>
           <p className="course-blurb">{course.blurb}</p>
           <div className="instructor-row">
-            <span className="instructor-avatar" />
+            {course.instructorPhotoUrl ? (
+              <span className="instructor-avatar" style={{ backgroundImage: `url(${course.instructorPhotoUrl})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+            ) : (
+              <span className="instructor-avatar" style={{ background: colorFromName(course.instructor), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 600, fontSize: "0.85rem" }}>
+                {initialsFromName(course.instructor)}
+              </span>
+            )}
             <div>
               <p className="instructor-name">{course.instructor}</p>
               <p className="instructor-role">Instructor</p>
@@ -426,6 +432,11 @@ export function CoursePage({ id }) {
                   <strong>{ch.title}</strong>
                   <br />
                   <span className="hint">{ch.description}</span>
+                  {ch.objectives && ch.objectives.length > 0 && (
+                    <ul style={{ margin: "6px 0 0 0", paddingLeft: 18, fontSize: "0.82rem", color: "#6b5647" }}>
+                      {ch.objectives.map((o, i) => <li key={i}>{o}</li>)}
+                    </ul>
+                  )}
                 </span>
                 <span className="lesson-lock">{hasAccess ? "▶" : "🔒"}</span>
               </div>
@@ -526,10 +537,22 @@ export function CoursePage({ id }) {
               </button>
             </>
           ) : (
-            <p className="hint">
-              Quiz progress: {certEligibility.passedChapterCount} of {certEligibility.assessedChapterCount} lessons passed.
-              Pass every lesson's quiz to earn a certificate.
-            </p>
+            <div>
+              <p className="hint" style={{ marginBottom: 6 }}>
+                {certEligibility.passedChapterCount} of {certEligibility.assessedChapterCount} lessons passed — pass every lesson's quiz to earn a certificate.
+              </p>
+              <div style={{ background: "#e8d5b5", borderRadius: 6, height: 8, overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${Math.round((certEligibility.passedChapterCount / certEligibility.assessedChapterCount) * 100)}%`,
+                    background: "#8B5A3A",
+                    height: "100%",
+                    borderRadius: 6,
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              </div>
+            </div>
           )}
         </div>
       )}
