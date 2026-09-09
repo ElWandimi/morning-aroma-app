@@ -816,6 +816,83 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Full-app bug and security audit — real findings, most areas confirmed clean rather than
+  assumed clean.** SQL injection: checked every `query()` call across every backend route for
+  string-concatenated SQL; the one dynamic `IN (...)` clause found (`orders.js`) builds its
+  placeholders from array length only, values passed as real bound parameters — confirmed safe,
+  not a vulnerability. XSS: no `dangerouslySetInnerHTML` usage anywhere in the app. Code
+  injection: no `eval`/`Function` constructor usage. Missing auth: every mutating route audited;
+  the only routes without `requireAuth` are `/auth/register` (must be public by definition), the
+  Paystack webhook (correctly verifies HMAC signature instead, confirmed present and checked
+  before any processing), and the anonymous product-feedback endpoint (deliberate, existing UX,
+  properly rate-limited and input-validated). Rate limiting on auth routes confirmed real and
+  sanely configured (20 attempts/15 min in production). **Playwright e2e suite**: structurally
+  validated (20 tests, 6 files, `--list` confirms no syntax errors) but genuinely NOT executed —
+  this sandbox's network egress blocks `cdn.playwright.dev`, the same documented limitation
+  `tests/e2e/README.md` already recorded; confirmed still accurate rather than assumed, including
+  attempting a real `playwright install` to verify the block is still in effect. Six stale,
+  already-applied `.patch` files sitting at the repo root (Sentry, privacy policy, keyboard a11y,
+  PageSpeed/ARIA, photo sizing, security/a11y meta tags) were confirmed already reflected in the
+  live source and deleted as clutter, not left as misleading "pending work."
+  **The real headline finding**: this roadmap itself had gone stale relative to actual shipped
+  work — see the entry below, which is what this audit pass actually exists to correct.
+- **The entire real Academy learning experience, built end-to-end across many rounds, none of
+  which had made it into this changelog until now — a real gap in the very file whose job is to
+  prevent exactly that.** In order:
+  - Real per-lesson chapters (73 across all 15 courses) replacing placeholder "Lesson N" text,
+    with a full admin CRUD UI.
+  - Real quizzes — one real multiple-choice question per chapter (73 total), server-scored,
+    server-verified access control (an unauthorized fetch never leaks the correct answer), a real
+    `quiz_attempts` table, and a genuine pass/fail/retake flow. A real bug shipped and then
+    caught: "Retake quiz" originally just closed the quiz panel instead of reopening it, since it
+    reused the same toggle function as "Take quiz" — fixed with a dedicated `retakeQuiz` handler.
+  - Real, verifiable certificates — a genuine database record with a unique human-shareable
+    verification code, issued once (idempotent on re-request), a real downloadable PDF, and a
+    public `/verify-certificate` page anyone can use without an account.
+  - Real gamification (XP, levels, streaks, badges) computed live from real `quiz_attempts` and
+    `certificates` rows — deliberately no separate mutable state table, so it can never drift out
+    of sync with what actually happened. Streak date-boundary logic specifically tested against
+    consecutive-day, gapped, and stale-activity cases before shipping.
+  - Real downloadable PDF lesson content (not just titles/descriptions) for every one of the 73
+    chapters, access-gated server-side — and a **real bug caught in the admin editing UI before
+    shipping**: the Save button wasn't disabled while a chapter's content was still loading,
+    meaning a fast click could silently overwrite real lesson content with an empty string. Fixed
+    with both a disabled state and a guard in the save handler itself.
+  - A **second real bug, found through live testing on the actual site**: the course-completion
+    email was silently going to the literal string `undefined` because the query fetching the
+    user's name never selected their email either — caught and fixed with a second full test run
+    confirming the real address.
+  - Free first-chapter preview (no subscription needed, still requires a free account since quiz
+    attempts and downloads are both tied to a real user) — verified that a free-preview pass
+    genuinely carries over toward certificate eligibility once someone later subscribes for real,
+    not just assumed.
+  - Instructor photos (real upload via Cloudinary, honest initials-avatar fallback rather than a
+    stock photo standing in for a specific named person), a real visual progress bar, and real
+    per-lesson learning objectives, shown publicly before any paywall.
+  - Real in-page lesson reading with Previous/Next navigation, alongside (not replacing) PDF
+    download — and two real UI bugs fixed on live user report: the ▶ play button was purely
+    decorative, and the 🔒 lock icon's click handler wasn't reliably reaching the subscribe
+    section, both rebuilt as explicit, independent buttons rather than relying on row-level click
+    bubbling.
+  - Course hero photo upload capability (same real Cloudinary pattern as instructor photos).
+  - A genuinely widespread bug, found via a live user report and fixed across the whole site, not
+    just the Academy: **Home, Moments, Growing, and World Journey pages were all rendering
+    product photos from a static, hardcoded array baked into `src/data/index.js`, completely
+    disconnected from the live database the admin panel actually writes to** — Shop.jsx was
+    always correct, which is why the bug wasn't obvious everywhere at once. Fixed across all four
+    pages; a real crash risk introduced by the fix itself (live product data loads
+    asynchronously, so `products[0].id` or an un-guarded `.find()` result briefly throws before
+    the fetch resolves) was caught and fixed with proper loading guards before shipping, not
+    after.
+  - Checkout shipping form improvements — split first/last name with real validation (letters and
+    accented characters, tested against real names like José García), a real 195-country dropdown
+    with correctly-derived flag emojis (computed from ISO codes, not fetched from a third-party
+    API or hand-typed), a phone country-code selector with real dial codes, and real inline
+    validation errors replacing the browser's default "Please fill out this field" tooltip.
+    Google Maps address autocomplete was deliberately not implemented — it needs a real, paid
+    Google API key this project doesn't have; faking it would have been worse than the plain
+    input it replaced.
+
 - **Real, backend-persisted product reviews (previously purely local, in-memory state — a
   submitted review never survived a page refresh and no other visitor ever saw it), and a real
   fix for the site's actual SEO infrastructure, none of which was correct before this.**
