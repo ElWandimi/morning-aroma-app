@@ -1015,6 +1015,25 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real, access-gated lesson content -- fetched only when a visitor actually clicks to download
+  // a specific lesson, same on-demand reasoning as getCourseChapters and getQuiz above.
+  const getChapterContent = async (chapterId) => {
+    try {
+      const body = await api.getChapterContent(token, chapterId);
+      return { ok: true, ...body };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const getChapterContentAdmin = async (chapterId) => {
+    try {
+      const body = await api.getChapterContentAdmin(token, chapterId);
+      return { ok: true, ...body };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   // Real quizzes -- quizExists is public (no token needed, matches the backend's own public
   // /exists route), but the real questions, submission, and attempt history all require a real,
   // signed-in user, since access itself is gated server-side on that user's real subscription or
@@ -1307,7 +1326,7 @@ export function AdminDataProvider({ children }) {
         getAllProducts, addProduct, removeProduct, setProductPhoto,
         realProductsLoading, realProductsError, refetchRealProducts, getProductFeedback,
         getAllCourses, addCourse, updateCourseDetails, removeCourse,
-        getCourseChapters, addChapter, updateChapterDetails, removeChapter,
+        getCourseChapters, addChapter, updateChapterDetails, removeChapter, getChapterContent, getChapterContentAdmin,
         quizExists, getQuiz, submitQuiz, getMyQuizAttempts, getQuizQuestionsAdmin, addQuizQuestion, updateQuizQuestionDetails, removeQuizQuestion,
         getCertificateEligibility, issueCertificate, getMyCertificates, getAcademyStats,
         realCoursesLoading, realCoursesError, refetchRealCourses,

@@ -121,6 +121,8 @@ export const api = {
   deleteCourse: (token, id) =>
     request(`/courses/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
   getChapters: (courseId) => request(`/courses/${courseId}/chapters`),
+  getChapterContent: (token, chapterId) => request(`/chapters/${chapterId}/content`, { headers: { Authorization: `Bearer ${token}` } }),
+  getChapterContentAdmin: (token, chapterId) => request(`/admin/chapters/${chapterId}/content`, { headers: { Authorization: `Bearer ${token}` } }),
   createChapter: (token, courseId, chapter) =>
     request(`/courses/${courseId}/chapters`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(chapter) }),
   updateChapter: (token, id, updates) =>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } from "../context";
 import { RECIPE_CARDS } from "../data";
 import { loadPaystackScript, activateOnEnterOrSpace } from "../utils/helpers";
-import { generateRecipeCardPDF, generateCertificatePDF } from "../utils/pdf";
+import { generateRecipeCardPDF, generateCertificatePDF, generateLessonPDF } from "../utils/pdf";
 import { useStructuredData } from "../hooks";
 import { api } from "../utils/api";
 
@@ -153,7 +153,7 @@ export function AcademyHubPage() {
 
 export function CoursePage({ id }) {
   const { go } = useRoute();
-  const { getAllCourses, getCourseChapters, getQuiz, submitQuiz, getCertificateEligibility, issueCertificate, realCoursesLoading } = useAdmin();
+  const { getAllCourses, getCourseChapters, getChapterContent, getQuiz, submitQuiz, getCertificateEligibility, issueCertificate, realCoursesLoading } = useAdmin();
   const { user } = useAuth();
   const { format, rates } = useCurrency();
   const { mySubscriptions, hasLifetimeAccess, createSubscription } = useSubscriptions();
@@ -172,6 +172,7 @@ export function CoursePage({ id }) {
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [certEligibility, setCertEligibility] = useState(null);
   const [issuingCert, setIssuingCert] = useState(false);
+  const [downloadingLessonId, setDownloadingLessonId] = useState(null);
 
   const courses = getAllCourses();
   const course = courses.find((c) => c.id === id);
@@ -225,6 +226,33 @@ export function CoursePage({ id }) {
       next[questionIndex] = optionIndex;
       return next;
     });
+  };
+
+  // Deliberately not just openQuiz(chapterId) again -- that function toggles closed when the
+  // given chapter is already the active one (the normal "click to collapse" behavior for the
+  // "Take quiz" button), which is exactly the state a just-graded quiz is already in. Retaking
+  // needs to force a fresh fetch and reset regardless of current state, not toggle it shut.
+  const retakeQuiz = async (chapterId) => {
+    setQuizResult(null);
+    setQuizAnswers([]);
+    setQuizLoading(true);
+    try {
+      const questions = await getQuiz(chapterId);
+      setQuizQuestions(questions);
+      setQuizAnswers(new Array(questions.length).fill(null));
+    } catch {
+      setQuizQuestions([]);
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+  const downloadLesson = async (ch) => {
+    setDownloadingLessonId(ch.id);
+    const result = await getChapterContent(ch.id);
+    setDownloadingLessonId(null);
+    if (!result.ok) { addToast(result.error); return; }
+    await generateLessonPDF(course, ch, result.content);
   };
 
   const submitQuizAnswers = async () => {
@@ -381,7 +409,7 @@ export function CoursePage({ id }) {
               📄 {downloadingRecipe ? "Preparing card…" : "Download Recipe Card (PDF)"}
             </button>
           )}
-          <p className="hint">{course.lessons} video lessons{recipe ? " · printable recipe card included" : ""}</p>
+          <p className="hint">{course.lessons} lesson{course.lessons === 1 ? "" : "s"}{recipe ? " · printable recipe card included" : ""}</p>
         </div>
       </div>
 
@@ -406,6 +434,16 @@ export function CoursePage({ id }) {
                   {activeQuizChapterId === ch.id ? "Hide quiz" : "Take quiz"}
                 </button>
               )}
+              {hasAccess && (
+                <button
+                  className="link-btn"
+                  style={{ marginLeft: 12 }}
+                  disabled={downloadingLessonId === ch.id}
+                  onClick={() => downloadLesson(ch)}
+                >
+                  {downloadingLessonId === ch.id ? "Preparing…" : "📄 Download (PDF)"}
+                </button>
+              )}
               {activeQuizChapterId === ch.id && (
                 <div style={{ marginLeft: 32, marginBottom: 16 }}>
                   {quizLoading ? (
@@ -424,7 +462,7 @@ export function CoursePage({ id }) {
                           </div>
                         );
                       })}
-                      <button className="link-btn" onClick={() => openQuiz(ch.id)}>Retake quiz</button>
+                      <button className="link-btn" onClick={() => retakeQuiz(ch.id)}>Retake quiz</button>
                     </div>
                   ) : (
                     <div>

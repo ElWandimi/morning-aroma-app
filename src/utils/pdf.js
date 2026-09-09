@@ -363,3 +363,79 @@ export async function generateCertificatePDF(certificate) {
 
   doc.save(`${slugify(certificate.courseName)}-certificate.pdf`);
 }
+
+// A real, downloadable PDF for one lesson's full content -- unlike the recipe card and
+// certificate above, lesson content can genuinely run to multiple pages, so this handles real
+// pagination: each paragraph is measured and wrapped, and a new page starts automatically once
+// the current one runs out of room, rather than assuming everything fits on a single page.
+export async function generateLessonPDF(course, chapter, content) {
+  const { default: jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const W = 612, H = 792, margin = 56;
+  const contentWidth = W - margin * 2;
+
+  const logoDataUrl = await loadImageAsDataURL(LOGO_URL).catch(() => null);
+
+  const drawPageChrome = () => {
+    doc.setFillColor(253, 248, 240);
+    doc.rect(0, 0, W, H, "F");
+    drawWatermark(doc, logoDataUrl, W, H);
+  };
+
+  drawPageChrome();
+  let y = margin;
+  const headerLogoSize = drawHeaderLogo(doc, logoDataUrl, margin, y, 22);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(197, 161, 129);
+  doc.text("MORNING AROMA ACADEMY", margin + headerLogoSize + 10, y + 16);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(139, 90, 58);
+  doc.text(course.name, W - margin, y + 16, { align: "right" });
+
+  y += 50;
+  doc.setDrawColor(232, 213, 181);
+  doc.setLineWidth(0.75);
+  doc.line(margin, y, W - margin, y);
+
+  y += 34;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(62, 44, 35);
+  const titleLines = doc.splitTextToSize(chapter.title, contentWidth);
+  doc.text(titleLines, margin, y);
+  y += titleLines.length * 26 + 24;
+
+  // Real pagination -- paragraphs are split on blank lines (matching how the content was
+  // written), each wrapped to the page width, and a fresh page starts whenever the next line
+  // would run past the bottom margin, rather than letting text run off the page.
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11.5);
+  doc.setTextColor(62, 44, 35);
+  const lineHeight = 17;
+  const paragraphs = content.split(/\n\n+/);
+
+  const ensureRoom = (neededHeight) => {
+    if (y + neededHeight > H - margin - 30) {
+      doc.addPage();
+      drawPageChrome();
+      y = margin;
+    }
+  };
+
+  paragraphs.forEach((para) => {
+    const lines = doc.splitTextToSize(para.trim(), contentWidth);
+    ensureRoom(lines.length * lineHeight);
+    doc.text(lines, margin, y);
+    y += lines.length * lineHeight + 16;
+  });
+
+  // Footer on the final page only -- matches the recipe card / certificate sign-off style.
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(9);
+  doc.setTextColor(197, 161, 129);
+  doc.text("Where quality meets its scent.", W / 2, H - margin + 10, { align: "center" });
+
+  doc.save(`${slugify(course.name)}-lesson-${chapter.number}.pdf`);
+}

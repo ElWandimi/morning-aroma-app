@@ -2,6 +2,7 @@ const express = require("express");
 const { query } = require("../db");
 const { requirePermission } = require("../middleware/requireAdmin");
 const { requireAuth } = require("../middleware/requireAuth");
+const { hasCourseAccessForChapter } = require("./quizzes");
 
 const router = express.Router();
 
@@ -42,6 +43,31 @@ router.get("/courses/:courseId/chapters", async (req, res) => {
   res.json({ chapters: result.rows.map(publicChapter) });
 });
 
+// Real, access-gated lesson content -- unlike title/description (public, effectively marketing
+// copy for the course), the full lesson body is the actual paid product, so this requires the
+// same real subscription/lifetime-access check quizzes.js already established, not just the
+// visible lock icon the frontend shows.
+router.get("/chapters/:id/content", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const allowed = await hasCourseAccessForChapter(req.user.sub, id);
+  if (!allowed) return res.status(403).json({ error: "You need an active subscription or lifetime access to download this lesson." });
+
+  const result = await query("SELECT title, content FROM chapters WHERE id = $1", [id]);
+  if (!result.rows[0]) return res.status(404).json({ error: "Chapter not found." });
+  if (!result.rows[0].content) return res.status(404).json({ error: "This lesson doesn't have downloadable content yet." });
+
+  res.json({ title: result.rows[0].title, content: result.rows[0].content });
+});
+
+// Admin view of a chapter's full content -- deliberately separate from the customer-facing route
+// above, and gated on Content permission rather than subscription/lifetime access. Staff managing
+// lesson content shouldn't need to personally subscribe to a course to edit its text.
+router.get("/admin/chapters/:id/content", requireAuth, requirePermission("Content"), async (req, res) => {
+  const result = await query("SELECT title, content FROM chapters WHERE id = $1", [req.params.id]);
+  if (!result.rows[0]) return res.status(404).json({ error: "Chapter not found." });
+  res.json({ title: result.rows[0].title, content: result.rows[0].content || "" });
+});
+
 router.post("/courses/:courseId/chapters", requireAuth, requirePermission("Content"), async (req, res) => {
   const { courseId } = req.params;
   const validationError = validateChapterInput(req.body);
@@ -74,18 +100,22 @@ router.patch("/chapters/:id", requireAuth, requirePermission("Content"), async (
   const { id } = req.params;
   const validationError = validateChapterInput(req.body, { partial: true });
   if (validationError) return res.status(400).json({ error: validationError });
+  if (req.body.content !== undefined && typeof req.body.content !== "string") {
+    return res.status(400).json({ error: "content must be a string." });
+  }
 
   const existing = await query("SELECT * FROM chapters WHERE id = $1", [id]);
   if (!existing.rows[0]) return res.status(404).json({ error: "Chapter not found." });
 
   const current = existing.rows[0];
-  const { title, description, number } = req.body;
+  const { title, description, number, content } = req.body;
   const result = await query(
-    `UPDATE chapters SET title = $1, description = $2, number = $3, updated_at = now() WHERE id = $4 RETURNING *`,
+    `UPDATE chapters SET title = $1, description = $2, number = $3, content = $4, updated_at = now() WHERE id = $5 RETURNING *`,
     [
       title !== undefined ? title.trim() : current.title,
       description !== undefined ? description.trim() : current.description,
       number !== undefined ? number : current.number,
+      content !== undefined ? content.trim() : current.content,
       id,
     ]
   );

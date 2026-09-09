@@ -1697,7 +1697,7 @@ export function AdminAuditLog() {
 }
 
 export function AdminContent() {
-  const { getMomentContent, setMomentContent, getAllCourses, addCourse, updateCourseDetails, removeCourse, getCourseChapters, addChapter, updateChapterDetails, removeChapter, getQuizQuestionsAdmin, addQuizQuestion, updateQuizQuestionDetails, removeQuizQuestion, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
+  const { getMomentContent, setMomentContent, getAllCourses, addCourse, updateCourseDetails, removeCourse, getCourseChapters, addChapter, updateChapterDetails, removeChapter, getChapterContentAdmin, getQuizQuestionsAdmin, addQuizQuestion, updateQuizQuestionDetails, removeQuizQuestion, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
   const { format } = useCurrency();
   const { addToast } = useToast();
   const [tab, setTab] = useState("Moments");
@@ -1718,7 +1718,8 @@ export function AdminContent() {
   const [chapters, setChapters] = useState([]);
   const [chaptersLoading, setChaptersLoading] = useState(false);
   const [editingChapter, setEditingChapter] = useState(null);
-  const [chapterDraft, setChapterDraft] = useState({ title: "", description: "" });
+  const [chapterDraft, setChapterDraft] = useState({ title: "", description: "", content: "" });
+  const [chapterContentLoading, setChapterContentLoading] = useState(false);
   const [showAddChapterForm, setShowAddChapterForm] = useState(false);
   const emptyNewChapter = { title: "", description: "" };
   const [newChapterDraft, setNewChapterDraft] = useState(emptyNewChapter);
@@ -1773,7 +1774,14 @@ export function AdminContent() {
     refetchExpandedChapters(courseId);
   };
 
-  const startChapterEdit = (ch) => { setEditingChapter(ch.id); setChapterDraft({ title: ch.title, description: ch.description }); };
+  const startChapterEdit = async (ch) => {
+    setEditingChapter(ch.id);
+    setChapterDraft({ title: ch.title, description: ch.description, content: "" });
+    setChapterContentLoading(true);
+    const result = await getChapterContentAdmin(ch.id);
+    setChapterContentLoading(false);
+    if (result.ok) setChapterDraft((prev) => ({ ...prev, content: result.content }));
+  };
   const saveChapterEdit = async (id) => {
     const result = await updateChapterDetails(id, chapterDraft);
     setEditingChapter(null);
@@ -2005,6 +2013,12 @@ export function AdminContent() {
                                     <input className="admin-content-input" value={chapterDraft.title} onChange={(e) => setChapterDraft({ ...chapterDraft, title: e.target.value })} maxLength={200} />
                                     <label className="filter-label">Description</label>
                                     <textarea className="admin-message-edit" rows={3} value={chapterDraft.description} onChange={(e) => setChapterDraft({ ...chapterDraft, description: e.target.value })} maxLength={800} />
+                                    <label className="filter-label">Full lesson content (used to generate the downloadable PDF -- separate paragraphs with a blank line)</label>
+                                    {chapterContentLoading ? (
+                                      <p className="hint">Loading content…</p>
+                                    ) : (
+                                      <textarea className="admin-message-edit" rows={10} value={chapterDraft.content} onChange={(e) => setChapterDraft({ ...chapterDraft, content: e.target.value })} maxLength={20000} />
+                                    )}
                                     <button className="link-btn" onClick={() => saveChapterEdit(ch.id)}>Save</button>
                                     <button className="link-btn" onClick={() => setEditingChapter(null)}>Cancel</button>
                                   </>

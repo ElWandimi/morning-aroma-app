@@ -204,3 +204,4 @@ router.delete("/quiz-questions/:id", requireAuth, requirePermission("Content"), 
 });
 
 module.exports = router;
+module.exports.hasCourseAccessForChapter = hasCourseAccessForChapter;
