@@ -37,7 +37,7 @@ export function GrowingHubPage() {
 
       {path === "Variety" && (
         <div className="grid4">
-          {realProductsLoading ? <p className="hint">Loading…</p> : products.map((p) => (
+          {realProductsLoading ? <p className="hint">Loading…</p> : products.filter((p) => GROWING_PROFILES[p.id]).map((p) => (
             <div key={p.id} className="everyday-card">
               <div
                 className={`everyday-photo ${p.tier === "premium" ? "premium-photo-sm" : ""}`}
@@ -239,7 +239,9 @@ export function GrowingFactorPage({ id }) {
   if (realProductsLoading) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
   const low = getAllProducts().find((p) => p.id === factor.lowId);
   const high = getAllProducts().find((p) => p.id === factor.highId);
-  if (!low || !high) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  if (!low || !high || !GROWING_PROFILES[low.id] || !GROWING_PROFILES[high.id]) {
+    return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  }
   return (
     <div className="product-page">
       <button className="link-btn back-link" onClick={() => go("growing")}>← Growing Library</button>
@@ -267,8 +269,8 @@ export function GrowingFactorPage({ id }) {
 export function SoilExplorerPage({ id }) {
   const { go } = useRoute();
   const { getAllProducts, realProductsLoading } = useAdmin();
-  const products = getAllProducts();
-  const [selected, setSelected] = useState(id || null);
+  const products = getAllProducts().filter((p) => GROWING_PROFILES[p.id]);
+  const [selected, setSelected] = useState(id && GROWING_PROFILES[id] ? id : null);
   useEffect(() => {
     if (!selected && products.length > 0) setSelected(products[0].id);
   }, [products.length]);
