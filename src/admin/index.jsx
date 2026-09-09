@@ -1711,6 +1711,7 @@ export function AdminContent() {
   const [newCourseError, setNewCourseError] = useState("");
   const [addingCourse, setAddingCourse] = useState(false);
   const [uploadingInstructorPhotoFor, setUploadingInstructorPhotoFor] = useState(null);
+  const [uploadingHeroPhotoFor, setUploadingHeroPhotoFor] = useState(null);
   // Chapter (lesson) management -- a separate expandable section per course, since it's a
   // distinct concern from the course's own price/blurb fields above and, unlike those, has no
   // preloaded state anywhere: chapters are only ever fetched for whichever one course is
@@ -1751,6 +1752,20 @@ export function AdminContent() {
       addToast(err.message);
     }
     setUploadingInstructorPhotoFor(null);
+  };
+
+  const handleHeroPhotoChange = async (courseId, e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingHeroPhotoFor(courseId);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      const result = await updateCourseDetails(courseId, { heroPhotoUrl: dataUrl });
+      addToast(result.ok ? "Hero photo updated" : result.error);
+    } catch (err) {
+      addToast(err.message);
+    }
+    setUploadingHeroPhotoFor(null);
   };
 
   const submitNewCourse = async () => {
@@ -2014,6 +2029,10 @@ export function AdminContent() {
                       <label className="link-btn" style={{ cursor: uploadingInstructorPhotoFor === c.id ? "default" : "pointer" }}>
                         {uploadingInstructorPhotoFor === c.id ? "Uploading…" : "Change instructor photo"}
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleInstructorPhotoChange(c.id, e)} disabled={uploadingInstructorPhotoFor === c.id} />
+                      </label>
+                      <label className="link-btn" style={{ cursor: uploadingHeroPhotoFor === c.id ? "default" : "pointer" }}>
+                        {uploadingHeroPhotoFor === c.id ? "Uploading…" : "Change course hero photo"}
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleHeroPhotoChange(c.id, e)} disabled={uploadingHeroPhotoFor === c.id} />
                       </label>
                       <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${c.name}? Unlike products, this removes it entirely -- including for anyone with an active subscription, who would lose access to the course page while still being billed by Paystack underneath. Cancel their subscriptions first if any exist.`)) { removeCourse(c.id).then((result) => addToast(result.ok ? `${c.name} discontinued` : result.error)); } }}>Discontinue</button>
                     </>

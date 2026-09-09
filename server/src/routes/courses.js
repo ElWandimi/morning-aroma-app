@@ -27,6 +27,7 @@ function publicCourse(row) {
     blurb: row.blurb,
     instructor: row.instructor,
     instructorPhotoUrl: row.instructor_photo_url,
+    heroPhotoUrl: row.hero_photo_url,
     lessons: row.lessons,
     monthlyPriceCents: row.monthly_price_cents,
     annualPriceCents: annualPriceCents(row.monthly_price_cents),
@@ -88,19 +89,22 @@ router.patch("/:id", requireAuth, requirePermission("Content"), async (req, res)
   if (!existing.rows[0]) return res.status(404).json({ error: "Course not found." });
 
   const current = existing.rows[0];
-  const { name, category, blurb, instructor, lessons, monthlyPriceCents, instructorPhotoUrl } = req.body;
+  const { name, category, blurb, instructor, lessons, monthlyPriceCents, instructorPhotoUrl, heroPhotoUrl } = req.body;
 
-  // Real upload if this is a fresh base64 photo from the admin form; a genuine no-op if
-  // instructorPhotoUrl wasn't sent at all, or if it's already a real hosted URL (unchanged) --
-  // same resolvePhotoUrl pattern products.js already uses, not a separate implementation.
+  // Real upload if this is a fresh base64 photo from the admin form; a genuine no-op if the
+  // field wasn't sent at all, or if it's already a real hosted URL (unchanged).
   let resolvedInstructorPhotoUrl = current.instructor_photo_url;
   if (instructorPhotoUrl !== undefined) {
     resolvedInstructorPhotoUrl = await resolvePhotoUrl(instructorPhotoUrl, "morning-aroma/instructors");
   }
+  let resolvedHeroPhotoUrl = current.hero_photo_url;
+  if (heroPhotoUrl !== undefined) {
+    resolvedHeroPhotoUrl = await resolvePhotoUrl(heroPhotoUrl, "morning-aroma/course-heroes");
+  }
 
   const result = await query(
-    `UPDATE courses SET name = $1, category = $2, blurb = $3, instructor = $4, lessons = $5, monthly_price_cents = $6, instructor_photo_url = $7, updated_at = now()
-     WHERE id = $8 RETURNING *`,
+    `UPDATE courses SET name = $1, category = $2, blurb = $3, instructor = $4, lessons = $5, monthly_price_cents = $6, instructor_photo_url = $7, hero_photo_url = $8, updated_at = now()
+     WHERE id = $9 RETURNING *`,
     [
       name !== undefined ? name.trim() : current.name,
       category !== undefined ? category.trim() : current.category,
@@ -109,6 +113,7 @@ router.patch("/:id", requireAuth, requirePermission("Content"), async (req, res)
       lessons !== undefined ? lessons : current.lessons,
       monthlyPriceCents !== undefined ? monthlyPriceCents : current.monthly_price_cents,
       resolvedInstructorPhotoUrl,
+      resolvedHeroPhotoUrl,
       id,
     ]
   );

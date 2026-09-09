@@ -173,6 +173,10 @@ export function CoursePage({ id }) {
   const [certEligibility, setCertEligibility] = useState(null);
   const [issuingCert, setIssuingCert] = useState(false);
   const [downloadingLessonId, setDownloadingLessonId] = useState(null);
+  const [readingChapterId, setReadingChapterId] = useState(null);
+  const [readingContent, setReadingContent] = useState(null);
+  const [readingLoading, setReadingLoading] = useState(false);
+  const [readingError, setReadingError] = useState("");
 
   const courses = getAllCourses();
   const course = courses.find((c) => c.id === id);
@@ -253,6 +257,39 @@ export function CoursePage({ id }) {
     setDownloadingLessonId(null);
     if (!result.ok) { addToast(result.error); return; }
     await generateLessonPDF(course, ch, result.content);
+  };
+
+  // Whether a SPECIFIC lesson number is unlocked -- not just the lesson the current row happens
+  // to be rendering, since Next/Previous navigation below needs to check the lock status of an
+  // arbitrary adjacent lesson, not only the one a click originated from.
+  const isChapterNumberUnlocked = (number) => hasAccess || number === 1;
+
+  const openReading = async (chapterId) => {
+    setReadingChapterId(chapterId);
+    setReadingError("");
+    const chapter = chapters.find((c) => c.id === chapterId);
+    if (!chapter || !isChapterNumberUnlocked(chapter.number)) {
+      setReadingContent(null);
+      return;
+    }
+    setReadingLoading(true);
+    const result = await getChapterContent(chapterId);
+    setReadingLoading(false);
+    if (result.ok) setReadingContent({ title: result.title, content: result.content });
+    else { setReadingContent(null); setReadingError(result.error); }
+  };
+
+  const closeReading = () => {
+    setReadingChapterId(null);
+    setReadingContent(null);
+    setReadingError("");
+  };
+
+  const goToAdjacentChapter = (direction) => {
+    const currentIndex = chapters.findIndex((c) => c.id === readingChapterId);
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= chapters.length) return;
+    openReading(chapters[nextIndex].id);
   };
 
   const submitQuizAnswers = async () => {
@@ -356,7 +393,7 @@ export function CoursePage({ id }) {
     <div className="product-page">
       <button className="link-btn back-link" onClick={() => go("academy")}>← All Courses</button>
       <div className="course-top">
-        <div className="course-hero-photo" />
+        <div className="course-hero-photo" style={course.heroPhotoUrl ? { backgroundImage: `url(${course.heroPhotoUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined} />
         <div className="product-info">
           <p className="eyebrow">{course.category}</p>
           <h1>{course.name}</h1>
@@ -433,22 +470,7 @@ export function CoursePage({ id }) {
             const lessonUnlocked = hasAccess || isFreePreview;
             return (
             <div key={ch.id}>
-              <div
-                className="lesson-row"
-                {...(!lessonUnlocked ? {
-                  role: "button",
-                  tabIndex: 0,
-                  style: { cursor: "pointer" },
-                  onClick: () => {
-                    document.getElementById("subscribe-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
-                    addToast("Subscribe to unlock this lesson");
-                  },
-                  onKeyDown: activateOnEnterOrSpace(() => {
-                    document.getElementById("subscribe-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
-                    addToast("Subscribe to unlock this lesson");
-                  }),
-                } : {})}
-              >
+              <div className="lesson-row">
                 <span className="lesson-num">{ch.number}</span>
                 <span>
                   <strong>{ch.title}</strong>{isFreePreview && <span className="eyebrow" style={{ marginLeft: 8 }}>Free preview</span>}
@@ -460,15 +482,35 @@ export function CoursePage({ id }) {
                     </ul>
                   )}
                 </span>
-                <span className="lesson-lock">{lessonUnlocked ? "▶" : "🔒"}</span>
+                <button
+                  type="button"
+                  className="lesson-lock"
+                  style={{ background: "none", border: "none", cursor: "pointer", font: "inherit" }}
+                  aria-label={lessonUnlocked ? `Read ${ch.title}` : `Subscribe to unlock ${ch.title}`}
+                  onClick={() => {
+                    if (lessonUnlocked) {
+                      readingChapterId === ch.id ? closeReading() : openReading(ch.id);
+                    } else {
+                      document.getElementById("subscribe-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      addToast("Subscribe to unlock this lesson");
+                    }
+                  }}
+                >
+                  {lessonUnlocked ? "▶" : "🔒"}
+                </button>
               </div>
               {lessonUnlocked && !user && (
                 <p className="hint" style={{ marginLeft: 32 }}>
-                  <button type="button" className="link-btn" onClick={() => { go("home"); addToast("Sign in free to preview this lesson"); }}>Sign in free</button> to take the quiz or download this preview lesson.
+                  <button type="button" className="link-btn" onClick={() => { go("home"); addToast("Sign in free to preview this lesson"); }}>Sign in free</button> to read this lesson, take the quiz, or download it.
                 </p>
               )}
               {lessonUnlocked && user && (
-                <button className="link-btn" style={{ marginLeft: 32 }} onClick={() => openQuiz(ch.id)}>
+                <button className="link-btn" style={{ marginLeft: 32 }} onClick={() => readingChapterId === ch.id ? closeReading() : openReading(ch.id)}>
+                  {readingChapterId === ch.id ? "Hide lesson" : "Read lesson"}
+                </button>
+              )}
+              {lessonUnlocked && user && (
+                <button className="link-btn" style={{ marginLeft: 12 }} onClick={() => openQuiz(ch.id)}>
                   {activeQuizChapterId === ch.id ? "Hide quiz" : "Take quiz"}
                 </button>
               )}
@@ -481,6 +523,40 @@ export function CoursePage({ id }) {
                 >
                   {downloadingLessonId === ch.id ? "Preparing…" : "📄 Download (PDF)"}
                 </button>
+              )}
+              {readingChapterId === ch.id && (
+                <div style={{ marginLeft: 32, marginBottom: 16, maxWidth: 640, background: "#faf6f0", padding: 16, borderRadius: 8 }}>
+                  {readingLoading ? (
+                    <p className="hint">Loading lesson…</p>
+                  ) : readingError ? (
+                    <p className="hint">{readingError}</p>
+                  ) : readingContent ? (
+                    <>
+                      <h4 style={{ marginTop: 0 }}>{readingContent.title}</h4>
+                      {readingContent.content.split("\n\n").map((para, i) => (
+                        <p key={i} style={{ fontSize: "0.92rem", lineHeight: 1.6 }}>{para}</p>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+                    <button
+                      type="button"
+                      className="link-btn"
+                      disabled={chapters.findIndex((c) => c.id === readingChapterId) <= 0}
+                      onClick={() => goToAdjacentChapter(-1)}
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      type="button"
+                      className="link-btn"
+                      disabled={chapters.findIndex((c) => c.id === readingChapterId) >= chapters.length - 1}
+                      onClick={() => goToAdjacentChapter(1)}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
               )}
               {activeQuizChapterId === ch.id && (
                 <div style={{ marginLeft: 32, marginBottom: 16 }}>
