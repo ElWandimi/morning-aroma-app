@@ -1095,6 +1095,17 @@ export function AdminDataProvider({ children }) {
     return Array.isArray(body && body.certificates) ? body.certificates : [];
   };
 
+  // Real progress stats -- XP, level, streak, and badges are all computed server-side from real
+  // quiz_attempts and certificates rows, not stored anywhere separately, so there's nothing here
+  // that can ever drift out of sync with what a user actually did.
+  const getAcademyStats = async () => {
+    try {
+      return await api.getAcademyStats(token);
+    } catch {
+      return null;
+    }
+  };
+
   const getAllGreenBeans = () => realGreenBeans;
   const addGreenBean = async (data) => {
     try {
@@ -1298,7 +1309,7 @@ export function AdminDataProvider({ children }) {
         getAllCourses, addCourse, updateCourseDetails, removeCourse,
         getCourseChapters, addChapter, updateChapterDetails, removeChapter,
         quizExists, getQuiz, submitQuiz, getMyQuizAttempts, getQuizQuestionsAdmin, addQuizQuestion, updateQuizQuestionDetails, removeQuizQuestion,
-        getCertificateEligibility, issueCertificate, getMyCertificates,
+        getCertificateEligibility, issueCertificate, getMyCertificates, getAcademyStats,
         realCoursesLoading, realCoursesError, refetchRealCourses,
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,

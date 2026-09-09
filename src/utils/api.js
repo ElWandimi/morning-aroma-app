@@ -147,6 +147,7 @@ export const api = {
     request(`/courses/${courseId}/certificate`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
   getMyCertificates: (token) => request("/users/me/certificates", { headers: { Authorization: `Bearer ${token}` } }),
   verifyCertificate: (code) => request(`/certificates/verify/${code}`),
+  getAcademyStats: (token) => request("/users/me/academy-stats", { headers: { Authorization: `Bearer ${token}` } }),
   getProducts: () => request("/products"),
   createProduct: (token, product) =>
     request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),

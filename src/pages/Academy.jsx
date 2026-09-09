@@ -10,7 +10,7 @@ const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
 export function AcademyHubPage() {
   const { go } = useRoute();
-  const { getAllCourses, realCoursesLoading, realCoursesError, refetchRealCourses, settings } = useAdmin();
+  const { getAllCourses, realCoursesLoading, realCoursesError, refetchRealCourses, settings, getAcademyStats } = useAdmin();
   const { user } = useAuth();
   const { format, rates } = useCurrency();
   const { hasLifetimeAccess, purchaseLifetimeAccess } = useSubscriptions();
@@ -18,6 +18,15 @@ export function AcademyHubPage() {
   const [cat, setCat] = useState("All");
   const [lifetimeSubmitting, setLifetimeSubmitting] = useState(false);
   const [lifetimeError, setLifetimeError] = useState("");
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) { setStats(null); return; }
+    getAcademyStats().then((result) => { if (!cancelled) setStats(result); });
+    return () => { cancelled = true; };
+  }, [user]);
+
 
   const courses = getAllCourses();
   const categories = ["All", ...new Set(courses.map((c) => c.category))];
@@ -90,6 +99,24 @@ export function AcademyHubPage() {
         </div>
       )}
       {lifetimeError && <p className="form-error">{lifetimeError}</p>}
+
+      {stats && stats.xp > 0 && (
+        <div className="academy-lifetime-banner">
+          <div>
+            <p className="academy-lifetime-title">{stats.level} · {stats.xp} XP</p>
+            <p className="hint">
+              {stats.passedChapterCount} lesson{stats.passedChapterCount === 1 ? "" : "s"} passed
+              {stats.certificateCount > 0 && ` · ${stats.certificateCount} certificate${stats.certificateCount === 1 ? "" : "s"}`}
+              {stats.streak > 0 && ` · 🔥 ${stats.streak}-day streak`}
+            </p>
+            {stats.badges.length > 0 && (
+              <p className="hint" style={{ marginTop: 6 }}>
+                {stats.badges.map((b) => b.name).join(" · ")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="cat-tabs">
         {categories.map((c) => (
