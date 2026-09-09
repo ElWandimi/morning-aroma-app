@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } from "../context";
 import { RECIPE_CARDS } from "../data";
 import { loadPaystackScript, activateOnEnterOrSpace } from "../utils/helpers";
@@ -125,7 +125,7 @@ export function AcademyHubPage() {
 
 export function CoursePage({ id }) {
   const { go } = useRoute();
-  const { getAllCourses, realCoursesLoading } = useAdmin();
+  const { getAllCourses, getCourseChapters, realCoursesLoading } = useAdmin();
   const { user } = useAuth();
   const { format, rates } = useCurrency();
   const { mySubscriptions, hasLifetimeAccess, createSubscription } = useSubscriptions();
@@ -134,9 +134,24 @@ export function CoursePage({ id }) {
   const [interval, setInterval] = useState("monthly");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [chapters, setChapters] = useState([]);
+  const [chaptersLoading, setChaptersLoading] = useState(true);
 
   const courses = getAllCourses();
   const course = courses.find((c) => c.id === id);
+
+  // Real per-lesson content, fetched fresh for whichever course is actually being viewed --
+  // cancelled/ignored on unmount or a fast id change so a slow response for a course the visitor
+  // already navigated away from can't overwrite what's now on screen for a different one.
+  useEffect(() => {
+    let cancelled = false;
+    setChaptersLoading(true);
+    getCourseChapters(id)
+      .then((result) => { if (!cancelled) setChapters(result); })
+      .catch(() => { if (!cancelled) setChapters([]); })
+      .finally(() => { if (!cancelled) setChaptersLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
 
   // Real Course structured data -- called unconditionally, before either early return below,
   // same Rules of Hooks reasoning established elsewhere in this app (see ROADMAP.md).
@@ -181,7 +196,6 @@ export function CoursePage({ id }) {
   const hasAccess = hasLifetimeAccess || !!activeCourseSub;
 
   const recipe = RECIPE_CARDS[course.name];
-  const lessonTitles = Array.from({ length: course.lessons }, (_, i) => `Lesson ${i + 1}`);
   const related = courses.filter((c) => c.category === course.category && c.id !== course.id).slice(0, 3);
   const priceCents = interval === "monthly" ? course.monthlyPriceCents : course.annualPriceCents;
 
@@ -286,15 +300,25 @@ export function CoursePage({ id }) {
       </div>
 
       <h3 className="matched-head">Lessons</h3>
-      <div className="lesson-list">
-        {lessonTitles.map((l, i) => (
-          <div key={l} className="lesson-row">
-            <span className="lesson-num">{i + 1}</span>
-            <span>{l}: {course.name} technique {i === 0 ? "— fundamentals" : i === course.lessons - 1 ? "— putting it together" : ""}</span>
-            <span className="lesson-lock">{hasAccess ? "▶" : "🔒"}</span>
-          </div>
-        ))}
-      </div>
+      {chaptersLoading ? (
+        <p className="hint">Loading lessons…</p>
+      ) : chapters.length > 0 ? (
+        <div className="lesson-list">
+          {chapters.map((ch) => (
+            <div key={ch.id} className="lesson-row">
+              <span className="lesson-num">{ch.number}</span>
+              <span>
+                <strong>{ch.title}</strong>
+                <br />
+                <span className="hint">{ch.description}</span>
+              </span>
+              <span className="lesson-lock">{hasAccess ? "▶" : "🔒"}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="hint">Lesson content for this course is coming soon.</p>
+      )}
 
       {related.length > 0 && (
         <div className="related">

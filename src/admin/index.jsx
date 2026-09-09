@@ -1697,7 +1697,7 @@ export function AdminAuditLog() {
 }
 
 export function AdminContent() {
-  const { getMomentContent, setMomentContent, getAllCourses, addCourse, updateCourseDetails, removeCourse, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
+  const { getMomentContent, setMomentContent, getAllCourses, addCourse, updateCourseDetails, removeCourse, getCourseChapters, addChapter, updateChapterDetails, removeChapter, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
   const { format } = useCurrency();
   const { addToast } = useToast();
   const [tab, setTab] = useState("Moments");
@@ -1710,6 +1710,20 @@ export function AdminContent() {
   const [newCourseDraft, setNewCourseDraft] = useState(emptyNewCourse);
   const [newCourseError, setNewCourseError] = useState("");
   const [addingCourse, setAddingCourse] = useState(false);
+  // Chapter (lesson) management -- a separate expandable section per course, since it's a
+  // distinct concern from the course's own price/blurb fields above and, unlike those, has no
+  // preloaded state anywhere: chapters are only ever fetched for whichever one course is
+  // currently expanded, the same on-demand reasoning as CoursePage's own chapter fetch.
+  const [expandedCourseId, setExpandedCourseId] = useState(null);
+  const [chapters, setChapters] = useState([]);
+  const [chaptersLoading, setChaptersLoading] = useState(false);
+  const [editingChapter, setEditingChapter] = useState(null);
+  const [chapterDraft, setChapterDraft] = useState({ title: "", description: "" });
+  const [showAddChapterForm, setShowAddChapterForm] = useState(false);
+  const emptyNewChapter = { title: "", description: "" };
+  const [newChapterDraft, setNewChapterDraft] = useState(emptyNewChapter);
+  const [newChapterError, setNewChapterError] = useState("");
+  const [addingChapter, setAddingChapter] = useState(false);
   const [editingCountry, setEditingCountry] = useState(null);
   const [countryDraft, setCountryDraft] = useState("");
 
@@ -1736,6 +1750,57 @@ export function AdminContent() {
     addToast(`${newCourseDraft.name} added`);
     setNewCourseDraft(emptyNewCourse);
     setShowAddCourseForm(false);
+  };
+
+  const refetchExpandedChapters = async (courseId) => {
+    setChaptersLoading(true);
+    const result = await getCourseChapters(courseId);
+    setChapters(result);
+    setChaptersLoading(false);
+  };
+
+  const toggleChapters = (courseId) => {
+    if (expandedCourseId === courseId) {
+      setExpandedCourseId(null);
+      setChapters([]);
+      setShowAddChapterForm(false);
+      setEditingChapter(null);
+      return;
+    }
+    setExpandedCourseId(courseId);
+    setShowAddChapterForm(false);
+    setEditingChapter(null);
+    refetchExpandedChapters(courseId);
+  };
+
+  const startChapterEdit = (ch) => { setEditingChapter(ch.id); setChapterDraft({ title: ch.title, description: ch.description }); };
+  const saveChapterEdit = async (id) => {
+    const result = await updateChapterDetails(id, chapterDraft);
+    setEditingChapter(null);
+    addToast(result.ok ? "Lesson updated" : result.error);
+    if (result.ok) refetchExpandedChapters(expandedCourseId);
+  };
+
+  const submitNewChapter = async () => {
+    if (!newChapterDraft.title.trim()) { setNewChapterError("Title is required."); return; }
+    if (!newChapterDraft.description.trim()) { setNewChapterError("A description is required."); return; }
+    setNewChapterError("");
+    setAddingChapter(true);
+    const result = await addChapter(expandedCourseId, newChapterDraft);
+    setAddingChapter(false);
+    if (result.error) { setNewChapterError(result.error); return; }
+    addToast("Lesson added");
+    setNewChapterDraft(emptyNewChapter);
+    setShowAddChapterForm(false);
+    refetchExpandedChapters(expandedCourseId);
+  };
+
+  const deleteChapterHandler = (ch) => {
+    if (!window.confirm(`Delete lesson "${ch.title}"? This can't be undone.`)) return;
+    removeChapter(ch.id).then((result) => {
+      addToast(result.ok ? "Lesson deleted" : result.error);
+      if (result.ok) refetchExpandedChapters(expandedCourseId);
+    });
   };
 
   const startCountryEdit = (name) => { setEditingCountry(name); setCountryDraft(getCountryHistory(name)); };
@@ -1837,6 +1902,62 @@ export function AdminContent() {
                       <button className="link-btn" onClick={() => startCourseEdit(c)}>Edit</button>
                       <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${c.name}? Unlike products, this removes it entirely -- including for anyone with an active subscription, who would lose access to the course page while still being billed by Paystack underneath. Cancel their subscriptions first if any exist.`)) { removeCourse(c.id).then((result) => addToast(result.ok ? `${c.name} discontinued` : result.error)); } }}>Discontinue</button>
                     </>
+                  )}
+
+                  <button className="link-btn" style={{ display: "block", marginTop: 8 }} onClick={() => toggleChapters(c.id)}>
+                    {expandedCourseId === c.id ? "Hide lessons" : `Manage lessons (${c.lessons})`}
+                  </button>
+
+                  {expandedCourseId === c.id && (
+                    <div className="admin-card" style={{ marginTop: 10, background: "#faf6f0" }}>
+                      {chaptersLoading ? (
+                        <p className="hint">Loading lessons…</p>
+                      ) : (
+                        <>
+                          {chapters.map((ch) => {
+                            const editingThisChapter = editingChapter === ch.id;
+                            return (
+                              <div key={ch.id} className="admin-card" style={{ marginBottom: 8 }}>
+                                {editingThisChapter ? (
+                                  <>
+                                    <label className="filter-label">Title</label>
+                                    <input className="admin-content-input" value={chapterDraft.title} onChange={(e) => setChapterDraft({ ...chapterDraft, title: e.target.value })} maxLength={200} />
+                                    <label className="filter-label">Description</label>
+                                    <textarea className="admin-message-edit" rows={3} value={chapterDraft.description} onChange={(e) => setChapterDraft({ ...chapterDraft, description: e.target.value })} maxLength={800} />
+                                    <button className="link-btn" onClick={() => saveChapterEdit(ch.id)}>Save</button>
+                                    <button className="link-btn" onClick={() => setEditingChapter(null)}>Cancel</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="admin-card-head"><strong>{ch.number}. {ch.title}</strong></div>
+                                    <p style={{ fontSize: "0.85rem", color: "#6b5647" }}>{ch.description}</p>
+                                    <button className="link-btn" onClick={() => startChapterEdit(ch)}>Edit</button>
+                                    <button className="link-btn" onClick={() => deleteChapterHandler(ch)}>Delete</button>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {chapters.length === 0 && <p className="hint">No lessons yet.</p>}
+
+                          {showAddChapterForm ? (
+                            <div className="admin-card">
+                              <div className="admin-card-head"><strong>New lesson</strong></div>
+                              <label className="filter-label">Title</label>
+                              <input className="admin-content-input" value={newChapterDraft.title} onChange={(e) => setNewChapterDraft({ ...newChapterDraft, title: e.target.value })} maxLength={200} />
+                              <label className="filter-label">Description</label>
+                              <textarea className="admin-message-edit" rows={3} value={newChapterDraft.description} onChange={(e) => setNewChapterDraft({ ...newChapterDraft, description: e.target.value })} maxLength={800} />
+                              {newChapterError && <p className="form-error">{newChapterError}</p>}
+                              <button className="link-btn" onClick={submitNewChapter} disabled={addingChapter}>{addingChapter ? "Adding…" : "Add lesson"}</button>
+                              <button className="link-btn" onClick={() => { setShowAddChapterForm(false); setNewChapterDraft(emptyNewChapter); setNewChapterError(""); }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <button className="btn-outline small" onClick={() => setShowAddChapterForm(true)}>+ Add lesson</button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               );

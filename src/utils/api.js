@@ -120,6 +120,13 @@ export const api = {
     request(`/courses/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
   deleteCourse: (token, id) =>
     request(`/courses/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  getChapters: (courseId) => request(`/courses/${courseId}/chapters`),
+  createChapter: (token, courseId, chapter) =>
+    request(`/courses/${courseId}/chapters`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(chapter) }),
+  updateChapter: (token, id, updates) =>
+    request(`/chapters/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
+  deleteChapter: (token, id) =>
+    request(`/chapters/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
   getProducts: () => request("/products"),
   createProduct: (token, product) =>
     request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),

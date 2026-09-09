@@ -979,6 +979,42 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real per-course lesson content -- fetched on demand per course, not preloaded alongside the
+  // course list itself, the same reasoning getProductFeedback above is fetched on demand rather
+  // than bundled into getAllProducts: most views of the course catalog never need any course's
+  // actual lesson list, only CoursePage does, for the one course being viewed.
+  const getCourseChapters = async (courseId) => {
+    const body = await api.getChapters(courseId);
+    return Array.isArray(body && body.chapters) ? body.chapters : [];
+  };
+  const addChapter = async (courseId, data) => {
+    try {
+      const { chapter } = await api.createChapter(token, courseId, data);
+      logAction("Chapter added", `${courseId} — ${data.title}`);
+      return { chapter };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  const updateChapterDetails = async (id, patch) => {
+    try {
+      const { chapter } = await api.updateChapter(token, id, patch);
+      logAction("Chapter updated", id);
+      return { ok: true, chapter };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const removeChapter = async (id) => {
+    try {
+      await api.deleteChapter(token, id);
+      logAction("Chapter removed", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   const getAllGreenBeans = () => realGreenBeans;
   const addGreenBean = async (data) => {
     try {
@@ -1180,6 +1216,7 @@ export function AdminDataProvider({ children }) {
         getAllProducts, addProduct, removeProduct, setProductPhoto,
         realProductsLoading, realProductsError, refetchRealProducts, getProductFeedback,
         getAllCourses, addCourse, updateCourseDetails, removeCourse,
+        getCourseChapters, addChapter, updateChapterDetails, removeChapter,
         realCoursesLoading, realCoursesError, refetchRealCourses,
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,
