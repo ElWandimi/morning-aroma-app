@@ -1697,7 +1697,7 @@ export function AdminAuditLog() {
 }
 
 export function AdminContent() {
-  const { getMomentContent, setMomentContent, getAllCourses, addCourse, updateCourseDetails, removeCourse, getCourseChapters, addChapter, updateChapterDetails, removeChapter, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
+  const { getMomentContent, setMomentContent, getAllCourses, addCourse, updateCourseDetails, removeCourse, getCourseChapters, addChapter, updateChapterDetails, removeChapter, getQuizQuestionsAdmin, addQuizQuestion, updateQuizQuestionDetails, removeQuizQuestion, realCoursesLoading, getCountryHistory, setCountryHistory } = useAdmin();
   const { format } = useCurrency();
   const { addToast } = useToast();
   const [tab, setTab] = useState("Moments");
@@ -1800,6 +1800,87 @@ export function AdminContent() {
     removeChapter(ch.id).then((result) => {
       addToast(result.ok ? "Lesson deleted" : result.error);
       if (result.ok) refetchExpandedChapters(expandedCourseId);
+    });
+  };
+
+  // Quiz question management -- one level deeper than chapters (course > chapter > questions),
+  // same on-demand-fetch reasoning as everything else in this file: only the one chapter whose
+  // quiz is currently expanded ever has its questions loaded.
+  const [expandedQuizChapterId, setExpandedQuizChapterId] = useState(null);
+  const [quizQuestionsAdmin, setQuizQuestionsAdmin] = useState([]);
+  const [quizQuestionsLoading, setQuizQuestionsLoading] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const emptyQuestionDraft = { question: "", options: ["", ""], correctIndex: 0, explanation: "" };
+  const [questionDraft, setQuestionDraft] = useState(emptyQuestionDraft);
+  const [showAddQuestionForm, setShowAddQuestionForm] = useState(false);
+  const [questionError, setQuestionError] = useState("");
+  const [savingQuestion, setSavingQuestion] = useState(false);
+
+  const refetchQuizQuestions = async (chapterId) => {
+    setQuizQuestionsLoading(true);
+    const result = await getQuizQuestionsAdmin(chapterId);
+    setQuizQuestionsAdmin(result);
+    setQuizQuestionsLoading(false);
+  };
+
+  const toggleQuizQuestions = (chapterId) => {
+    if (expandedQuizChapterId === chapterId) {
+      setExpandedQuizChapterId(null);
+      setQuizQuestionsAdmin([]);
+      setShowAddQuestionForm(false);
+      setEditingQuestion(null);
+      return;
+    }
+    setExpandedQuizChapterId(chapterId);
+    setShowAddQuestionForm(false);
+    setEditingQuestion(null);
+    refetchQuizQuestions(chapterId);
+  };
+
+  const validateQuestionDraft = (draft) => {
+    if (!draft.question.trim()) return "Question text is required.";
+    const validOptions = draft.options.filter((o) => o.trim());
+    if (validOptions.length < 2) return "At least 2 non-empty options are required.";
+    if (draft.correctIndex < 0 || draft.correctIndex >= draft.options.length || !draft.options[draft.correctIndex].trim()) {
+      return "The correct answer must point to a non-empty option.";
+    }
+    if (!draft.explanation.trim()) return "An explanation is required.";
+    return null;
+  };
+
+  const startQuestionEdit = (q) => { setEditingQuestion(q.id); setQuestionDraft({ question: q.question, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation }); };
+  const saveQuestionEdit = async (id) => {
+    const err = validateQuestionDraft(questionDraft);
+    if (err) { setQuestionError(err); return; }
+    setQuestionError("");
+    setSavingQuestion(true);
+    const result = await updateQuizQuestionDetails(id, questionDraft);
+    setSavingQuestion(false);
+    if (!result.ok) { setQuestionError(result.error); return; }
+    setEditingQuestion(null);
+    addToast("Question updated");
+    refetchQuizQuestions(expandedQuizChapterId);
+  };
+
+  const submitNewQuestion = async () => {
+    const err = validateQuestionDraft(questionDraft);
+    if (err) { setQuestionError(err); return; }
+    setQuestionError("");
+    setSavingQuestion(true);
+    const result = await addQuizQuestion(expandedQuizChapterId, questionDraft);
+    setSavingQuestion(false);
+    if (result.error) { setQuestionError(result.error); return; }
+    addToast("Question added");
+    setQuestionDraft(emptyQuestionDraft);
+    setShowAddQuestionForm(false);
+    refetchQuizQuestions(expandedQuizChapterId);
+  };
+
+  const deleteQuestionHandler = (q) => {
+    if (!window.confirm("Delete this question? This can't be undone.")) return;
+    removeQuizQuestion(q.id).then((result) => {
+      addToast(result.ok ? "Question deleted" : result.error);
+      if (result.ok) refetchQuizQuestions(expandedQuizChapterId);
     });
   };
 
@@ -1934,6 +2015,122 @@ export function AdminContent() {
                                     <button className="link-btn" onClick={() => startChapterEdit(ch)}>Edit</button>
                                     <button className="link-btn" onClick={() => deleteChapterHandler(ch)}>Delete</button>
                                   </>
+                                )}
+
+                                <button className="link-btn" style={{ display: "block", marginTop: 6 }} onClick={() => toggleQuizQuestions(ch.id)}>
+                                  {expandedQuizChapterId === ch.id ? "Hide quiz" : "Manage quiz"}
+                                </button>
+
+                                {expandedQuizChapterId === ch.id && (
+                                  <div className="admin-card" style={{ marginTop: 8, background: "#f2ede4" }}>
+                                    {quizQuestionsLoading ? (
+                                      <p className="hint">Loading questions…</p>
+                                    ) : (
+                                      <>
+                                        {quizQuestionsAdmin.map((q) => {
+                                          const editingThisQuestion = editingQuestion === q.id;
+                                          return (
+                                            <div key={q.id} className="admin-card" style={{ marginBottom: 8 }}>
+                                              {editingThisQuestion ? (
+                                                <>
+                                                  <label className="filter-label">Question</label>
+                                                  <input className="admin-content-input" value={questionDraft.question} onChange={(e) => setQuestionDraft({ ...questionDraft, question: e.target.value })} maxLength={500} />
+                                                  <label className="filter-label">Options (select the correct one)</label>
+                                                  {questionDraft.options.map((opt, oi) => (
+                                                    <div key={oi} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                                                      <input type="radio" checked={questionDraft.correctIndex === oi} onChange={() => setQuestionDraft({ ...questionDraft, correctIndex: oi })} />
+                                                      <input
+                                                        className="admin-content-input"
+                                                        value={opt}
+                                                        onChange={(e) => {
+                                                          const next = [...questionDraft.options];
+                                                          next[oi] = e.target.value;
+                                                          setQuestionDraft({ ...questionDraft, options: next });
+                                                        }}
+                                                        maxLength={200}
+                                                      />
+                                                      {questionDraft.options.length > 2 && (
+                                                        <button className="link-btn" onClick={() => {
+                                                          const next = questionDraft.options.filter((_, i) => i !== oi);
+                                                          const nextCorrect = questionDraft.correctIndex >= next.length ? 0 : questionDraft.correctIndex;
+                                                          setQuestionDraft({ ...questionDraft, options: next, correctIndex: nextCorrect });
+                                                        }}>Remove</button>
+                                                      )}
+                                                    </div>
+                                                  ))}
+                                                  {questionDraft.options.length < 6 && (
+                                                    <button className="link-btn" onClick={() => setQuestionDraft({ ...questionDraft, options: [...questionDraft.options, ""] })}>+ Add option</button>
+                                                  )}
+                                                  <label className="filter-label">Explanation (shown after answering)</label>
+                                                  <textarea className="admin-message-edit" rows={2} value={questionDraft.explanation} onChange={(e) => setQuestionDraft({ ...questionDraft, explanation: e.target.value })} maxLength={800} />
+                                                  {questionError && <p className="form-error">{questionError}</p>}
+                                                  <button className="link-btn" onClick={() => saveQuestionEdit(q.id)} disabled={savingQuestion}>Save</button>
+                                                  <button className="link-btn" onClick={() => { setEditingQuestion(null); setQuestionError(""); }}>Cancel</button>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <p><strong>{q.number}. {q.question}</strong></p>
+                                                  <ul style={{ fontSize: "0.85rem" }}>
+                                                    {q.options.map((opt, oi) => (
+                                                      <li key={oi} style={{ color: oi === q.correctIndex ? "#2e7d32" : "#6b5647" }}>
+                                                        {opt}{oi === q.correctIndex ? " ✓" : ""}
+                                                      </li>
+                                                    ))}
+                                                  </ul>
+                                                  <p className="hint">{q.explanation}</p>
+                                                  <button className="link-btn" onClick={() => startQuestionEdit(q)}>Edit</button>
+                                                  <button className="link-btn" onClick={() => deleteQuestionHandler(q)}>Delete</button>
+                                                </>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+
+                                        {quizQuestionsAdmin.length === 0 && <p className="hint">No quiz questions yet.</p>}
+
+                                        {showAddQuestionForm ? (
+                                          <div className="admin-card">
+                                            <div className="admin-card-head"><strong>New question</strong></div>
+                                            <label className="filter-label">Question</label>
+                                            <input className="admin-content-input" value={questionDraft.question} onChange={(e) => setQuestionDraft({ ...questionDraft, question: e.target.value })} maxLength={500} />
+                                            <label className="filter-label">Options (select the correct one)</label>
+                                            {questionDraft.options.map((opt, oi) => (
+                                              <div key={oi} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                                                <input type="radio" checked={questionDraft.correctIndex === oi} onChange={() => setQuestionDraft({ ...questionDraft, correctIndex: oi })} />
+                                                <input
+                                                  className="admin-content-input"
+                                                  value={opt}
+                                                  onChange={(e) => {
+                                                    const next = [...questionDraft.options];
+                                                    next[oi] = e.target.value;
+                                                    setQuestionDraft({ ...questionDraft, options: next });
+                                                  }}
+                                                  maxLength={200}
+                                                />
+                                                {questionDraft.options.length > 2 && (
+                                                  <button className="link-btn" onClick={() => {
+                                                    const next = questionDraft.options.filter((_, i) => i !== oi);
+                                                    const nextCorrect = questionDraft.correctIndex >= next.length ? 0 : questionDraft.correctIndex;
+                                                    setQuestionDraft({ ...questionDraft, options: next, correctIndex: nextCorrect });
+                                                  }}>Remove</button>
+                                                )}
+                                              </div>
+                                            ))}
+                                            {questionDraft.options.length < 6 && (
+                                              <button className="link-btn" onClick={() => setQuestionDraft({ ...questionDraft, options: [...questionDraft.options, ""] })}>+ Add option</button>
+                                            )}
+                                            <label className="filter-label">Explanation (shown after answering)</label>
+                                            <textarea className="admin-message-edit" rows={2} value={questionDraft.explanation} onChange={(e) => setQuestionDraft({ ...questionDraft, explanation: e.target.value })} maxLength={800} />
+                                            {questionError && <p className="form-error">{questionError}</p>}
+                                            <button className="link-btn" onClick={submitNewQuestion} disabled={savingQuestion}>{savingQuestion ? "Adding…" : "Add question"}</button>
+                                            <button className="link-btn" onClick={() => { setShowAddQuestionForm(false); setQuestionDraft(emptyQuestionDraft); setQuestionError(""); }}>Cancel</button>
+                                          </div>
+                                        ) : (
+                                          <button className="btn-outline small" onClick={() => { setShowAddQuestionForm(true); setQuestionDraft(emptyQuestionDraft); setQuestionError(""); }}>+ Add question</button>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             );

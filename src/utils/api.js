@@ -127,6 +127,20 @@ export const api = {
     request(`/chapters/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
   deleteChapter: (token, id) =>
     request(`/chapters/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  getQuizExists: (chapterId) => request(`/chapters/${chapterId}/quiz/exists`),
+  getQuiz: (token, chapterId) => request(`/chapters/${chapterId}/quiz`, { headers: { Authorization: `Bearer ${token}` } }),
+  submitQuiz: (token, chapterId, answers) =>
+    request(`/chapters/${chapterId}/quiz/submit`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ answers }) }),
+  getMyQuizAttempts: (token, chapterId) =>
+    request(`/chapters/${chapterId}/quiz/my-attempts`, { headers: { Authorization: `Bearer ${token}` } }),
+  getQuizQuestionsAdmin: (token, chapterId) =>
+    request(`/admin/chapters/${chapterId}/quiz-questions`, { headers: { Authorization: `Bearer ${token}` } }),
+  createQuizQuestion: (token, chapterId, question) =>
+    request(`/chapters/${chapterId}/quiz-questions`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(question) }),
+  updateQuizQuestion: (token, id, updates) =>
+    request(`/quiz-questions/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
+  deleteQuizQuestion: (token, id) =>
+    request(`/quiz-questions/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
   getProducts: () => request("/products"),
   createProduct: (token, product) =>
     request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),

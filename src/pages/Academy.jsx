@@ -125,7 +125,7 @@ export function AcademyHubPage() {
 
 export function CoursePage({ id }) {
   const { go } = useRoute();
-  const { getAllCourses, getCourseChapters, realCoursesLoading } = useAdmin();
+  const { getAllCourses, getCourseChapters, getQuiz, submitQuiz, realCoursesLoading } = useAdmin();
   const { user } = useAuth();
   const { format, rates } = useCurrency();
   const { mySubscriptions, hasLifetimeAccess, createSubscription } = useSubscriptions();
@@ -136,6 +136,12 @@ export function CoursePage({ id }) {
   const [error, setError] = useState("");
   const [chapters, setChapters] = useState([]);
   const [chaptersLoading, setChaptersLoading] = useState(true);
+  const [activeQuizChapterId, setActiveQuizChapterId] = useState(null);
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizAnswers, setQuizAnswers] = useState([]);
+  const [quizResult, setQuizResult] = useState(null);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
 
   const courses = getAllCourses();
   const course = courses.find((c) => c.id === id);
@@ -152,6 +158,42 @@ export function CoursePage({ id }) {
       .finally(() => { if (!cancelled) setChaptersLoading(false); });
     return () => { cancelled = true; };
   }, [id]);
+
+  const openQuiz = async (chapterId) => {
+    if (activeQuizChapterId === chapterId) {
+      setActiveQuizChapterId(null);
+      return;
+    }
+    setActiveQuizChapterId(chapterId);
+    setQuizResult(null);
+    setQuizAnswers([]);
+    setQuizLoading(true);
+    try {
+      const questions = await getQuiz(chapterId);
+      setQuizQuestions(questions);
+      setQuizAnswers(new Array(questions.length).fill(null));
+    } catch {
+      setQuizQuestions([]);
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+  const selectQuizAnswer = (questionIndex, optionIndex) => {
+    setQuizAnswers((prev) => {
+      const next = [...prev];
+      next[questionIndex] = optionIndex;
+      return next;
+    });
+  };
+
+  const submitQuizAnswers = async () => {
+    setQuizSubmitting(true);
+    const result = await submitQuiz(activeQuizChapterId, quizAnswers);
+    setQuizSubmitting(false);
+    if (result.ok) setQuizResult(result);
+    else addToast(result.error);
+  };
 
   // Real Course structured data -- called unconditionally, before either early return below,
   // same Rules of Hooks reasoning established elsewhere in this app (see ROADMAP.md).
@@ -305,14 +347,69 @@ export function CoursePage({ id }) {
       ) : chapters.length > 0 ? (
         <div className="lesson-list">
           {chapters.map((ch) => (
-            <div key={ch.id} className="lesson-row">
-              <span className="lesson-num">{ch.number}</span>
-              <span>
-                <strong>{ch.title}</strong>
-                <br />
-                <span className="hint">{ch.description}</span>
-              </span>
-              <span className="lesson-lock">{hasAccess ? "▶" : "🔒"}</span>
+            <div key={ch.id}>
+              <div className="lesson-row">
+                <span className="lesson-num">{ch.number}</span>
+                <span>
+                  <strong>{ch.title}</strong>
+                  <br />
+                  <span className="hint">{ch.description}</span>
+                </span>
+                <span className="lesson-lock">{hasAccess ? "▶" : "🔒"}</span>
+              </div>
+              {hasAccess && (
+                <button className="link-btn" style={{ marginLeft: 32 }} onClick={() => openQuiz(ch.id)}>
+                  {activeQuizChapterId === ch.id ? "Hide quiz" : "Take quiz"}
+                </button>
+              )}
+              {activeQuizChapterId === ch.id && (
+                <div style={{ marginLeft: 32, marginBottom: 16 }}>
+                  {quizLoading ? (
+                    <p className="hint">Loading quiz…</p>
+                  ) : quizQuestions.length === 0 ? (
+                    <p className="hint">This lesson doesn't have a quiz yet.</p>
+                  ) : quizResult ? (
+                    <div>
+                      <p><strong>{quizResult.passed ? "Passed! " : "Not quite — "}</strong>Score: {quizResult.score}%</p>
+                      {quizQuestions.map((q, i) => {
+                        const r = quizResult.results[i];
+                        return (
+                          <div key={q.id} style={{ marginBottom: 10 }}>
+                            <p>{q.question}</p>
+                            <p className="hint">{r.correct ? "✓ Correct" : "✗ Incorrect"} — {r.explanation}</p>
+                          </div>
+                        );
+                      })}
+                      <button className="link-btn" onClick={() => openQuiz(ch.id)}>Retake quiz</button>
+                    </div>
+                  ) : (
+                    <div>
+                      {quizQuestions.map((q, qi) => (
+                        <div key={q.id} style={{ marginBottom: 12 }}>
+                          <p>{q.question}</p>
+                          {q.options.map((opt, oi) => (
+                            <label key={oi} style={{ display: "block" }}>
+                              <input
+                                type="radio"
+                                name={`quiz-${q.id}`}
+                                checked={quizAnswers[qi] === oi}
+                                onChange={() => selectQuizAnswer(qi, oi)}
+                              /> {opt}
+                            </label>
+                          ))}
+                        </div>
+                      ))}
+                      <button
+                        className="btn-primary small"
+                        disabled={quizSubmitting || quizAnswers.some((a) => a === null)}
+                        onClick={submitQuizAnswers}
+                      >
+                        {quizSubmitting ? "Submitting…" : "Submit answers"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

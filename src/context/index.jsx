@@ -1015,6 +1015,62 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real quizzes -- quizExists is public (no token needed, matches the backend's own public
+  // /exists route), but the real questions, submission, and attempt history all require a real,
+  // signed-in user, since access itself is gated server-side on that user's real subscription or
+  // lifetime access, not just cosmetically hidden client-side.
+  const quizExists = async (chapterId) => {
+    const body = await api.getQuizExists(chapterId);
+    return !!(body && body.exists);
+  };
+  const getQuiz = async (chapterId) => {
+    const body = await api.getQuiz(token, chapterId);
+    return Array.isArray(body && body.questions) ? body.questions : [];
+  };
+  const submitQuiz = async (chapterId, answers) => {
+    try {
+      const body = await api.submitQuiz(token, chapterId, answers);
+      return { ok: true, ...body };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const getMyQuizAttempts = async (chapterId) => {
+    const body = await api.getMyQuizAttempts(token, chapterId);
+    return Array.isArray(body && body.attempts) ? body.attempts : [];
+  };
+  const getQuizQuestionsAdmin = async (chapterId) => {
+    const body = await api.getQuizQuestionsAdmin(token, chapterId);
+    return Array.isArray(body && body.questions) ? body.questions : [];
+  };
+  const addQuizQuestion = async (chapterId, data) => {
+    try {
+      const { question } = await api.createQuizQuestion(token, chapterId, data);
+      logAction("Quiz question added", chapterId);
+      return { question };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  const updateQuizQuestionDetails = async (id, patch) => {
+    try {
+      const { question } = await api.updateQuizQuestion(token, id, patch);
+      logAction("Quiz question updated", id);
+      return { ok: true, question };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const removeQuizQuestion = async (id) => {
+    try {
+      await api.deleteQuizQuestion(token, id);
+      logAction("Quiz question removed", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   const getAllGreenBeans = () => realGreenBeans;
   const addGreenBean = async (data) => {
     try {
@@ -1217,6 +1273,7 @@ export function AdminDataProvider({ children }) {
         realProductsLoading, realProductsError, refetchRealProducts, getProductFeedback,
         getAllCourses, addCourse, updateCourseDetails, removeCourse,
         getCourseChapters, addChapter, updateChapterDetails, removeChapter,
+        quizExists, getQuiz, submitQuiz, getMyQuizAttempts, getQuizQuestionsAdmin, addQuizQuestion, updateQuizQuestionDetails, removeQuizQuestion,
         realCoursesLoading, realCoursesError, refetchRealCourses,
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,
