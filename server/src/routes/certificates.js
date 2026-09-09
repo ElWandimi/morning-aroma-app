@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const { query } = require("../db");
 const { requireAuth } = require("../middleware/requireAuth");
+const { sendCourseCompletionEmail } = require("../utils/email");
 
 const router = express.Router();
 
@@ -91,7 +92,7 @@ router.post("/courses/:courseId/certificate", requireAuth, async (req, res) => {
     return res.status(403).json({ error: "You haven't completed every quiz in this course yet.", ...status });
   }
 
-  const user = await query("SELECT name FROM users WHERE id = $1", [req.user.sub]);
+  const user = await query("SELECT name, email FROM users WHERE id = $1", [req.user.sub]);
 
   const existing = await query("SELECT * FROM certificates WHERE user_id = $1 AND course_id = $2", [req.user.sub, courseId]);
   if (existing.rows[0]) {
@@ -107,7 +108,21 @@ router.post("/courses/:courseId/certificate", requireAuth, async (req, res) => {
         "INSERT INTO certificates (user_id, course_id, verification_code) VALUES ($1, $2, $3) RETURNING *",
         [req.user.sub, courseId, code]
       );
-      return res.status(201).json({ certificate: publicCertificate(inserted.rows[0], course.rows[0].name, user.rows[0].name) });
+      const certificate = publicCertificate(inserted.rows[0], course.rows[0].name, user.rows[0].name);
+
+      // Real "what to take next" -- same category, a different course, whichever real course in
+      // it was created first (ORDER BY created_at rather than something arbitrary like name).
+      // Genuinely absent, not a placeholder, when nothing else exists in the category yet.
+      const nextCourseResult = await query(
+        "SELECT id, name FROM courses WHERE category = $1 AND id != $2 AND removed = false ORDER BY created_at ASC LIMIT 1",
+        [course.rows[0].category, courseId]
+      );
+      const nextCourse = nextCourseResult.rows[0] || null;
+
+      sendCourseCompletionEmail(user.rows[0], course.rows[0], certificate, nextCourse)
+        .catch((err) => console.error("Failed to send course completion email:", err));
+
+      return res.status(201).json({ certificate });
     } catch (e) {
       if (e.code !== "23505" || attempt === 4) throw e; // 23505 = unique_violation
     }

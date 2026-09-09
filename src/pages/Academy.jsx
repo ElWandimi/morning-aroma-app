@@ -424,12 +424,19 @@ export function CoursePage({ id }) {
         <p className="hint">Loading lessons…</p>
       ) : chapters.length > 0 ? (
         <div className="lesson-list">
-          {chapters.map((ch) => (
+          {chapters.map((ch) => {
+            // Chapter 1 is always unlocked as a free preview, regardless of subscription -- see
+            // the matching change in hasCourseAccessForChapter server-side. Still requires being
+            // signed in, since quiz attempts and content downloads are both tied to a real user;
+            // an anonymous visitor sees a sign-in prompt instead of a button that would just fail.
+            const isFreePreview = !hasAccess && ch.number === 1;
+            const lessonUnlocked = hasAccess || isFreePreview;
+            return (
             <div key={ch.id}>
               <div className="lesson-row">
                 <span className="lesson-num">{ch.number}</span>
                 <span>
-                  <strong>{ch.title}</strong>
+                  <strong>{ch.title}</strong>{isFreePreview && <span className="eyebrow" style={{ marginLeft: 8 }}>Free preview</span>}
                   <br />
                   <span className="hint">{ch.description}</span>
                   {ch.objectives && ch.objectives.length > 0 && (
@@ -438,14 +445,19 @@ export function CoursePage({ id }) {
                     </ul>
                   )}
                 </span>
-                <span className="lesson-lock">{hasAccess ? "▶" : "🔒"}</span>
+                <span className="lesson-lock">{lessonUnlocked ? "▶" : "🔒"}</span>
               </div>
-              {hasAccess && (
+              {lessonUnlocked && !user && (
+                <p className="hint" style={{ marginLeft: 32 }}>
+                  <button type="button" className="link-btn" onClick={() => { go("home"); addToast("Sign in free to preview this lesson"); }}>Sign in free</button> to take the quiz or download this preview lesson.
+                </p>
+              )}
+              {lessonUnlocked && user && (
                 <button className="link-btn" style={{ marginLeft: 32 }} onClick={() => openQuiz(ch.id)}>
                   {activeQuizChapterId === ch.id ? "Hide quiz" : "Take quiz"}
                 </button>
               )}
-              {hasAccess && (
+              {lessonUnlocked && user && (
                 <button
                   className="link-btn"
                   style={{ marginLeft: 12 }}
@@ -504,7 +516,8 @@ export function CoursePage({ id }) {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="hint">Lesson content for this course is coming soon.</p>

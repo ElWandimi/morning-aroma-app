@@ -125,4 +125,29 @@ customer once a refund is initiated -- initiating it promptly is what's in your 
   await sendEmail("Refund needed notification", adminEmail, subject, body);
 }
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendEmailVerificationCode, sendRefundNeededEmail };
+// Sent once, the moment a certificate is genuinely issued for the first time (see
+// routes/certificates.js's POST /courses/:courseId/certificate) -- not on every re-request of an
+// already-issued certificate, since that would re-send this every time someone re-downloads their
+// own PDF. Fire-and-forget from the caller's perspective, same reasoning as every other email in
+// this file -- a notification failing to send must never block the certificate itself from being
+// issued, since the certificate is the real, durable outcome here.
+async function sendCourseCompletionEmail(user, course, certificate, nextCourse) {
+  const subject = `You did it -- ${course.name} complete! 🎉`;
+  const nextCourseBlock = nextCourse
+    ? `\nSince you enjoyed ${course.name}, you might like ${nextCourse.name} next: ${SITE_URL}/academy/course/${nextCourse.id}\n`
+    : "";
+  const body = `Hi ${user.name},
+
+Congratulations -- you've passed every quiz in ${course.name} and earned your certificate.
+
+Your certificate is ready to download from the course page, and anyone can verify it's genuine
+at ${SITE_URL}/verify-certificate using its code: ${certificate.verificationCode}
+${nextCourseBlock}
+See everything you've earned so far in the Academy: ${SITE_URL}/academy
+
+Nicely done,
+The Morning Aroma Academy team`;
+  await sendEmail("Course completion email", user.email, subject, body);
+}
+
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendEmailVerificationCode, sendRefundNeededEmail, sendCourseCompletionEmail };

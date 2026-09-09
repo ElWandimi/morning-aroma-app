@@ -10,17 +10,25 @@ const router = express.Router();
 // quiz can never be fetched or submitted by someone who wouldn't actually see that lesson
 // unlocked in the UI. A non-existent chapter/course resolves to false, not an error, since the
 // caller (routes below) already 404s separately for that case.
+//
+// Exception: chapter 1 of any course is always allowed through, as a free preview -- lets a
+// visitor genuinely sample a course's real quiz and real lesson content (both of which reuse
+// this same check, via chapters.js's own /content route) before ever paying for it. A real
+// passing attempt on a free-preview chapter still counts toward certificate eligibility later,
+// since courseCompletionStatus in certificates.js only looks at quiz_attempts rows, not whether
+// the visitor had a subscription at the moment they took the quiz.
 async function hasCourseAccessForChapter(userId, chapterId) {
-  const chapterResult = await query("SELECT course_id FROM chapters WHERE id = $1", [chapterId]);
-  const courseId = chapterResult.rows[0] && chapterResult.rows[0].course_id;
-  if (!courseId) return false;
+  const chapterResult = await query("SELECT course_id, number FROM chapters WHERE id = $1", [chapterId]);
+  const chapter = chapterResult.rows[0];
+  if (!chapter) return false;
+  if (chapter.number === 1) return true;
 
   const lifetime = await query("SELECT 1 FROM academy_lifetime_access WHERE user_id = $1", [userId]);
   if (lifetime.rows[0]) return true;
 
   const sub = await query(
     "SELECT 1 FROM subscriptions WHERE user_id = $1 AND course_id = $2 AND status IN ('active', 'paused')",
-    [userId, courseId]
+    [userId, chapter.course_id]
   );
   return !!sub.rows[0];
 }
