@@ -165,12 +165,26 @@ export function JourneyPage() {
   const { addEntry, removeEntry, entriesFor } = useJournal();
   const { add: addToCart } = useCart();
   const { addToast } = useToast();
-  const { getAllProducts } = useAdmin();
+  const { getAllProducts, realProductsLoading } = useAdmin();
   const allProducts = getAllProducts();
   const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
-  const [selectedProduct, setSelectedProduct] = useState(allProducts[0].id);
+  // allProducts[0].id used to run unguarded here -- on first render, before the async /products
+  // fetch resolves, allProducts is still [], so allProducts[0] is undefined and .id crashed the
+  // whole page (confirmed: this is a real, pre-existing crash on a fresh /journey load whenever
+  // the products fetch hasn't completed yet, not something introduced by this change). The
+  // useEffect right below re-syncs this to a real product once the fetch resolves.
+  const [selectedProduct, setSelectedProduct] = useState(allProducts[0]?.id ?? "");
   const [rating, setRating] = useState(5);
   const [note, setNote] = useState("");
+
+  // useState's initial value only ever runs once, on first mount -- if that first render happened
+  // before the products fetch resolved (the exact case the empty-string fallback above exists
+  // for), selectedProduct would otherwise stay "" forever even once real products load, since
+  // nothing else ever re-picks a value for it. This keeps it pointed at a real product the moment
+  // one becomes available, without overwriting a person's own later choice from the dropdown.
+  useEffect(() => {
+    if (!selectedProduct && allProducts.length > 0) setSelectedProduct(allProducts[0].id);
+  }, [allProducts, selectedProduct]);
 
   if (!user) {
     return (
@@ -183,6 +197,14 @@ export function JourneyPage() {
         <SignUpModal open={authView === "signup"} onClose={() => setAuthView(null)} onSwitchToSignIn={() => setAuthView("signin")} />
       </div>
     );
+  }
+
+  // Same reasoning as ProductPage's own realProductsLoading guard: everything below this point
+  // (avgProfile, recommendation, the Log a Coffee form's product list) assumes allProducts is the
+  // real, loaded catalog, not the empty array it starts as. Placed after the !user check (signed
+  // out is its own, unrelated state) but before any of that real logic runs.
+  if (realProductsLoading) {
+    return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
   }
 
   const entries = entriesFor(user.email);
@@ -266,6 +288,33 @@ export function JourneyPage() {
               <p className="hint">Log your first coffee to build your fingerprint.</p>
             )}
           </div>
+        </div>
+
+        <div className="journey-col">
+          <div className="mini-brew">
+            <h3>Log a Coffee</h3>
+            <form onSubmit={submitEntry}>
+              <div className="journal-field">
+                <label htmlFor="journal-variety">Variety</label>
+                <select id="journal-variety" value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)}>
+                  {allProducts.map((p) => (<option key={p.id} value={p.id}>{p.name} — {p.country}</option>))}
+                </select>
+              </div>
+              <div className="journal-field">
+                <label id="journal-rating-label">Rating</label>
+                <div className="star-row" role="group" aria-labelledby="journal-rating-label">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button type="button" key={n} className={`star ${n <= rating ? "filled" : ""}`} onClick={() => setRating(n)} aria-label={`${n} beans`} aria-pressed={n === rating}>●</button>
+                  ))}
+                </div>
+              </div>
+              <div className="journal-field">
+                <label htmlFor="journal-note">Private notes</label>
+                <textarea id="journal-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Tasting notes, brew method, how it made you feel…" maxLength={500} />
+              </div>
+              <button type="submit" className="btn-primary full">Add to Journal</button>
+            </form>
+          </div>
 
           {recommendation && (
             <div className="mini-brew reco-card">
@@ -275,27 +324,6 @@ export function JourneyPage() {
               <button className="btn-outline small" onClick={() => go("product", { id: recommendation.id })}>View variety →</button>
             </div>
           )}
-        </div>
-
-        <div className="journey-col">
-          <div className="mini-brew">
-            <h3>Log a Coffee</h3>
-            <form onSubmit={submitEntry}>
-              <label htmlFor="journal-variety">Variety</label>
-              <select id="journal-variety" value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)}>
-                {allProducts.map((p) => (<option key={p.id} value={p.id}>{p.name} — {p.country}</option>))}
-              </select>
-              <label id="journal-rating-label">Rating</label>
-              <div className="star-row" role="group" aria-labelledby="journal-rating-label">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button type="button" key={n} className={`star ${n <= rating ? "filled" : ""}`} onClick={() => setRating(n)} aria-label={`${n} beans`} aria-pressed={n === rating}>●</button>
-                ))}
-              </div>
-              <label htmlFor="journal-note">Private notes</label>
-              <textarea id="journal-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Tasting notes, brew method, how it made you feel…" maxLength={500} />
-              <button type="submit" className="btn-primary full">Add to Journal</button>
-            </form>
-          </div>
         </div>
       </div>
 
@@ -314,7 +342,7 @@ export function JourneyPage() {
                   {e.note && <p className="journal-note">"{e.note}"</p>}
                   <p className="journal-date">{e.date}</p>
                 </div>
-                <button className="link-btn" onClick={() => removeEntry(user.email, e.id)}>Remove</button>
+                <button className="btn-danger-link" onClick={() => removeEntry(user.email, e.id)}>Remove</button>
               </div>
             );
           })}
@@ -347,42 +375,43 @@ export function JourneyPage() {
                   {s.interval === "monthly" ? "Billed monthly" : "Billed annually"} — {format(s.amountUsdCents)} × {s.quantity}
                   {s.status === "active" && s.nextPaymentDate && ` — next payment ${s.nextPaymentDate.slice(0, 10)}`}
                 </p>
-                {s.status === "active" && (
-                  <button
-                    className="btn-outline small"
-                    onClick={async () => {
-                      const result = await pauseSubscription(s.id);
-                      addToast(result.ok ? "Subscription paused" : result.error);
-                    }}
-                  >
-                    Pause
-                  </button>
-                )}
-                {s.status === "paused" && (
-                  <button
-                    className="btn-outline small"
-                    onClick={async () => {
-                      const result = await resumeSubscription(s.id);
-                      addToast(result.ok ? "Subscription resumed" : result.error);
-                    }}
-                  >
-                    Resume
-                  </button>
-                )}
-                {(s.status === "active" || s.status === "paused") && (
-                  <button
-                    className="link-btn"
-                    style={{ marginLeft: 10 }}
-                    onClick={async () => {
-                      if (window.confirm("Cancel this subscription? This can't be undone.")) {
-                        const result = await cancelSubscription(s.id);
-                        addToast(result.ok ? "Subscription cancelled" : result.error);
-                      }
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
+                <div className="order-card-actions">
+                  {s.status === "active" && (
+                    <button
+                      className="btn-outline small"
+                      onClick={async () => {
+                        const result = await pauseSubscription(s.id);
+                        addToast(result.ok ? "Subscription paused" : result.error);
+                      }}
+                    >
+                      Pause
+                    </button>
+                  )}
+                  {s.status === "paused" && (
+                    <button
+                      className="btn-outline small"
+                      onClick={async () => {
+                        const result = await resumeSubscription(s.id);
+                        addToast(result.ok ? "Subscription resumed" : result.error);
+                      }}
+                    >
+                      Resume
+                    </button>
+                  )}
+                  {(s.status === "active" || s.status === "paused") && (
+                    <button
+                      className="btn-danger-link"
+                      onClick={async () => {
+                        if (window.confirm("Cancel this subscription? This can't be undone.")) {
+                          const result = await cancelSubscription(s.id);
+                          addToast(result.ok ? "Subscription cancelled" : result.error);
+                        }
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -417,33 +446,34 @@ export function JourneyPage() {
                   return <li key={it.id}>{p ? `${p.name} — ${p.country}` : "Discontinued item"} × {it.qty}</li>;
                 })}
               </ul>
-              <button
-                className="btn-outline small"
-                onClick={() => {
-                  const availableItems = o.items.filter((it) => allProducts.some((p) => p.id === it.id));
-                  availableItems.forEach((it) => addToCart(it.id, it.qty));
-                  const skipped = o.items.length - availableItems.length;
-                  if (availableItems.length === 0) addToast("Those items are no longer available");
-                  else if (skipped > 0) addToast(`Added ${availableItems.length} item${availableItems.length === 1 ? "" : "s"} — ${skipped} no longer available`);
-                  else addToast("Order added to your bag");
-                }}
-              >
-                Reorder
-              </button>
-              {o.status === "Processing" && (o.paymentStatus === "unpaid" || (o.paymentStatus === "paid" && Date.now() - new Date(o.paidAt).getTime() <= CANCELLATION_WINDOW_MS)) && (
+              <div className="order-card-actions">
                 <button
-                  className="link-btn"
-                  style={{ marginLeft: 10 }}
-                  onClick={async () => {
-                    if (window.confirm(`Cancel order ${o.orderNumber}? This can't be undone.`)) {
-                      const result = await cancelOrder(o.id);
-                      addToast(result.ok ? "Order cancelled" : result.error);
-                    }
+                  className="btn-outline small"
+                  onClick={() => {
+                    const availableItems = o.items.filter((it) => allProducts.some((p) => p.id === it.id));
+                    availableItems.forEach((it) => addToCart(it.id, it.qty));
+                    const skipped = o.items.length - availableItems.length;
+                    if (availableItems.length === 0) addToast("Those items are no longer available");
+                    else if (skipped > 0) addToast(`Added ${availableItems.length} item${availableItems.length === 1 ? "" : "s"} — ${skipped} no longer available`);
+                    else addToast("Order added to your bag");
                   }}
                 >
-                  Cancel order
+                  Reorder
                 </button>
-              )}
+                {o.status === "Processing" && (o.paymentStatus === "unpaid" || (o.paymentStatus === "paid" && Date.now() - new Date(o.paidAt).getTime() <= CANCELLATION_WINDOW_MS)) && (
+                  <button
+                    className="btn-danger-link"
+                    onClick={async () => {
+                      if (window.confirm(`Cancel order ${o.orderNumber}? This can't be undone.`)) {
+                        const result = await cancelOrder(o.id);
+                        addToast(result.ok ? "Order cancelled" : result.error);
+                      }
+                    }}
+                  >
+                    Cancel order
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -571,6 +571,17 @@ a { color: inherit; text-decoration: none; }
 .radar-label { font-size: 9px; fill: var(--chestnut); font-family: 'Inter', sans-serif; font-weight: 700; }
 .reco-card { background: var(--steam); }
 .reco-name { font-weight: 700; color: var(--chestnut); margin-bottom: 4px; }
+/* The "Log a Coffee" form's Variety select, Rating label, and stars all used to flow inline with
+   no wrapping container -- a <label> is inline by default in HTML, so "Variety [dropdown] Rating"
+   ran together on one line instead of stacking as separate fields. Each field is now a real block
+   with its own label-above-control layout, and the select/textarea get the same bordered,
+   full-width treatment as every other form input on the site instead of a bare browser default. */
+.journal-field { margin-bottom: 16px; }
+.journal-field label { display: block; font-weight: 700; margin-bottom: 6px; }
+.journal-field select, .journal-field textarea {
+  width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--gold);
+  font-family: inherit; font-size: 16px; box-sizing: border-box;
+}
 .star-row { display: flex; gap: 6px; margin: 4px 0 10px; }
 .star { background: none; border: none; font-size: 1.4rem; color: var(--gold); cursor: pointer; padding: 0; }
 .star.filled { color: var(--chestnut); }
@@ -584,6 +595,12 @@ a { color: inherit; text-decoration: none; }
 .order-head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
 .order-status { color: var(--green); font-size: 0.85rem; }
 .order-items { padding-left: 18px; margin: 8px 0 12px; font-size: 0.9rem; color: #4a3a30; }
+/* Reorder/Pause/Resume plus a destructive Cancel used to just flow inline with a one-off
+   marginLeft: 10 holding Cancel apart from its sibling -- a real flex row with a real gap
+   instead, and Cancel gets the same visibly distinct danger styling used on the admin dashboard
+   (btn-danger-link), since it's genuinely irreversible (its own confirm dialog says so) but was
+   styled identically to a harmless link. */
+.order-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 10px; }
 
 /* checkout */
 .checkout-page { max-width: 900px; margin: 0 auto; padding: 40px 24px 90px; }
