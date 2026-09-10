@@ -659,8 +659,17 @@ a { color: inherit; text-decoration: none; }
 .admin-status-track { height: 10px; background: var(--gold); border-radius: 6px; overflow: hidden; }
 .admin-status-fill { height: 100%; background: var(--chestnut); }
 
-.admin-table { display: flex; flex-direction: column; gap: 2px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(62,44,35,0.06); }
-.admin-row { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: center; padding: 10px 14px; background: white; border-bottom: 1px solid var(--gold); font-size: 0.86rem; transition: background .15s ease; }
+.admin-table { display: flex; flex-direction: column; gap: 2px; border-radius: 10px; box-shadow: 0 4px 14px rgba(62,44,35,0.06); overflow-x: auto; overflow-y: hidden; }
+.admin-table .admin-row:first-child { border-top-left-radius: 10px; border-top-right-radius: 10px; }
+.admin-table .admin-row:last-child { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; border-bottom: none; }
+/* Every .admin-row is a fixed-column grid sized for a real desktop width -- at narrower
+   viewports those columns crushed down to the point of clipping content (a "Discontinue" button
+   truncated to "Disc", action columns overlapping the price/stock columns next to them). Rather
+   than reflow a 5-6 column data table into stacked cards (a much bigger redesign), each row gets
+   a real minimum width and the table scrolls horizontally below that -- the same pattern as any
+   data-dense admin table -- so every column, and every button inside the actions column, keeps
+   its actual legible size instead of being squeezed. */
+.admin-row { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: center; padding: 10px 14px; background: white; border-bottom: 1px solid var(--gold); font-size: 0.86rem; transition: background .15s ease; min-width: 640px; }
 .admin-table .admin-row:not(.admin-header):hover { background: var(--steam); }
 .admin-table-products .admin-row { grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr; }
 .admin-header { font-weight: 700; color: var(--almond-text); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; background: linear-gradient(180deg, var(--steam), rgba(249,230,212,0.5)); }
@@ -670,7 +679,7 @@ a { color: inherit; text-decoration: none; }
 .role-badge.super_admin { background: var(--chestnut); color: var(--cream); }
 .role-badge.premium { background: var(--espresso); color: var(--gold); }
 .role-badge.everyday { background: var(--gold); color: var(--espresso); }
-.admin-table-orders .admin-row { grid-template-columns: 0.9fr 1.3fr 0.9fr 0.7fr 0.8fr 0.9fr 1.2fr; }
+.admin-table-orders .admin-row { grid-template-columns: 0.9fr 1.3fr 0.9fr 0.7fr 0.8fr 0.9fr 1.2fr; min-width: 760px; }
 .payment-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; text-transform: capitalize; }
 .payment-badge.unpaid { background: #fdecea; color: #b3261e; }
 .payment-badge.paid { background: #e6f4ea; color: #1e7e34; }
@@ -976,7 +985,7 @@ a { color: inherit; text-decoration: none; }
 .stock-notice.low { background: rgba(201,130,99,0.15); color: var(--terracotta-btn); }
 
 /* admin: stock column + audit log */
-.admin-table-products-stock .admin-row { grid-template-columns: 1fr 1fr 0.8fr 0.9fr 1fr 1.4fr; }
+.admin-table-products-stock .admin-row { grid-template-columns: 1fr 1fr 0.8fr 0.9fr 1fr 1.4fr; min-width: 760px; }
 .stock-badge { font-size: 0.8rem; font-weight: 600; }
 .stock-badge.low { color: var(--terracotta-btn); font-weight: 700; }
 .stock-badge.out { color: #a33; font-weight: 700; }
@@ -1147,10 +1156,23 @@ a { color: inherit; text-decoration: none; }
 .admin-stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--almond-text); margin: 0 0 6px; }
 .admin-stat-value { font-size: 1.5rem; font-weight: 700; color: var(--chestnut); margin: 0; }
 .admin-table-inventory .admin-row { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
-.admin-table-invoices .admin-row { grid-template-columns: 0.8fr 1.4fr 0.8fr 0.8fr 1fr; }
-.admin-table-invoices-service .admin-row { grid-template-columns: 1.2fr 1.4fr 0.8fr 0.8fr 1fr; }
+.admin-table-invoices .admin-row { grid-template-columns: 0.8fr 1.4fr 0.8fr 0.8fr 1fr; min-width: 600px; }
+.admin-table-invoices-service .admin-row { grid-template-columns: 1.2fr 1.4fr 0.8fr 0.8fr 1fr; min-width: 640px; }
 .admin-table-invoices-service .admin-price-input { width: 80px; }
-.admin-inline-edit { display: flex; align-items: center; gap: 8px; }
+.admin-inline-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Card-level action row (Edit / Save / Cancel / Discontinue / photo-upload labels, on Products,
+   Academy courses & chapters, Countries, Kenya messages, Moments, etc.) -- these buttons used to
+   just flow inline after the card's text with nothing but link-btn's own 8px margin-left holding
+   them apart, so on a card with several actions (e.g. a course's Edit / Change instructor photo /
+   Change hero photo / Discontinue) they ran together with no real gap and no wrap fallback at
+   narrow widths. A real flex row fixes the spacing; a distinct danger style for destructive
+   actions (Discontinue, Delete, Revoke) stops them from being visually identical to Edit/Save,
+   which is what actually matters here -- Discontinue and Edit look the same today. */
+.admin-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px; }
+.admin-card-actions .link-btn, .admin-card-actions .btn-danger-link { margin-left: 0; }
+.btn-danger-link { background: none; border: none; color: #a8433f; text-decoration: underline; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+.btn-danger-link:hover { color: #832e2b; }
+.btn-danger-link:disabled { opacity: 0.5; cursor: default; }
 .inv-status { font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; display: inline-block; width: fit-content; }
 .inv-status.ok { background: #e8f0e0; color: var(--green); }
 .inv-status.low { background: #fdf0ea; color: var(--terracotta-btn); }

@@ -742,11 +742,11 @@ export function AdminCustomers() {
                     {viewingOrdersFor === u.email ? "Hide orders" : "View orders"}
                   </button>
                   {u.role === "super_admin" ? (
-                    <button className="link-btn" disabled={pendingId === u.id} onClick={() => updateUser(u, { role: "customer" }, `${u.name} is no longer an admin`)}>Revoke admin</button>
+                    <button className="btn-danger-link" disabled={pendingId === u.id} onClick={() => updateUser(u, { role: "customer" }, `${u.name} is no longer an admin`)}>Revoke admin</button>
                   ) : u.role === "staff" ? (
                     <>
                       <button className="link-btn" disabled={pendingId === u.id} onClick={() => setEditingPermsFor(editingPermsFor === u.email ? null : u.email)}>Edit access</button>
-                      <button className="link-btn" disabled={pendingId === u.id} onClick={() => updateUser(u, { role: "customer" }, `${u.name} is no longer staff`)}>Revoke staff</button>
+                      <button className="btn-danger-link" disabled={pendingId === u.id} onClick={() => updateUser(u, { role: "customer" }, `${u.name} is no longer staff`)}>Revoke staff</button>
                     </>
                   ) : (
                     <>
@@ -1087,8 +1087,10 @@ export function AdminProducts() {
 
           {formError && <p className="form-error">{formError}</p>}
           {!editingProduct && <p className="hint" style={{ marginTop: 8 }}>Appears immediately on Shop, its own product page, and can be added to cart — but not on Home's featured tiers or Moments/Brew Guides suggestions, which stay curated.</p>}
-          <button className="btn-primary" type="submit" style={{ marginTop: 10 }}>{editingProduct ? "Save changes" : "Add product"}</button>
-          {editingProduct && <button type="button" className="link-btn" onClick={cancelEditDetails}>Cancel</button>}
+          <div className="admin-card-actions" style={{ marginTop: 10 }}>
+            <button className="btn-primary" type="submit">{editingProduct ? "Save changes" : "Add product"}</button>
+            {editingProduct && <button type="button" className="link-btn" onClick={cancelEditDetails}>Cancel</button>}
+          </div>
         </form>
       )}
 
@@ -1122,17 +1124,17 @@ export function AdminProducts() {
               )}
               <span>
                 {editing === p.id ? (
-                  <>
+                  <div className="admin-card-actions">
                     <button className="link-btn" onClick={() => save(p.id)}>Save</button>
                     <button className="link-btn" onClick={() => setEditing(null)}>Cancel</button>
-                  </>
+                  </div>
                 ) : editingStock === p.id ? (
-                  <>
+                  <div className="admin-card-actions">
                     <button className="link-btn" onClick={() => saveStock(p.id)}>Save</button>
                     <button className="link-btn" onClick={() => setEditingStock(null)}>Cancel</button>
-                  </>
+                  </div>
                 ) : (
-                  <>
+                  <div className="admin-card-actions">
                     <button className="link-btn" onClick={() => startEdit(p)}>Edit price</button>
                     <button className="link-btn" onClick={() => startStockEdit(p)}>Edit stock</button>
                     <button className="link-btn" onClick={() => startEditDetails(p)}>Edit details</button>
@@ -1141,8 +1143,8 @@ export function AdminProducts() {
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleExistingPhotoChange(p.id, e)} disabled={uploadingPhotoFor === p.id} />
                     </label>
                     <button className="link-btn" onClick={() => setSharingFor(sharingFor === p.id ? null : p.id)}>Share</button>
-                    <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${p.name}? It will disappear from Shop but stay visible in past orders.`)) { removeProduct(p.id).then((result) => addToast(result.ok ? `${p.name} discontinued` : result.error)); } }}>Discontinue</button>
-                  </>
+                    <button className="btn-danger-link" onClick={() => { if (window.confirm(`Discontinue ${p.name}? It will disappear from Shop but stay visible in past orders.`)) { removeProduct(p.id).then((result) => addToast(result.ok ? `${p.name} discontinued` : result.error)); } }}>Discontinue</button>
+                  </div>
                 )}
               </span>
             </div>
@@ -1290,7 +1292,7 @@ export function AdminInventory() {
                 <span className={stock === 0 ? "inv-status out" : stock <= 8 ? "inv-status low" : "inv-status ok"}>
                   {stock === 0 ? "Sold out" : stock <= 8 ? "Low" : "In stock"}
                 </span>
-                <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${p.name}?`)) { removeProduct(p.id).then((result) => addToast(result.ok ? `${p.name} discontinued` : result.error)); } }}>Discontinue</button>
+                <button className="btn-danger-link" onClick={() => { if (window.confirm(`Discontinue ${p.name}?`)) { removeProduct(p.id).then((result) => addToast(result.ok ? `${p.name} discontinued` : result.error)); } }}>Discontinue</button>
               </span>
             </div>
           );
@@ -1361,7 +1363,7 @@ export function AdminInventory() {
                 <span className={stock === 0 ? "inv-status out" : stock < 100 ? "inv-status low" : "inv-status ok"}>
                   {stock === 0 ? "Sold out" : stock < 100 ? "Low" : "In stock"}
                 </span>
-                <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${g.name}?`)) { removeGreenBean(g.id).then((result) => addToast(result.ok ? `${g.name} discontinued` : result.error)); } }}>Discontinue</button>
+                <button className="btn-danger-link" onClick={() => { if (window.confirm(`Discontinue ${g.name}?`)) { removeGreenBean(g.id).then((result) => addToast(result.ok ? `${g.name} discontinued` : result.error)); } }}>Discontinue</button>
               </span>
             </div>
           );
@@ -1626,22 +1628,26 @@ export function AdminLiveMessages() {
             {editingIndex === i ? (
               <>
                 <textarea className="admin-message-edit" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} rows={2} maxLength={200} autoFocus />
-                <button className="link-btn" onClick={() => saveEdit(i)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-                <button className="link-btn" onClick={() => setEditingIndex(null)} disabled={saving}>Cancel</button>
+                <div className="admin-card-actions">
+                  <button className="link-btn" onClick={() => saveEdit(i)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+                  <button className="link-btn" onClick={() => setEditingIndex(null)} disabled={saving}>Cancel</button>
+                </div>
               </>
             ) : (
               <>
                 <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{m}</p>
-                <button className="link-btn" onClick={() => startEdit(i, m)}>Edit</button>
-                <button
-                  className="link-btn"
-                  onClick={async () => {
-                    const result = await removeKenyaMessage(i);
-                    addToast(result && result.ok === false ? result.error : "Message removed");
-                  }}
-                >
-                  Remove
-                </button>
+                <div className="admin-card-actions">
+                  <button className="link-btn" onClick={() => startEdit(i, m)}>Edit</button>
+                  <button
+                    className="btn-danger-link"
+                    onClick={async () => {
+                      const result = await removeKenyaMessage(i);
+                      addToast(result && result.ok === false ? result.error : "Message removed");
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -1954,14 +1960,18 @@ export function AdminContent() {
                     <input className="admin-content-input" value={momentDraft.benefit} onChange={(e) => setMomentDraft({ ...momentDraft, benefit: e.target.value })} maxLength={120} />
                     <label className="filter-label">Description</label>
                     <textarea className="admin-message-edit" rows={4} value={momentDraft.description} onChange={(e) => setMomentDraft({ ...momentDraft, description: e.target.value })} maxLength={800} />
-                    <button className="link-btn" onClick={() => saveMoment(m.id)}>Save</button>
-                    <button className="link-btn" onClick={() => setEditingMoment(null)}>Cancel</button>
+                    <div className="admin-card-actions">
+                      <button className="link-btn" onClick={() => saveMoment(m.id)}>Save</button>
+                      <button className="link-btn" onClick={() => setEditingMoment(null)}>Cancel</button>
+                    </div>
                   </>
                 ) : (
                   <>
                     <p className="hint">{m.benefit}</p>
                     <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{m.description}</p>
-                    <button className="link-btn" onClick={() => startMomentEdit(m)}>Edit</button>
+                    <div className="admin-card-actions">
+                      <button className="link-btn" onClick={() => startMomentEdit(m)}>Edit</button>
+                    </div>
                   </>
                 )}
               </div>
@@ -1998,8 +2008,10 @@ export function AdminContent() {
                 <label className="filter-label">Blurb</label>
                 <textarea className="admin-message-edit" rows={3} value={newCourseDraft.blurb} onChange={(e) => setNewCourseDraft({ ...newCourseDraft, blurb: e.target.value })} maxLength={400} />
                 {newCourseError && <p className="form-error">{newCourseError}</p>}
-                <button className="link-btn" onClick={submitNewCourse} disabled={addingCourse}>{addingCourse ? "Adding…" : "Add course"}</button>
-                <button className="link-btn" onClick={() => { setShowAddCourseForm(false); setNewCourseDraft(emptyNewCourse); setNewCourseError(""); }}>Cancel</button>
+                <div className="admin-card-actions">
+                  <button className="link-btn" onClick={submitNewCourse} disabled={addingCourse}>{addingCourse ? "Adding…" : "Add course"}</button>
+                  <button className="link-btn" onClick={() => { setShowAddCourseForm(false); setNewCourseDraft(emptyNewCourse); setNewCourseError(""); }}>Cancel</button>
+                </div>
               </div>
             )}
 
@@ -2018,23 +2030,27 @@ export function AdminContent() {
                       <input className="admin-content-input" type="number" min={0} value={courseDraft.monthlyPriceCents} onChange={(e) => setCourseDraft({ ...courseDraft, monthlyPriceCents: Number(e.target.value) })} />
                       <label className="filter-label">Blurb</label>
                       <textarea className="admin-message-edit" rows={3} value={courseDraft.blurb} onChange={(e) => setCourseDraft({ ...courseDraft, blurb: e.target.value })} maxLength={400} />
-                      <button className="link-btn" onClick={() => saveCourse(c.id)}>Save</button>
-                      <button className="link-btn" onClick={() => setEditingCourse(null)}>Cancel</button>
+                      <div className="admin-card-actions">
+                        <button className="link-btn" onClick={() => saveCourse(c.id)}>Save</button>
+                        <button className="link-btn" onClick={() => setEditingCourse(null)}>Cancel</button>
+                      </div>
                     </>
                   ) : (
                     <>
                       <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{c.blurb}</p>
                       <p className="hint">{c.instructor} · {c.lessons} lessons · {format(c.monthlyPriceCents)}/mo · {format(c.annualPriceCents)}/yr</p>
-                      <button className="link-btn" onClick={() => startCourseEdit(c)}>Edit</button>
-                      <label className="link-btn" style={{ cursor: uploadingInstructorPhotoFor === c.id ? "default" : "pointer" }}>
-                        {uploadingInstructorPhotoFor === c.id ? "Uploading…" : "Change instructor photo"}
-                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleInstructorPhotoChange(c.id, e)} disabled={uploadingInstructorPhotoFor === c.id} />
-                      </label>
-                      <label className="link-btn" style={{ cursor: uploadingHeroPhotoFor === c.id ? "default" : "pointer" }}>
-                        {uploadingHeroPhotoFor === c.id ? "Uploading…" : "Change course hero photo"}
-                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleHeroPhotoChange(c.id, e)} disabled={uploadingHeroPhotoFor === c.id} />
-                      </label>
-                      <button className="link-btn" onClick={() => { if (window.confirm(`Discontinue ${c.name}? Unlike products, this removes it entirely -- including for anyone with an active subscription, who would lose access to the course page while still being billed by Paystack underneath. Cancel their subscriptions first if any exist.`)) { removeCourse(c.id).then((result) => addToast(result.ok ? `${c.name} discontinued` : result.error)); } }}>Discontinue</button>
+                      <div className="admin-card-actions">
+                        <button className="link-btn" onClick={() => startCourseEdit(c)}>Edit</button>
+                        <label className="link-btn" style={{ cursor: uploadingInstructorPhotoFor === c.id ? "default" : "pointer" }}>
+                          {uploadingInstructorPhotoFor === c.id ? "Uploading…" : "Change instructor photo"}
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleInstructorPhotoChange(c.id, e)} disabled={uploadingInstructorPhotoFor === c.id} />
+                        </label>
+                        <label className="link-btn" style={{ cursor: uploadingHeroPhotoFor === c.id ? "default" : "pointer" }}>
+                          {uploadingHeroPhotoFor === c.id ? "Uploading…" : "Change course hero photo"}
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleHeroPhotoChange(c.id, e)} disabled={uploadingHeroPhotoFor === c.id} />
+                        </label>
+                        <button className="btn-danger-link" onClick={() => { if (window.confirm(`Discontinue ${c.name}? Unlike products, this removes it entirely -- including for anyone with an active subscription, who would lose access to the course page while still being billed by Paystack underneath. Cancel their subscriptions first if any exist.`)) { removeCourse(c.id).then((result) => addToast(result.ok ? `${c.name} discontinued` : result.error)); } }}>Discontinue</button>
+                      </div>
                     </>
                   )}
 
@@ -2066,15 +2082,19 @@ export function AdminContent() {
                                     ) : (
                                       <textarea className="admin-message-edit" rows={10} value={chapterDraft.content} onChange={(e) => setChapterDraft({ ...chapterDraft, content: e.target.value })} maxLength={20000} />
                                     )}
-                                    <button className="link-btn" onClick={() => saveChapterEdit(ch.id)} disabled={chapterContentLoading}>Save</button>
-                                    <button className="link-btn" onClick={() => setEditingChapter(null)}>Cancel</button>
+                                    <div className="admin-card-actions">
+                                      <button className="link-btn" onClick={() => saveChapterEdit(ch.id)} disabled={chapterContentLoading}>Save</button>
+                                      <button className="link-btn" onClick={() => setEditingChapter(null)}>Cancel</button>
+                                    </div>
                                   </>
                                 ) : (
                                   <>
                                     <div className="admin-card-head"><strong>{ch.number}. {ch.title}</strong></div>
                                     <p style={{ fontSize: "0.85rem", color: "#6b5647" }}>{ch.description}</p>
-                                    <button className="link-btn" onClick={() => startChapterEdit(ch)}>Edit</button>
-                                    <button className="link-btn" onClick={() => deleteChapterHandler(ch)}>Delete</button>
+                                    <div className="admin-card-actions">
+                                      <button className="link-btn" onClick={() => startChapterEdit(ch)}>Edit</button>
+                                      <button className="btn-danger-link" onClick={() => deleteChapterHandler(ch)}>Delete</button>
+                                    </div>
                                   </>
                                 )}
 
@@ -2125,8 +2145,10 @@ export function AdminContent() {
                                                   <label className="filter-label">Explanation (shown after answering)</label>
                                                   <textarea className="admin-message-edit" rows={2} value={questionDraft.explanation} onChange={(e) => setQuestionDraft({ ...questionDraft, explanation: e.target.value })} maxLength={800} />
                                                   {questionError && <p className="form-error">{questionError}</p>}
-                                                  <button className="link-btn" onClick={() => saveQuestionEdit(q.id)} disabled={savingQuestion}>Save</button>
-                                                  <button className="link-btn" onClick={() => { setEditingQuestion(null); setQuestionError(""); }}>Cancel</button>
+                                                  <div className="admin-card-actions">
+                                                    <button className="link-btn" onClick={() => saveQuestionEdit(q.id)} disabled={savingQuestion}>Save</button>
+                                                    <button className="link-btn" onClick={() => { setEditingQuestion(null); setQuestionError(""); }}>Cancel</button>
+                                                  </div>
                                                 </>
                                               ) : (
                                                 <>
@@ -2139,8 +2161,10 @@ export function AdminContent() {
                                                     ))}
                                                   </ul>
                                                   <p className="hint">{q.explanation}</p>
-                                                  <button className="link-btn" onClick={() => startQuestionEdit(q)}>Edit</button>
-                                                  <button className="link-btn" onClick={() => deleteQuestionHandler(q)}>Delete</button>
+                                                  <div className="admin-card-actions">
+                                                    <button className="link-btn" onClick={() => startQuestionEdit(q)}>Edit</button>
+                                                    <button className="btn-danger-link" onClick={() => deleteQuestionHandler(q)}>Delete</button>
+                                                  </div>
                                                 </>
                                               )}
                                             </div>
@@ -2183,8 +2207,10 @@ export function AdminContent() {
                                             <label className="filter-label">Explanation (shown after answering)</label>
                                             <textarea className="admin-message-edit" rows={2} value={questionDraft.explanation} onChange={(e) => setQuestionDraft({ ...questionDraft, explanation: e.target.value })} maxLength={800} />
                                             {questionError && <p className="form-error">{questionError}</p>}
-                                            <button className="link-btn" onClick={submitNewQuestion} disabled={savingQuestion}>{savingQuestion ? "Adding…" : "Add question"}</button>
-                                            <button className="link-btn" onClick={() => { setShowAddQuestionForm(false); setQuestionDraft(emptyQuestionDraft); setQuestionError(""); }}>Cancel</button>
+                                            <div className="admin-card-actions">
+                                              <button className="link-btn" onClick={submitNewQuestion} disabled={savingQuestion}>{savingQuestion ? "Adding…" : "Add question"}</button>
+                                              <button className="link-btn" onClick={() => { setShowAddQuestionForm(false); setQuestionDraft(emptyQuestionDraft); setQuestionError(""); }}>Cancel</button>
+                                            </div>
                                           </div>
                                         ) : (
                                           <button className="btn-outline small" onClick={() => { setShowAddQuestionForm(true); setQuestionDraft(emptyQuestionDraft); setQuestionError(""); }}>+ Add question</button>
@@ -2207,8 +2233,10 @@ export function AdminContent() {
                               <label className="filter-label">Description</label>
                               <textarea className="admin-message-edit" rows={3} value={newChapterDraft.description} onChange={(e) => setNewChapterDraft({ ...newChapterDraft, description: e.target.value })} maxLength={800} />
                               {newChapterError && <p className="form-error">{newChapterError}</p>}
-                              <button className="link-btn" onClick={submitNewChapter} disabled={addingChapter}>{addingChapter ? "Adding…" : "Add lesson"}</button>
-                              <button className="link-btn" onClick={() => { setShowAddChapterForm(false); setNewChapterDraft(emptyNewChapter); setNewChapterError(""); }}>Cancel</button>
+                              <div className="admin-card-actions">
+                                <button className="link-btn" onClick={submitNewChapter} disabled={addingChapter}>{addingChapter ? "Adding…" : "Add lesson"}</button>
+                                <button className="link-btn" onClick={() => { setShowAddChapterForm(false); setNewChapterDraft(emptyNewChapter); setNewChapterError(""); }}>Cancel</button>
+                              </div>
                             </div>
                           ) : (
                             <button className="btn-outline small" onClick={() => setShowAddChapterForm(true)}>+ Add lesson</button>
@@ -2235,13 +2263,17 @@ export function AdminContent() {
                   <>
                     <label className="filter-label">World Journey history</label>
                     <textarea className="admin-message-edit" rows={4} value={countryDraft} onChange={(e) => setCountryDraft(e.target.value)} maxLength={800} />
-                    <button className="link-btn" onClick={() => saveCountry(c.name)}>Save</button>
-                    <button className="link-btn" onClick={() => setEditingCountry(null)}>Cancel</button>
+                    <div className="admin-card-actions">
+                      <button className="link-btn" onClick={() => saveCountry(c.name)}>Save</button>
+                      <button className="link-btn" onClick={() => setEditingCountry(null)}>Cancel</button>
+                    </div>
                   </>
                 ) : (
                   <>
                     <p style={{ fontSize: "0.88rem", color: "#6b5647" }}>{getCountryHistory(c.name)}</p>
-                    <button className="link-btn" onClick={() => startCountryEdit(c.name)}>Edit</button>
+                    <div className="admin-card-actions">
+                      <button className="link-btn" onClick={() => startCountryEdit(c.name)}>Edit</button>
+                    </div>
                   </>
                 )}
               </div>
