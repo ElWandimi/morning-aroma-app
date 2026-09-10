@@ -134,7 +134,14 @@ a { color: inherit; text-decoration: none; }
 
 /* steam */
 .steam-wrap { position: relative; display: inline-block; width: 40px; height: 60px; }
-.steam { position: absolute; bottom: 0; left: 50%; width: 6px; height: 30px; background: rgba(139,90,58,0.25); border-radius: 50%; filter: blur(4px); animation: rise 4s ease-in-out infinite; }
+/* Previously rgba(139,90,58,0.25) -- a mid-brown at low opacity, blurred 4px. Checked against
+   all three real usages of this component (the feedback bean's solid chestnut-brown button, the
+   sign-in modal's cream background, and formerly the hero's dark photo) and it was essentially
+   imperceptible against every one of them -- not a placement problem specific to any single
+   usage, the color/opacity choice itself didn't have enough contrast to read anywhere. A light,
+   near-white wisp with a soft shadow for definition reads clearly against the brown button and
+   still shows (via the shadow, not color contrast) against the light cream modal. */
+.steam { position: absolute; bottom: 0; left: 50%; width: 6px; height: 30px; background: rgba(253,248,240,0.55); box-shadow: 0 0 6px rgba(139,90,58,0.2); border-radius: 50%; filter: blur(3px); animation: rise 4s ease-in-out infinite; }
 .s2 { left: 30%; animation-delay: 1.2s; }
 .s3 { left: 70%; animation-delay: 2.4s; }
 @keyframes rise { 0% { transform: translateY(0) scaleX(1); opacity: 0; } 30% { opacity: 0.6; } 100% { transform: translateY(-50px) scaleX(1.6); opacity: 0; } }
@@ -262,7 +269,13 @@ a { color: inherit; text-decoration: none; }
 .modal-card { background: var(--cream); border-radius: 18px; padding: 30px; max-width: 380px; width: 100%; position: relative; }
 .modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--chestnut); }
 .modal-title { font-size: 1.6rem; margin-bottom: 16px; }
+/* The base .steam is a light, near-white wisp (works against the feedback bean's solid brown
+   button) -- against this modal's cream card, the same light color has almost no contrast at
+   all, confirmed by capturing it across its full animation cycle and finding it barely visible
+   even at peak opacity. Scoped to a darker, warm-brown wisp here instead, since a single .steam
+   color can't read against both a dark/solid background and a near-white one. */
 .login-steam { display: block; margin: 0 auto 4px; opacity: 0.8; }
+.login-steam .steam { background: rgba(139,90,58,0.35); box-shadow: none; }
 .login-eyebrow { text-align: left; }
 .login-switch-line { text-align: center; margin-top: 16px; font-size: 0.9rem; color: var(--almond-text); }
 .login-name-row { display: flex; gap: 12px; }
