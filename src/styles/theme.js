@@ -251,6 +251,12 @@ a { color: inherit; text-decoration: none; }
 .filters-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .filters-head h4 { font-size: 1.1rem; }
 .filters-head-actions { display: flex; align-items: center; gap: 10px; }
+/* Six filter groups (Aroma/Body/Acidity/Roast/Moment/Brew) stacked in a narrow 220px column,
+   each headed by the same tracked-out caps label, read as one undifferentiated block on the
+   page -- a thin rule between groups gives the eye a real stopping point between them, on top of
+   (not instead of) the functional label each one still needs to identify what it filters. */
+.filter-group { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--gold); }
+.filter-group:last-of-type { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
 /* Mobile filter drawer: the toggle button and scrim only exist/show below 800px (the same
    breakpoint .shop-layout already collapses at) — on desktop the filters stay exactly as they
@@ -287,7 +293,8 @@ a { color: inherit; text-decoration: none; }
 .chip { border: 1px solid var(--gold); background: var(--cream); color: var(--espresso); border-radius: 20px; padding: 5px 12px; font-size: 0.78rem; cursor: pointer; text-transform: capitalize; }
 .chip-active { background: var(--chestnut); color: var(--cream); border-color: var(--chestnut); }
 .results-count { font-size: 0.85rem; color: var(--almond-text); margin-bottom: 14px; font-weight: 700; }
-.empty-state { text-align: center; padding: 40px 20px; color: #6b5647; }
+.empty-state { text-align: center; padding: 60px 20px; color: #6b5647; max-width: 360px; margin: 0 auto; }
+.empty-state p { font-size: 1.05rem; margin-bottom: 16px; }
 .premium-photo-sm { background: linear-gradient(135deg, var(--chestnut), var(--espresso)); background-size: contain; background-repeat: no-repeat; background-position: center; }
 
 /* product page */
@@ -1177,10 +1184,24 @@ a { color: inherit; text-decoration: none; }
   background: var(--cream); border-radius: 22px; padding: 22px;
   box-shadow: 0 16px 34px rgba(62,44,35,0.18); transition: transform .4s var(--spring);
 }
+/* The heart's default translucent-white chip (.wishlist-heart) blends into this card's own
+   cream background -- barely visible until hover. A real border plus a stronger shadow gives it
+   a defined edge against the card at rest, not just on hover. */
+.origin-row-photo .wishlist-heart { background: white; border: 1px solid var(--gold); box-shadow: 0 3px 8px rgba(62,44,35,0.12); }
 .origin-row-photo img { width: 100%; max-width: 260px; height: auto; display: block; border-radius: 10px; }
 .origin-row-photo-wrap { width: 100%; max-width: 260px; }
 .origin-row:hover .origin-row-photo { transform: translateY(-6px) scale(1.02); }
 .origin-row.sold-out-card .origin-row-photo img { filter: grayscale(0.55); opacity: 0.7; }
+/* .premium-foot is shared with the narrower Home/Premium-tier cards, where a stacked,
+   full-width button suits a ~240px card. origin-row-text is much wider (flex: 1 1 320px), so
+   that same full-width button stretched out looked like an oversized, disconnected bar under a
+   small price rather than a natural pairing -- this keeps them on one row instead, sized to the
+   button's own content. The sold-out state gets a visibly different treatment (outlined, not
+   filled) rather than just a faded copy of the active button, so "can't buy this" reads at a
+   glance instead of on close inspection. */
+.origin-row-text .premium-foot { flex-direction: row; align-items: center; gap: 18px; flex-wrap: wrap; }
+.origin-row-text .premium-foot .btn-cart { width: auto; }
+.origin-row-text .premium-foot .btn-cart:disabled { background: transparent; color: var(--terracotta-btn); border: 1.5px solid var(--terracotta-btn); opacity: 1; }
 @media (max-width: 760px) {
   .origin-row, .origin-row-reverse { flex-direction: column; }
   .origin-row-photo { max-width: 260px; order: -1; }

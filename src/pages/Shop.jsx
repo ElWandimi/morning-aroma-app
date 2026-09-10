@@ -59,46 +59,58 @@ export function ShopPage() {
             </span>
           </div>
 
-          <p className="filter-label">Aroma</p>
-          <div className="chip-row">
-            {FILTER_DEFS.aroma.map((t) => (
-              <button key={t} className={`chip ${filters.aroma.includes(t) ? "chip-active" : ""}`} onClick={() => toggleAroma(t)}>{t}</button>
-            ))}
+          <div className="filter-group">
+            <p className="filter-label">Aroma</p>
+            <div className="chip-row">
+              {FILTER_DEFS.aroma.map((t) => (
+                <button key={t} className={`chip ${filters.aroma.includes(t) ? "chip-active" : ""}`} onClick={() => toggleAroma(t)}>{t}</button>
+              ))}
+            </div>
           </div>
 
-          <p className="filter-label">Body</p>
-          <div className="chip-row">
-            {FILTER_DEFS.body.map((t) => (
-              <button key={t} className={`chip ${filters.body === t ? "chip-active" : ""}`} onClick={() => setSingle("body", t)}>{t}</button>
-            ))}
+          <div className="filter-group">
+            <p className="filter-label">Body</p>
+            <div className="chip-row">
+              {FILTER_DEFS.body.map((t) => (
+                <button key={t} className={`chip ${filters.body === t ? "chip-active" : ""}`} onClick={() => setSingle("body", t)}>{t}</button>
+              ))}
+            </div>
           </div>
 
-          <p className="filter-label">Acidity</p>
-          <div className="chip-row">
-            {FILTER_DEFS.acidity.map((t) => (
-              <button key={t} className={`chip ${filters.acidity === t ? "chip-active" : ""}`} onClick={() => setSingle("acidity", t)}>{t}</button>
-            ))}
+          <div className="filter-group">
+            <p className="filter-label">Acidity</p>
+            <div className="chip-row">
+              {FILTER_DEFS.acidity.map((t) => (
+                <button key={t} className={`chip ${filters.acidity === t ? "chip-active" : ""}`} onClick={() => setSingle("acidity", t)}>{t}</button>
+              ))}
+            </div>
           </div>
 
-          <p className="filter-label">Roast level</p>
-          <div className="chip-row">
-            {FILTER_DEFS.roast.map((t) => (
-              <button key={t} className={`chip ${filters.roast === t ? "chip-active" : ""}`} onClick={() => setSingle("roast", t)}>{t}</button>
-            ))}
+          <div className="filter-group">
+            <p className="filter-label">Roast level</p>
+            <div className="chip-row">
+              {FILTER_DEFS.roast.map((t) => (
+                <button key={t} className={`chip ${filters.roast === t ? "chip-active" : ""}`} onClick={() => setSingle("roast", t)}>{t}</button>
+              ))}
+            </div>
           </div>
 
-          <p className="filter-label">Moment</p>
-          <div className="chip-row">
-            {FILTER_DEFS.moment.map((t) => (
-              <button key={t} className={`chip ${filters.moment === t ? "chip-active" : ""}`} onClick={() => setSingle("moment", t)}>{t}</button>
-            ))}
+          <div className="filter-group">
+            <p className="filter-label">Moment</p>
+            <div className="chip-row">
+              {FILTER_DEFS.moment.map((t) => (
+                <button key={t} className={`chip ${filters.moment === t ? "chip-active" : ""}`} onClick={() => setSingle("moment", t)}>{t}</button>
+              ))}
+            </div>
           </div>
 
-          <p className="filter-label">Brew method</p>
-          <div className="chip-row">
-            {FILTER_DEFS.brew.map((t) => (
-              <button key={t} className={`chip ${filters.brew === t ? "chip-active" : ""}`} onClick={() => setSingle("brew", t)}>{t}</button>
-            ))}
+          <div className="filter-group">
+            <p className="filter-label">Brew method</p>
+            <div className="chip-row">
+              {FILTER_DEFS.brew.map((t) => (
+                <button key={t} className={`chip ${filters.brew === t ? "chip-active" : ""}`} onClick={() => setSingle("brew", t)}>{t}</button>
+              ))}
+            </div>
           </div>
 
           <button className="btn-primary shop-filter-apply" onClick={() => setFiltersOpen(false)}>Show {filtered.length} result{filtered.length === 1 ? "" : "s"}</button>
