@@ -3,6 +3,7 @@ import { Glass, SignInModal, SignUpModal } from "../components";
 import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute, useSubscriptions } from "../context";
 import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO, COUNTRY_DIAL_CODES } from "../data";
 import { getProductPhotoUrl, loadPaystackScript } from "../utils/helpers";
+import { useClickOutside, useEscapeKey } from "../hooks";
 
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 if (!PAYSTACK_PUBLIC_KEY && import.meta.env.PROD) {
@@ -12,13 +13,95 @@ if (!PAYSTACK_PUBLIC_KEY && import.meta.env.PROD) {
   console.error("VITE_PAYSTACK_PUBLIC_KEY is not set — checkout cannot reach Paystack. Set it in the frontend service's environment variables.");
 }
 
-// Real country names via Intl.DisplayNames -- a built-in, standards-based browser API, not a
+// Real country names via Intl.DisplayNames — a built-in, standards-based browser API, not a
 // hand-maintained list or a fetch to a third-party service. Computed once at module load (not
 // per-render) and sorted alphabetically, since COUNTRY_DIAL_CODES itself is ordered by ISO code.
 const countryNamer = new Intl.DisplayNames(["en"], { type: "region" });
 const SHIPPING_COUNTRIES = COUNTRY_DIAL_CODES
   .map((c) => ({ ...c, name: countryNamer.of(c.code) }))
   .sort((a, b) => a.name.localeCompare(b.name));
+
+// Both the country-name field and the phone dial-code field are really the same ~195-country
+// list, just with a different display string and a different value written back to `shipping`.
+// The native <select> this replaced rendered that whole list as the browser's own OS-level
+// popup -- outside the page's DOM and CSS entirely, which is why it had no real boundary, no
+// distinguishable styling, and (on some platforms) could visually take over the screen instead of
+// scrolling in place. This is a real in-page dropdown instead: bounded height with internal
+// scroll (so it never grows past the viewport), a search box (since scrolling to a specific
+// country alphabetically across ~195 entries is genuinely slow otherwise), and the same
+// click-outside/Escape-to-close behavior already used by the header's currency/language
+// switchers, for a consistent, native-feeling dropdown that reads clearly.
+function SearchableCountrySelect({ label, value, onChange, getDisplay, ariaInvalid, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+  useEscapeKey(open, () => setOpen(false));
+  useClickOutside(ref, open, () => setOpen(false));
+
+  const filtered = query.trim()
+    ? SHIPPING_COUNTRIES.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : SHIPPING_COUNTRIES;
+
+  const selected = SHIPPING_COUNTRIES.find((c) => getDisplay(c).value === value);
+
+  const select = (c) => {
+    onChange(c);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div className="country-select" ref={ref}>
+      <button
+        type="button"
+        className="country-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-invalid={ariaInvalid}
+        aria-label={label}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="country-select-value">
+          {selected ? getDisplay(selected).label : <span className="country-select-placeholder">{placeholder}</span>}
+        </span>
+        <span className="country-select-caret" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="country-select-panel" role="listbox" aria-label={label}>
+          <input
+            type="text"
+            className="country-select-search"
+            placeholder="Search countries…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoFocus
+          />
+          <div className="country-select-list">
+            {filtered.length === 0 ? (
+              <p className="hint" style={{ padding: "10px 12px" }}>No countries match "{query}".</p>
+            ) : (
+              filtered.map((c) => {
+                const d = getDisplay(c);
+                return (
+                  <button
+                    key={c.code}
+                    type="button"
+                    className={`country-select-option ${d.value === value ? "active" : ""}`}
+                    role="option"
+                    aria-selected={d.value === value}
+                    onClick={() => select(c)}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // A real name needs letters (including accented ones), spaces, or hyphens -- not digits or
 // symbols -- and at least 2 characters, matching how a first or last name actually looks across
@@ -316,33 +399,46 @@ export function CheckoutPage() {
             </div>
             <div>
               <label htmlFor="ship-country">Country</label>
+              {/* A real native <select> here (visually hidden, kept in sync) so browser address
+                  autofill -- which only targets genuine form controls, not the custom button/panel
+                  below -- still works. Its own onChange forwards into the same setShipping call
+                  the visible dropdown uses, so an autofilled value and a manually-picked one are
+                  handled identically. */}
               <select
                 id="ship-country"
                 autoComplete="country"
+                className="visually-hidden"
+                tabIndex={-1}
+                aria-hidden="true"
                 value={shipping.country}
-                aria-invalid={!!shippingErrors.country}
                 onChange={(e) => setShipping({ ...shipping, country: e.target.value })}
               >
                 <option value="">Select country</option>
                 {SHIPPING_COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.name}>{c.flag} {c.name}</option>
+                  <option key={c.code} value={c.name}>{c.name}</option>
                 ))}
               </select>
+              <SearchableCountrySelect
+                label="Select country"
+                placeholder="Select country"
+                value={shipping.country}
+                ariaInvalid={!!shippingErrors.country}
+                getDisplay={(c) => ({ value: c.name, label: `${c.flag} ${c.name}` })}
+                onChange={(c) => setShipping({ ...shipping, country: c.name })}
+              />
               {shippingErrors.country && <p className="form-error">{shippingErrors.country}</p>}
             </div>
           </div>
 
           <label htmlFor="ship-phone">Phone</label>
           <div className="form-row-2" style={{ gridTemplateColumns: "auto 1fr" }}>
-            <select
-              aria-label="Phone country code"
+            <SearchableCountrySelect
+              label="Phone country code"
+              placeholder="Code"
               value={shipping.phoneCode}
-              onChange={(e) => setShipping({ ...shipping, phoneCode: e.target.value })}
-            >
-              {SHIPPING_COUNTRIES.map((c) => (
-                <option key={c.code} value={c.dial}>{c.flag} +{c.dial}</option>
-              ))}
-            </select>
+              getDisplay={(c) => ({ value: c.dial, label: `${c.flag} +${c.dial}` })}
+              onChange={(c) => setShipping({ ...shipping, phoneCode: c.dial })}
+            />
             <input
               id="ship-phone"
               type="tel"

@@ -1058,6 +1058,42 @@ a { color: inherit; text-decoration: none; }
 .lang-option.active { background: var(--steam); font-weight: 700; }
 .lang-option-code { margin-left: auto; font-size: 0.72rem; color: var(--almond-text); font-weight: 700; }
 .lang-credit { font-size: 0.68rem; color: var(--almond-text); padding: 8px 10px 2px; margin: 0; border-top: 1px solid var(--gold); margin-top: 4px; }
+/* Checkout's country / phone-code fields -- same idea as .lang-panel above (bounded height,
+   internal scroll, click-outside/Escape to close) but wider, since a country name needs more
+   room than a currency code, and the trigger needs to look and behave like the other form
+   inputs around it (same border, same padding, same focus ring) rather than a plain unstyled
+   <select>, which had no real visual boundary and, being a native OS popup, could take over the
+   whole viewport on some platforms instead of scrolling in place. */
+.country-select { position: relative; }
+.country-select-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  padding: 10px 12px; border: 1px solid var(--gold); border-radius: 8px; background: white;
+  font-family: inherit; font-size: 0.95rem; color: var(--espresso); cursor: pointer; text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.country-select-trigger:hover { border-color: var(--almond); }
+.country-select-trigger:focus-visible { outline: none; border-color: var(--chestnut); box-shadow: 0 0 0 3px rgba(139,90,58,0.15); }
+.country-select-trigger[aria-expanded="true"] { border-color: var(--chestnut); box-shadow: 0 0 0 3px rgba(139,90,58,0.15); }
+.country-select-trigger[aria-invalid="true"] { border-color: #a8433f; }
+.country-select-placeholder { color: var(--almond-text); }
+.country-select-caret { color: var(--almond-text); font-size: 0.75rem; flex-shrink: 0; }
+.country-select-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 70; width: max(100%, 260px);
+  background: var(--cream); border: 1px solid var(--gold); border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(62,44,35,0.2); animation: toastIn .2s ease;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.country-select-search {
+  margin: 8px; width: calc(100% - 16px); padding: 8px 10px; border: 1px solid var(--gold);
+  border-radius: 8px; font-family: inherit; font-size: 0.9rem;
+}
+/* The bounded height + internal scroll is the actual fix for "the dropdown fills the page" --
+   however long the filtered country list is, it scrolls inside this box instead of pushing the
+   page's own layout or (as the native <select> did) taking over the screen. */
+.country-select-list { max-height: 260px; overflow-y: auto; padding: 0 6px 6px; display: flex; flex-direction: column; gap: 2px; }
+.country-select-option { display: block; width: 100%; background: none; border: none; text-align: left; padding: 9px 10px; border-radius: 8px; font-family: inherit; font-size: 0.9rem; cursor: pointer; color: var(--espresso); }
+.country-select-option:hover { background: var(--steam); }
+.country-select-option.active { background: var(--steam); font-weight: 700; }
 .currency-btn { font-size: 0.78rem !important; font-weight: 700; letter-spacing: 0.02em; position: relative; }
 .currency-loading-dot { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--terracotta-btn); animation: currency-pulse 1.2s ease-in-out infinite; }
 @keyframes currency-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
