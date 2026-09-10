@@ -1085,6 +1085,23 @@ a { color: inherit; text-decoration: none; }
 .service-inquiry-form label { display: block; font-size: 0.8rem; font-weight: 700; margin: 12px 0 4px; color: var(--chestnut); }
 .service-inquiry-form input, .service-inquiry-form select, .service-inquiry-form textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; box-sizing: border-box; }
 
+/* Services page additions: real answers to questions specific to these two offerings (reusing
+   the site's one FAQ_ITEMS list and its existing .faq-* accordion styling, not a second
+   duplicated pattern), and honest cross-links to Academy and Green Coffee -- both genuinely
+   related offerings a services visitor would plausibly want, not filler links. */
+.services-faq { max-width: 700px; margin: 0 auto; padding: 60px 24px 20px; }
+.services-faq-more { text-align: center; margin-top: 18px; }
+.services-faq-more .link-btn { margin-left: 0; }
+.services-related { max-width: 1000px; margin: 0 auto; padding: 60px 24px 70px; }
+.services-related-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 10px; }
+.services-related-card {
+  text-align: left; background: white; border: 1px solid var(--gold); border-radius: 16px; padding: 24px;
+  cursor: pointer; font-family: inherit; transition: transform .15s ease, box-shadow .15s ease;
+}
+.services-related-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(62,44,35,0.1); }
+.services-related-card h4 { margin: 8px 0 6px; }
+.services-related-card p { color: #6b5647; font-size: 0.9rem; line-height: 1.55; margin: 0; }
+
 /* disabled buttons, site-wide */
 .btn-primary:disabled, .btn-outline:disabled {
   opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important;

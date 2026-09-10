@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { useAdmin, useAuth, useToast } from "../context";
-import { SERVICES, SERVICE_PROCESS } from "../data";
+import { useAdmin, useAuth, useRoute, useToast } from "../context";
+import { FAQ_ITEMS, SERVICES, SERVICE_PROCESS } from "../data";
+import { useStructuredData } from "../hooks";
 
 export function OurServicesPage() {
   const { user } = useAuth();
+  const { go } = useRoute();
   const { addServiceInquiry } = useAdmin();
   const { addToast } = useToast();
   const [sent, setSent] = useState(false);
@@ -12,6 +14,32 @@ export function OurServicesPage() {
   const [company, setCompany] = useState("");
   const [interest, setInterest] = useState("Remote Consulting");
   const [message, setMessage] = useState("");
+  const [openFaqIdx, setOpenFaqIdx] = useState(null);
+
+  // Real Service structured data -- the same pattern ProductPage and CoursePage already use,
+  // previously missing here even though this page is exactly the kind of commercial-offering
+  // content that benefits from it (search engines can surface it as a distinct service listing,
+  // not just an unstructured page of text).
+  useStructuredData({
+    "@context": "https://schema.org",
+    "@type": "Service",
+    serviceType: "Coffee roasting and brewing consulting, coffee auction representation",
+    provider: { "@type": "Organization", name: "Morning Aroma", sameAs: `${window.location.origin}/` },
+    areaServed: "Worldwide (remote consulting); Kenya (auction representation)",
+    hasOfferCatalog: {
+      "@type": "OfferCatalog",
+      name: "Our Services",
+      itemListElement: SERVICES.map((s) => ({
+        "@type": "Offer",
+        itemOffered: { "@type": "Service", name: s.title, description: s.description },
+      })),
+    },
+  });
+
+  // Reuses the site's one shared FAQ_ITEMS list (tagged by topic) rather than a second,
+  // duplicated set of services-specific questions -- these three also show up on the main FAQ
+  // page, so there's one place to keep the actual answers accurate, not two.
+  const servicesFaq = FAQ_ITEMS.filter((f) => f.topic === "services");
 
   return (
     <div className="services-page">
@@ -57,6 +85,29 @@ export function OurServicesPage() {
         </div>
       </div>
 
+      {servicesFaq.length > 0 && (
+        <div className="services-faq">
+          <div className="shop-head">
+            <p className="eyebrow">questions</p>
+            <h2>Common Questions</h2>
+          </div>
+          <div className="faq-list">
+            {servicesFaq.map((f, i) => (
+              <div key={f.q} className={`faq-item ${openFaqIdx === i ? "open" : ""}`}>
+                <button className="faq-question" onClick={() => setOpenFaqIdx(openFaqIdx === i ? null : i)}>
+                  <span>{f.q}</span>
+                  <span className="faq-chevron">{openFaqIdx === i ? "−" : "+"}</span>
+                </button>
+                {openFaqIdx === i && <p className="faq-answer">{f.a}</p>}
+              </div>
+            ))}
+          </div>
+          <p className="hint services-faq-more">
+            More questions? See the full <button type="button" className="link-btn" onClick={() => go("faq")}>FAQ</button>.
+          </p>
+        </div>
+      )}
+
       <div className="service-inquiry">
         <div className="service-inquiry-inner">
           <div>
@@ -96,6 +147,22 @@ export function OurServicesPage() {
               </form>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="services-related">
+        <p className="eyebrow">related</p>
+        <div className="services-related-links">
+          <button type="button" className="services-related-card" onClick={() => go("academy")}>
+            <span className="service-icon">🎓</span>
+            <h4>Academy</h4>
+            <p>Prefer to train your own team directly? Our courses cover the same skills these consulting sessions do — self-paced, on your own schedule.</p>
+          </button>
+          <button type="button" className="services-related-card" onClick={() => go("greenbeans")}>
+            <span className="service-icon">🌱</span>
+            <h4>Green Coffee</h4>
+            <p>Sourcing lots yourself once you know what you're after? The same traceable origins we cup for auction clients are available unroasted, by the kilogram.</p>
+          </button>
         </div>
       </div>
     </div>

@@ -788,14 +788,17 @@ export const GLOBAL_RITUALS = [
 ];
 
 export const FAQ_ITEMS = [
-  { q: "How fresh is the coffee when it ships?", a: "Every bag ships within two weeks of its roast date, printed right on the label. We roast in small batches to keep it that way." },
-  { q: "Do you ship internationally?", a: "Yes — rates and delivery windows are calculated at checkout based on your address." },
-  { q: "What's the difference between Premium and Everyday tiers?", a: "Premium lots are limited, higher-altitude, and priced closer to specialty-auction rates. Everyday varieties are still fully traceable, just produced at higher volume and priced for daily drinking." },
-  { q: "Can I cancel an order?", a: "Yes, while it's still 'Processing' — before roasting begins. Cancel it yourself from My Aroma Journey, or contact us if it's already moved further along." },
-  { q: "Can I subscribe for recurring deliveries?", a: "Subscriptions are coming soon. For now, reordering from My Aroma Journey takes about two clicks." },
-  { q: "How do I know what I'm paying the farmer?", a: "Every product page and country page publishes the FOB price we paid — see the Source Library for the full breakdown." },
-  { q: "I'm a roaster — can I buy green, unroasted coffee?", a: "Yes — our Green Coffee page sells the same traceable origins unroasted, by the kilogram, to roasters and serious home-roasters. Each lot lists its own minimum order quantity." },
-  { q: "I run a café — can I order wholesale?", a: "Yes — use the quotation form in the footer, or sign in if you already have a trade account and it'll route straight to your rep." },
+  { q: "How fresh is the coffee when it ships?", a: "Every bag ships within two weeks of its roast date, printed right on the label. We roast in small batches to keep it that way.", topic: "shop" },
+  { q: "Do you ship internationally?", a: "Yes — rates and delivery windows are calculated at checkout based on your address.", topic: "shop" },
+  { q: "What's the difference between Premium and Everyday tiers?", a: "Premium lots are limited, higher-altitude, and priced closer to specialty-auction rates. Everyday varieties are still fully traceable, just produced at higher volume and priced for daily drinking.", topic: "shop" },
+  { q: "Can I cancel an order?", a: "Yes, while it's still 'Processing' — before roasting begins. Cancel it yourself from My Aroma Journey, or contact us if it's already moved further along.", topic: "shop" },
+  { q: "Can I subscribe for recurring deliveries?", a: "Subscriptions are coming soon. For now, reordering from My Aroma Journey takes about two clicks.", topic: "shop" },
+  { q: "How do I know what I'm paying the farmer?", a: "Every product page and country page publishes the FOB price we paid — see the Source Library for the full breakdown.", topic: "shop" },
+  { q: "I'm a roaster — can I buy green, unroasted coffee?", a: "Yes — our Green Coffee page sells the same traceable origins unroasted, by the kilogram, to roasters and serious home-roasters. Each lot lists its own minimum order quantity.", topic: "shop" },
+  { q: "I run a café — can I order wholesale?", a: "Yes — use the quotation form in the footer, or sign in if you already have a trade account and it'll route straight to your rep.", topic: "shop" },
+  { q: "How long until someone responds to a service inquiry?", a: "Within two business days — usually with a couple of proposed times for a short discovery call, as noted on the Our Services page.", topic: "services" },
+  { q: "Is remote consulting available anywhere, or only certain regions?", a: "Remote Roasting & Brewing Consulting runs over live video, so it's not tied to a region. Kenyan Auction Representation is specifically for buyers sourcing from the Nairobi Coffee Exchange.", topic: "services" },
+  { q: "I'm not sure which service I need — can I still reach out?", a: "Yes — the inquiry form has a 'Both / not sure yet' option specifically for that; a short discovery call is how we figure out the right fit.", topic: "services" },
 ];
 
 export const PROCESSING_METHODS = [
