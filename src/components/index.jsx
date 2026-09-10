@@ -882,9 +882,15 @@ export function SearchModal({ open, onClose }) {
 }
 
 export function AnnouncementBar() {
-  const { settings } = useAdmin();
+  const { settings, settingsLoading } = useAdmin();
   const [dismissed, setDismissed] = useState(false);
-  if (!settings.announcementEnabled || !settings.announcementText || dismissed) return null;
+  // settings starts as DEFAULT_SETTINGS (see context/index.jsx) purely so other parts of the app
+  // have something to read before the real fetch resolves -- but that default's announcement text
+  // ("Free shipping...") is a placeholder, not a real announcement, and was rendering as if it
+  // were live content on every fresh page load until the real fetch completed (visible as a
+  // flash of stale text, longer on a slow connection). Waiting for settingsLoading to clear means
+  // this only ever shows the real, current announcement -- never the fallback default.
+  if (settingsLoading || !settings.announcementEnabled || !settings.announcementText || dismissed) return null;
   return (
     <div className="announcement-bar">
       <span>{settings.announcementText}</span>
