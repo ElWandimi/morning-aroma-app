@@ -269,6 +269,20 @@ a { color: inherit; text-decoration: none; }
 .footer-form form { display: flex; flex-direction: column; gap: 8px; }
 .footer-form input, .footer-form select, .footer-form textarea { padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(232,213,181,0.3); background: rgba(255,255,255,0.06); color: var(--cream); font-family: inherit; }
 .form-success { color: var(--gold); font-size: 0.9rem; }
+/* The quotation form used to always render in full (5 fields) in every page's footer -- this is
+   the only place addQuotation is ever called (the admin dashboard's "Quotation requests" section
+   depends on it), so the capability had to stay, but the height it was flagged for only needs to
+   exist once someone actually wants to request one. */
+.footer-quote-toggle { margin-top: 4px; }
+.footer-contact-hint { line-height: 1.6; margin-bottom: 8px; }
+.footer-contact-hint .link-btn { color: var(--gold); margin-left: 0; text-decoration: underline; }
+.footer-email { display: block; font-size: 0.9rem; opacity: 0.85; margin-bottom: 14px; }
+.footer-email:hover { opacity: 1; }
+/* Real Privacy/Terms links moved into the brand column -- it used to be the one column with real
+   empty space below the tagline whenever a site hadn't set social handles yet (confirmed: this
+   dev instance has neither set), and folding the legal links up here both fills that gap and
+   shortens the footer's own final row. */
+.footer-column-legal { margin-top: 16px; font-size: 0.78rem; }
 .copyright { text-align: center; margin-top: 40px; font-size: 0.8rem; opacity: 0.6; }
 
 /* feedback bean */
@@ -1215,7 +1229,7 @@ a { color: inherit; text-decoration: none; }
 .legal-callout p { color: var(--espresso); }
 
 /* footer legal row */
-.footer-legal { max-width: 1200px; margin: 40px auto 0; padding-top: 20px; border-top: 1px solid rgba(232,213,181,0.15); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.footer-legal { max-width: 1200px; margin: 30px auto 0; padding-top: 18px; border-top: 1px solid rgba(232,213,181,0.15); text-align: center; }
 .footer-legal .copyright { margin: 0; }
 .footer-legal-links { display: flex; gap: 8px; font-size: 0.8rem; opacity: 0.85; }
 .footer-legal-links a:hover { opacity: 1; text-decoration: underline; }

@@ -1173,6 +1173,7 @@ export function Footer() {
   const { addQuotation, settings } = useAdmin();
   const { addToast } = useToast();
   const [sent, setSent] = useState(false);
+  const [quoteFormOpen, setQuoteFormOpen] = useState(false);
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [variety, setVariety] = useState("");
@@ -1188,6 +1189,11 @@ export function Footer() {
             <span className="brand-name light">Morning Aroma</span>
           </div>
           <p className="tagline handwritten">{settings.tagline}</p>
+          {/* Only renders when an admin has actually set a handle/URL -- previously this left a
+              real, empty-looking gap in this column for any site that hadn't filled those in
+              (confirmed: this dev instance has neither set, and the column visibly had ~350px of
+              nothing below the tagline before the legal row). Explore/Shop below now fill that
+              space with real, useful links regardless of whether social links exist. */}
           {(settings.instagramHandle || settings.facebookUrl) && (
             <div className="footer-social">
               {settings.instagramHandle && (
@@ -1198,57 +1204,78 @@ export function Footer() {
               )}
             </div>
           )}
+          <div className="footer-legal-links footer-column-legal">
+            <a href={pathFor("privacy")} onClick={(e) => { e.preventDefault(); go("privacy"); }}>Privacy Policy</a>
+            <span aria-hidden="true">·</span>
+            <a href={pathFor("terms")} onClick={(e) => { e.preventDefault(); go("terms"); }}>Terms of Service</a>
+          </div>
+        </div>
+        <div className="footer-links">
+          <h5>Shop</h5>
+          <a href={pathFor("shop")} onClick={(e) => { e.preventDefault(); go("shop"); }}>All Coffee</a>
+          <a href={pathFor("academy")} onClick={(e) => { e.preventDefault(); go("academy"); }}>Academy</a>
+          <a href={pathFor("greenbeans")} onClick={(e) => { e.preventDefault(); go("greenbeans"); }}>Green Coffee</a>
+          <a href={pathFor("services")} onClick={(e) => { e.preventDefault(); go("services"); }}>Our Services</a>
+          {user && <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); }}>My Aroma Journey</a>}
         </div>
         <div className="footer-links">
           <h5>Explore</h5>
           <a href={pathFor("worldjourney")} onClick={(e) => { e.preventDefault(); go("worldjourney"); }}>The World Journey</a>
-          <a href={pathFor("services")} onClick={(e) => { e.preventDefault(); go("services"); }}>Our Services</a>
-          <a href={pathFor("greenbeans")} onClick={(e) => { e.preventDefault(); go("greenbeans"); }}>Green Coffee</a>
           <a href={pathFor("sourcelibrary")} onClick={(e) => { e.preventDefault(); go("sourcelibrary"); }}>Source Library</a>
           <a href={pathFor("rituals")} onClick={(e) => { e.preventDefault(); go("rituals"); }}>Global Rituals</a>
+          <a href={pathFor("promise")} onClick={(e) => { e.preventDefault(); go("promise"); }}>Our Promise</a>
           <a href={pathFor("faq")} onClick={(e) => { e.preventDefault(); go("faq"); }}>FAQ</a>
-          <a href={pathFor("contact")} onClick={(e) => { e.preventDefault(); go("contact"); }}>Contact</a>
-          {user && <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); }}>My Aroma Journey</a>}
-          <a href={`mailto:${settings.contactEmail}`}>{settings.contactEmail}</a>
         </div>
         <div className="footer-form">
-          <h5>Request a Quotation</h5>
-          {sent ? (
-            <p className="form-success">Thank you — your note has reached us. We'll reply within two business days.</p>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                addQuotation({ name, email, variety, quantity, message });
-                setSent(true);
-                addToast("Quotation request sent");
-              }}
-            >
-              <input aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={120} required />
-              <input aria-label="Email" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" maxLength={254} required />
-              <select aria-label="Variety of interest" value={variety} onChange={(e) => setVariety(e.target.value)} required>
-                <option value="" disabled>Variety of interest</option>
-                <option>Premium</option>
-                <option>Everyday</option>
-                <option>Not sure yet</option>
-              </select>
-              <input aria-label="Estimated quantity" placeholder="Estimated quantity (e.g. 40kg/month)" value={quantity} onChange={(e) => setQuantity(e.target.value)} maxLength={60} />
-              <textarea aria-label="Message" placeholder="Tell us what you're looking for" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} maxLength={1000} />
-              <button className="btn-primary full" type="submit">Send request</button>
-              <p className="hint" style={{ color: "var(--steam)", opacity: 0.8 }}>
-                {user ? "Signed in — we'll route this straight to our trade team." : "Already work with us as a roaster? Sign in and this goes straight to your account rep."}
-              </p>
-            </form>
+          <h5>Get in Touch</h5>
+          <p className="hint footer-contact-hint">
+            Questions, press, or a coffee story to share? <button type="button" className="link-btn" onClick={() => go("contact")}>Contact us</button> — we read every message.
+          </p>
+          <a href={`mailto:${settings.contactEmail}`} className="footer-email">{settings.contactEmail}</a>
+          {/* The real wholesale-quotation form and its addQuotation call are unchanged below --
+              this is the only place in the app that creates a quotation the admin dashboard's
+              "Quotation requests" section tracks, so the capability itself had to stay. Collapsed
+              behind a button by default instead of always rendering 5 fields in every page's
+              footer -- the actual height cost this section was flagged for only exists once
+              someone genuinely wants to request a quotation, not on every page load. */}
+          {!quoteFormOpen && !sent && (
+            <button className="btn-outline light small footer-quote-toggle" onClick={() => setQuoteFormOpen(true)}>
+              Request a Quotation
+            </button>
+          )}
+          {quoteFormOpen && (
+            sent ? (
+              <p className="form-success">Thank you — your note has reached us. We'll reply within two business days.</p>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  addQuotation({ name, email, variety, quantity, message });
+                  setSent(true);
+                  addToast("Quotation request sent");
+                }}
+              >
+                <input aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={120} required />
+                <input aria-label="Email" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" maxLength={254} required />
+                <select aria-label="Variety of interest" value={variety} onChange={(e) => setVariety(e.target.value)} required>
+                  <option value="" disabled>Variety of interest</option>
+                  <option>Premium</option>
+                  <option>Everyday</option>
+                  <option>Not sure yet</option>
+                </select>
+                <input aria-label="Estimated quantity" placeholder="Estimated quantity (e.g. 40kg/month)" value={quantity} onChange={(e) => setQuantity(e.target.value)} maxLength={60} />
+                <textarea aria-label="Message" placeholder="Tell us what you're looking for" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} maxLength={1000} />
+                <button className="btn-primary full" type="submit">Send request</button>
+                <p className="hint" style={{ color: "var(--steam)", opacity: 0.8 }}>
+                  {user ? "Signed in — we'll route this straight to our trade team." : "Already work with us as a roaster? Sign in and this goes straight to your account rep."}
+                </p>
+              </form>
+            )
           )}
         </div>
       </div>
       <div className="footer-legal">
         <p className="copyright">© {new Date().getFullYear()} Morning Aroma. Roasted with care, everywhere.</p>
-        <div className="footer-legal-links">
-          <a href={pathFor("privacy")} onClick={(e) => { e.preventDefault(); go("privacy"); }}>Privacy Policy</a>
-          <span aria-hidden="true">·</span>
-          <a href={pathFor("terms")} onClick={(e) => { e.preventDefault(); go("terms"); }}>Terms of Service</a>
-        </div>
       </div>
     </footer>
   );
