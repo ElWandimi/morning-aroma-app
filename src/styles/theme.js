@@ -78,28 +78,44 @@ a { color: inherit; text-decoration: none; }
 .nav-dropdown-panel a { display: block; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; color: var(--espresso); }
 .nav-dropdown-panel a:hover { background: var(--steam); }
 .nav-dropdown-panel a.nav-dropdown-panel-link::after { content: none; }
+/* The profile dropdown's "Sign out" is a real <button> (it triggers an action, not navigation),
+   so it isn't reached by the anchor-scoped rule above -- shared with .nav-dropdown-panel-link so a
+   button item in any dropdown panel gets the identical block/padding/hover treatment its sibling
+   <a> items already have, rather than only working for links. */
+.nav-dropdown-panel button.nav-dropdown-panel-link {
+  display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+  padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; font-family: inherit; color: var(--espresso);
+}
+.nav-dropdown-panel button.nav-dropdown-panel-link:hover { background: var(--steam); }
 .nav-actions { display: flex; align-items: center; gap: 14px; }
 .hamburger { background: none; border: none; font-size: 1.3rem; cursor: pointer; }
 .nav-mobile { display: flex; flex-direction: column; padding: 12px 24px 18px; gap: 10px; font-weight: 600; }
 /* Overrides link-btn's small, underlined, inline-link styling (built for sitting next to text in
-   the desktop user-chip) so this reads as a normal item in the mobile menu's vertical list,
-   consistent with its sibling <a> links rather than looking like a stray inline link. */
+   the mobile menu's vertical list) so this reads as a normal item, consistent with its sibling
+   <a> links rather than looking like a stray inline link. */
 .nav-mobile-signout { text-align: left; text-decoration: none; margin-left: 0; font-size: inherit; font-weight: inherit; color: inherit; padding: 0; }
-.user-chip { display: flex; align-items: center; gap: 4px; font-size: 0.85rem; font-weight: 700; }
-.user-chip .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; }
-.user-chip .role { color: var(--almond-text); font-weight: 600; }
+/* "My Profile" dropdown -- replaces the old flat sequence of a status dot, name, role text, and a
+   separate Sign out link/button all sitting inline in the header. One trigger (name + caret,
+   matching the Explore dropdown's own look) opens a panel with the role, the Journey link, and
+   Sign out, instead of five separate elements competing for space next to the cart/search icons. */
+.profile-trigger { display: inline-flex; align-items: center; gap: 6px; }
+.profile-trigger .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.profile-panel { min-width: 220px; }
+.profile-panel-role { font-size: 0.78rem; color: var(--almond-text); font-weight: 700; padding: 6px 12px 8px; margin: 0; border-bottom: 1px solid var(--gold); margin-bottom: 4px; }
+.profile-panel .profile-signout { color: #a8433f; }
+.profile-panel .profile-signout:hover { background: #fdf0ea; }
 @media (min-width: 900px) { .nav-links { display: flex; } .nav-mobile { display: none; } .hamburger { display: none; } }
 @media (max-width: 480px) {
   .nav-inner { padding: 12px 14px; }
   .nav-actions { gap: 6px; }
   .admin-btn { display: none; } /* still reachable via the hamburger menu's "Admin Dashboard" link */
-  /* Whole chip hidden, not just the role badge -- a real Playwright trace at this exact width
-     (390px, iPhone 13) showed the user-chip's "Sign out" button physically intercepting clicks
-     meant for the hamburger next to it: 6 icon buttons, the user's name, Sign out, and the
-     hamburger all crowded into one row with no wrapping was a real, not hypothetical, mobile
-     usability bug -- a signed-in visitor on a real narrow phone would hit the same problem.
-     "My Aroma Journey" and "Sign out" are both reachable via the hamburger menu instead. */
-  .user-chip { display: none; }
+  /* Whole trigger hidden, not just its role text -- a real Playwright trace at this exact width
+     (390px, iPhone 13) showed .nav-actions overflowing the viewport by ~27px with the profile
+     dropdown trigger present, pushing the hamburger button almost entirely off-screen. Same
+     reasoning as the .user-chip rule this replaced: "My Aroma Journey" and "Sign out" are both
+     already reachable via the hamburger menu instead, so hiding the desktop-style trigger here
+     loses nothing, not even for a super_admin (Admin Dashboard is in that same menu). */
+  .profile-dropdown { display: none; }
   .brand-name { font-size: 1.05rem; }
   .brand-mark-img { height: 36px; }
   .cart-btn { min-width: 40px; min-height: 40px; font-size: 1.15rem; }
@@ -686,7 +702,15 @@ a { color: inherit; text-decoration: none; }
 .feedback-thanks { text-align: center; padding: 10px 0; }
 
 /* aroma quiz */
-.quiz-page { max-width: 600px; margin: 0 auto; padding: 60px 24px 90px; }
+/* This page is inherently one small question card at a time -- padding it out with more content
+   beside the card would work against the focused, one-decision-at-a-time flow a quiz needs. The
+   real problem instead was that a plain cream page with 90px of empty bottom padding and nothing
+   else on it read as unfinished, not intentional, at any real desktop width -- a warm gradient
+   wash (the same device already used for Home's flatter sections) gives the empty space its own
+   presence instead of looking like a gap, and the vertical padding is trimmed so the card doesn't
+   sit quite so adrift in the middle of the viewport. */
+.quiz-page { max-width: 600px; margin: 0 auto; padding: 40px 24px 60px; position: relative; z-index: 1; }
+.quiz-page-wrap { min-height: calc(100vh - 200px); background: linear-gradient(180deg, var(--steam) 0%, var(--cream) 70%); }
 .quiz-progress { display: flex; justify-content: center; gap: 8px; margin-bottom: 24px; }
 .quiz-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
 .quiz-dot.active { background: var(--chestnut); }

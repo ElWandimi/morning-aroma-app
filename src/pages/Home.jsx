@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { Glass, PhotoMarquee, Steam, WaveDivider } from "../components";
+import { Glass, PhotoMarquee, WaveDivider } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
 import { COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
@@ -22,7 +22,6 @@ export function Hero() {
         <source src="/video/hero-coffee.mp4" type="video/mp4" />
       </video>
       <div className="hero-overlay" />
-      <Steam className="hero-steam" />
       <div className="hero-content">
         <p className="handwritten hero-eyebrow">a note from the roastery —</p>
         <h1 className="hero-title">

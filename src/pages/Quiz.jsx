@@ -27,8 +27,10 @@ export function QuizPage() {
     // crash into the error boundary.
     if (realProductsLoading) {
       return (
-        <div className="quiz-page">
-          <p className="hint" style={{ padding: 80, textAlign: "center" }}>Finding your match…</p>
+        <div className="quiz-page-wrap">
+          <div className="quiz-page">
+            <p className="hint" style={{ padding: 80, textAlign: "center" }}>Finding your match…</p>
+          </div>
         </div>
       );
     }
@@ -44,28 +46,32 @@ export function QuizPage() {
 
     if (!best) {
       return (
-        <div className="quiz-page">
-          <div className="empty-state" style={{ padding: 80 }}>
-            <p>{realProductsError ? "Couldn't load the catalog to match you with a variety." : "No varieties are available to match right now."}</p>
-            <button className="btn-outline small" onClick={refetchRealProducts}>Try again</button>
-            <button className="link-btn" style={{ marginTop: 16 }} onClick={restart}>Take the quiz again</button>
+        <div className="quiz-page-wrap">
+          <div className="quiz-page">
+            <div className="empty-state" style={{ padding: 80 }}>
+              <p>{realProductsError ? "Couldn't load the catalog to match you with a variety." : "No varieties are available to match right now."}</p>
+              <button className="btn-outline small" onClick={refetchRealProducts}>Try again</button>
+              <button className="link-btn" style={{ marginTop: 16 }} onClick={restart}>Take the quiz again</button>
+            </div>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="quiz-page">
-        <div className="quiz-result">
-          <p className="eyebrow gold">your match</p>
-          <h1>{best.name} — {best.country}</h1>
-          <p className="handwritten product-note">{best.note}</p>
-          <p className="quiz-copy">Matched to how you like to feel, the body and acidity you're after, and when you'll actually drink it.</p>
-          <div className="quiz-result-actions">
-            <button className="btn-primary" onClick={() => go("product", { id: best.id })}>View this variety</button>
-            <button className="btn-outline" onClick={() => add(best.id)}>Add to cart</button>
+      <div className="quiz-page-wrap">
+        <div className="quiz-page">
+          <div className="quiz-result">
+            <p className="eyebrow gold">your match</p>
+            <h1>{best.name} — {best.country}</h1>
+            <p className="handwritten product-note">{best.note}</p>
+            <p className="quiz-copy">Matched to how you like to feel, the body and acidity you're after, and when you'll actually drink it.</p>
+            <div className="quiz-result-actions">
+              <button className="btn-primary" onClick={() => go("product", { id: best.id })}>View this variety</button>
+              <button className="btn-outline" onClick={() => add(best.id)}>Add to cart</button>
+            </div>
+            <button className="link-btn" style={{ marginTop: 16 }} onClick={restart}>Take the quiz again</button>
           </div>
-          <button className="link-btn" style={{ marginTop: 16 }} onClick={restart}>Take the quiz again</button>
         </div>
       </div>
     );
@@ -73,21 +79,23 @@ export function QuizPage() {
 
   const q = QUIZ_QUESTIONS[step];
   return (
-    <div className="quiz-page">
-      <div className="quiz-progress">
-        {QUIZ_QUESTIONS.map((_, i) => (
-          <span key={i} className={`quiz-dot ${i <= step ? "active" : ""}`} />
-        ))}
-      </div>
-      <Glass className="quiz-question-panel">
-        <p className="eyebrow">question {step + 1} of {QUIZ_QUESTIONS.length}</p>
-        <h2>{q.prompt}</h2>
-        <div className="quiz-options">
-          {q.options.map((opt) => (
-            <button key={opt.label} className="quiz-option" onClick={() => pick(opt)}>{opt.label}</button>
+    <div className="quiz-page-wrap">
+      <div className="quiz-page">
+        <div className="quiz-progress">
+          {QUIZ_QUESTIONS.map((_, i) => (
+            <span key={i} className={`quiz-dot ${i <= step ? "active" : ""}`} />
           ))}
         </div>
-      </Glass>
+        <Glass className="quiz-question-panel">
+          <p className="eyebrow">question {step + 1} of {QUIZ_QUESTIONS.length}</p>
+          <h2>{q.prompt}</h2>
+          <div className="quiz-options">
+            {q.options.map((opt) => (
+              <button key={opt.label} className="quiz-option" onClick={() => pick(opt)}>{opt.label}</button>
+            ))}
+          </div>
+        </Glass>
+      </div>
     </div>
   );
 }

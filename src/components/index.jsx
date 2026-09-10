@@ -1052,6 +1052,10 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
   const exploreRef = useRef(null);
   useEscapeKey(exploreOpen, () => setExploreOpen(false));
   useClickOutside(exploreRef, exploreOpen, () => setExploreOpen(false));
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef(null);
+  useEscapeKey(profileOpen, () => setProfileOpen(false));
+  useClickOutside(profileRef, profileOpen, () => setProfileOpen(false));
   return (
     <header className="nav">
       <div className="nav-inner">
@@ -1110,13 +1114,45 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
           <button className="cart-btn" onClick={() => setCartOpen(true)} aria-label="Open cart">
             🛍️{count > 0 && <span className="cart-badge">{count}</span>}
           </button>
+          {/* The admin button, green status dot, name, role text, and Sign out used to all sit
+              flat and inline here -- five separate elements competing for space next to the
+              cart/wishlist/search icons, the exact clutter a mobile-width version of this row was
+              already found and fixed for (see the .user-chip display:none rule below, from a real
+              Playwright trace showing Sign out intercepting clicks meant for the hamburger). This
+              consolidates all of it into one "My Profile" dropdown, the same pattern already used
+              for the nav's Explore group -- one clean trigger instead of a long flat sequence. */}
           {user?.role === "super_admin" || user?.role === "staff" ? (
             <button className="btn-outline admin-btn" onClick={() => go("admin")}>Admin</button>
           ) : null}
           {user ? (
-            <div className="user-chip">
-              <span className="dot" /> <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); }}>{user.name}</a> <span className="role">· {user.role.replace("_", " ")}</span>
-              <button className="link-btn" onClick={logout}>Sign out</button>
+            <div className="nav-dropdown profile-dropdown" ref={profileRef}>
+              <button
+                type="button"
+                className="profile-trigger"
+                aria-haspopup="menu"
+                aria-expanded={profileOpen}
+                onClick={() => setProfileOpen((v) => !v)}
+              >
+                <span className="dot" aria-hidden="true" />
+                {user.name}
+                <span className="nav-dropdown-caret" aria-hidden="true">▾</span>
+              </button>
+              {profileOpen && (
+                <div className="nav-dropdown-panel profile-panel" role="menu" aria-label="My Profile">
+                  <p className="profile-panel-role">Signed in as {user.name} · {user.role.replace("_", " ")}</p>
+                  <a
+                    role="menuitem"
+                    className="nav-dropdown-panel-link"
+                    href={pathFor("journey")}
+                    onClick={(e) => { e.preventDefault(); setProfileOpen(false); go("journey"); }}
+                  >
+                    My Aroma Journey
+                  </a>
+                  <button type="button" role="menuitem" className="nav-dropdown-panel-link profile-signout" onClick={() => { setProfileOpen(false); logout(); }}>
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           ) : sessionLoading ? (
             <span className="nav-session-check" aria-hidden="true" />
