@@ -47,6 +47,11 @@ export function PremiumTier() {
   const { getPrice, getAllProducts } = useAdmin();
   const { format } = useCurrency();
   const premiumProducts = getAllProducts().filter((p) => p.tier === "premium");
+  // Same reasoning as EverydayTier below: premium-tier products come from the live, admin-editable
+  // catalog, not static data -- if every one is ever discontinued or briefly unset, rendering the
+  // section's own dark photo background and heading around an empty scroll row would look like a
+  // real bug rather than a quiet moment, so nothing to show means the section doesn't render.
+  if (premiumProducts.length === 0) return null;
   return (
     <section className="premium">
       <div className="section-head dark">
@@ -152,6 +157,45 @@ export function MomentsSnapshot() {
   );
 }
 
+export function AcademyTeaser() {
+  const { go } = useRoute();
+  const { getAllCourses, realCoursesLoading } = useAdmin();
+  const { format } = useCurrency();
+  // Three courses, not the whole catalog -- this is a teaser pointing at Academy, not a second
+  // catalog page. Picks the first three the admin-managed list returns, so it always reflects
+  // real, current courses rather than a hardcoded set of ids that would silently go stale (or
+  // break entirely) the day one of those specific courses is renamed or discontinued.
+  const featured = getAllCourses().slice(0, 3);
+  // Same convention as EverydayTier/PremiumTier above: nothing real to feature means the section
+  // doesn't render, rather than showing an empty teaser for a catalog that doesn't exist yet.
+  if (realCoursesLoading || featured.length === 0) return null;
+  return (
+    <section className="academy-teaser">
+      <div className="section-head">
+        <h2>You Might Be Interested in Our Academy</h2>
+        <p className="section-sub">Real courses on brewing, tasting, and roasting — taught by people who do this for a living, not just write about it.</p>
+      </div>
+      <div className="course-grid">
+        {featured.map((c) => (
+          <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("course", { id: c.id }))} role="link" tabIndex={0}>
+            <p className="eyebrow">{c.category}</p>
+            <h3>{c.name}</h3>
+            <p>{c.blurb}</p>
+            <div className="course-meta">
+              <span>{c.lessons} lessons</span>
+              <span>{c.instructor}</span>
+            </div>
+            <p className="course-price">{format(c.monthlyPriceCents)}/mo</p>
+          </div>
+        ))}
+      </div>
+      <div className="academy-teaser-cta">
+        <button className="btn-outline" onClick={() => go("academy")}>See All Courses</button>
+      </div>
+    </section>
+  );
+}
+
 export function SourceTrust() {
   const items = [
     { t: "Traceable", d: "Every bag names its farm." },
@@ -214,6 +258,7 @@ export function HomePage() {
       <QuizPanel />
       <EverydayTier />
       <MomentsSnapshot />
+      <AcademyTeaser />
       <SourceTrust />
       <SeasonalBanner />
     </>

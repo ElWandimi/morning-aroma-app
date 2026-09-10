@@ -62,7 +62,22 @@ a { color: inherit; text-decoration: none; }
 .brand-mark-img { height: 46px; width: auto; display: block; }
 .brand-name { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 1.3rem; color: var(--chestnut); }
 .brand-name.light { color: var(--cream); }
-.nav-links { display: none; gap: 22px; flex-wrap: wrap; row-gap: 6px; font-weight: 600; font-size: 0.92rem; }
+.nav-links { display: none; gap: 22px; flex-wrap: wrap; row-gap: 6px; font-weight: 600; font-size: 0.92rem; align-items: center; }
+.nav-dropdown { position: relative; }
+.nav-dropdown-trigger { background: none; border: none; font-family: inherit; font-weight: 600; font-size: 0.92rem; color: inherit; cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 4px; position: relative; }
+.nav-dropdown-caret { font-size: 0.7rem; transition: transform .15s ease; }
+.nav-dropdown-trigger[aria-expanded="true"] .nav-dropdown-caret { transform: rotate(180deg); }
+.nav-dropdown-trigger::after { content: ''; position: absolute; left: 50%; right: 50%; bottom: -4px; height: 2px; background: var(--chestnut); transition: left .25s var(--spring), right .25s var(--spring); }
+.nav-dropdown-trigger:hover::after, .nav-dropdown-trigger[aria-expanded="true"]::after { left: 0; right: 0; }
+.nav-dropdown-panel {
+  position: absolute; top: calc(100% + 14px); left: 50%; transform: translateX(-50%); z-index: 70;
+  background: var(--cream); border: 1px solid var(--gold); border-radius: 12px; padding: 8px;
+  box-shadow: 0 12px 30px rgba(62,44,35,0.18); min-width: 180px; display: flex; flex-direction: column; gap: 2px;
+  animation: toastIn .2s ease;
+}
+.nav-dropdown-panel a { display: block; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; color: var(--espresso); }
+.nav-dropdown-panel a:hover { background: var(--steam); }
+.nav-dropdown-panel a.nav-dropdown-panel-link::after { content: none; }
 .nav-actions { display: flex; align-items: center; gap: 14px; }
 .hamburger { background: none; border: none; font-size: 1.3rem; cursor: pointer; }
 .nav-mobile { display: flex; flex-direction: column; padding: 12px 24px 18px; gap: 10px; font-weight: 600; }
@@ -174,6 +189,18 @@ a { color: inherit; text-decoration: none; }
 .moment-icon { font-size: 2rem; }
 .moment-card h4 { margin: 10px 0 6px; }
 .moment-card a { font-weight: 700; color: var(--chestnut); }
+
+/* academy teaser -- picks up the .course-card styling Academy's own catalog page already uses
+   (reveal-on-scroll, alternating tilt, hover lift), so a course looks the same whether it's
+   being introduced here or browsed properly on /academy, rather than inventing a second card
+   style for the same content. A plain var(--steam) background here would read as a continuation
+   of MomentsSnapshot right above it (nearly the same warm tone, no visible seam) -- the gold top
+   border plus a distinct cream base gives this its own clear edge without adding a third photo
+   treatment to the page. */
+.academy-teaser { padding: 70px 24px; background: var(--cream); border-top: 1px solid var(--gold); }
+.academy-teaser .section-head { text-align: center; }
+.academy-teaser .section-sub { margin-left: auto; margin-right: auto; }
+.academy-teaser-cta { text-align: center; margin-top: 36px; }
 
 /* trust */
 .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 20px; max-width: 900px; margin: 0 auto; padding: 30px 24px 60px; text-align: center; }

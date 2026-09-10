@@ -1026,18 +1026,32 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
   // Coordinates the currency and language dropdowns so opening one closes the other, rather than
   // each managing an independent open/closed boolean with no awareness of its sibling.
   const [openDropdown, setOpenDropdown] = useState(null); // null | "currency" | "language"
+  // 10 flat top-level links didn't fit on one row between the mobile breakpoint (900px) and
+  // roughly 1050px -- "Our Promise" alone wrapped onto its own second line, and even where all
+  // 10 did fit, that's a lot of undifferentiated text to scan in one row. Shop, Academy, and Our
+  // Services are each a distinct thing someone comes here to do (buy, learn a course, book a
+  // service) and stay standalone; the remaining content/story pages group under one "Explore"
+  // dropdown, cutting the top-level row to 4 items. The mobile menu is a vertical list with no
+  // crowding problem, so it keeps showing every page flat -- only the desktop row groups them.
   const links = [
     { label: "Shop", page: "shop" },
+    { label: "Academy", page: "academy" },
+    { label: "Our Services", page: "services" },
+  ];
+  const exploreLinks = [
     { label: "Moments", page: "moments" },
     { label: "Brew Guides", page: "brewguides" },
-    { label: "Academy", page: "academy" },
     { label: "Growing", page: "growing" },
     { label: "World Journey", page: "worldjourney" },
-    { label: "Our Services", page: "services" },
     { label: "Green Coffee", page: "greenbeans" },
     { label: "History", page: "history" },
     { label: "Our Promise", page: "promise" },
   ];
+  const allLinksForMobile = [...links, ...exploreLinks];
+  const [exploreOpen, setExploreOpen] = useState(false);
+  const exploreRef = useRef(null);
+  useEscapeKey(exploreOpen, () => setExploreOpen(false));
+  useClickOutside(exploreRef, exploreOpen, () => setExploreOpen(false));
   return (
     <header className="nav">
       <div className="nav-inner">
@@ -1049,6 +1063,32 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
           {links.map((l) => (
             <a key={l.label} href={pathFor(l.page)} onClick={(e) => { e.preventDefault(); go(l.page); }}>{l.label}</a>
           ))}
+          <div className="nav-dropdown" ref={exploreRef}>
+            <button
+              type="button"
+              className="nav-dropdown-trigger"
+              aria-haspopup="menu"
+              aria-expanded={exploreOpen}
+              onClick={() => setExploreOpen((v) => !v)}
+            >
+              Explore <span className="nav-dropdown-caret" aria-hidden="true">▾</span>
+            </button>
+            {exploreOpen && (
+              <div className="nav-dropdown-panel" role="menu" aria-label="Explore">
+                {exploreLinks.map((l) => (
+                  <a
+                    key={l.label}
+                    role="menuitem"
+                    className="nav-dropdown-panel-link"
+                    href={pathFor(l.page)}
+                    onClick={(e) => { e.preventDefault(); setExploreOpen(false); go(l.page); }}
+                  >
+                    {l.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
         <div className="nav-actions">
           <CurrencySwitcher
@@ -1090,7 +1130,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
         <div className="nav-mobile">
           {user && <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); setOpen(false); }}>My Aroma Journey</a>}
           {(user?.role === "super_admin" || user?.role === "staff") && <a href={pathFor("admin")} onClick={(e) => { e.preventDefault(); go("admin"); setOpen(false); }}>Admin Dashboard</a>}
-          {links.map((l) => (
+          {allLinksForMobile.map((l) => (
             <a key={l.label} href={pathFor(l.page)} onClick={(e) => { e.preventDefault(); go(l.page); setOpen(false); }}>{l.label}</a>
           ))}
           {user && <button className="link-btn nav-mobile-signout" onClick={() => { logout(); setOpen(false); }}>Sign out</button>}
