@@ -1259,6 +1259,32 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real, backend-persisted newsletter subscribers -- same public/anonymous submission and
+  // admin-gated list pattern as feedback above, not client-only state (a subscriber who typed
+  // their email into the footer form genuinely needs it to survive their next page load).
+  const addNewsletterSubscriber = async (s) => {
+    try {
+      const { subscriber } = await api.subscribeNewsletter(s);
+      return { ok: true, subscriber };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const [newsletterSubscribers, setNewsletterSubscribers] = useState([]);
+  const [newsletterSubscribersLoading, setNewsletterSubscribersLoading] = useState(true);
+  const refetchNewsletterSubscribers = () => {
+    if (!token) { setNewsletterSubscribersLoading(false); return; }
+    setNewsletterSubscribersLoading(true);
+    api.getNewsletterSubscribers(token)
+      .then((body) => setNewsletterSubscribers(pluck(body, "subscribers", { array: true })))
+      .catch(() => {})
+      .finally(() => setNewsletterSubscribersLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchNewsletterSubscribers();
+    else setNewsletterSubscribersLoading(false);
+  }, [token, user && user.role]);
+
   const getMomentContent = (m) => ({ ...m, ...(momentOverrides[m.id] || {}) });
   const setMomentContent = (id, patch) => {
     setMomentOverrides((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
@@ -1340,6 +1366,7 @@ export function AdminDataProvider({ children }) {
         serviceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
         liveChats, startChat, sendChatMessage, updateChatStatus,
         feedbackList, addFeedback, toggleFeedbackReviewed,
+        newsletterSubscribers, newsletterSubscribersLoading, addNewsletterSubscriber, refetchNewsletterSubscribers,
         getMomentContent, setMomentContent, momentOverrides,
         getCourseContent, setCourseContent, courseOverrides,
         getCountryHistory, setCountryHistory,

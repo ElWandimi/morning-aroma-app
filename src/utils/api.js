@@ -113,6 +113,10 @@ export const api = {
     request("/feedback", { headers: { Authorization: `Bearer ${token}` } }),
   setFeedbackReviewed: (token, id, reviewed) =>
     request(`/feedback/${id}/reviewed`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reviewed }) }),
+  subscribeNewsletter: (subscriber) =>
+    request("/newsletter", { method: "POST", body: JSON.stringify(subscriber) }),
+  getNewsletterSubscribers: (token) =>
+    request("/newsletter", { headers: { Authorization: `Bearer ${token}` } }),
   getCourses: () => request("/courses"),
   createCourse: (token, course) =>
     request("/courses", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(course) }),

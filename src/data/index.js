@@ -926,7 +926,7 @@ export const GROWING_PATHS = ["Variety", "Country", "Growing Factor"];
 
 export const CHECKOUT_STEPS = ["Review", "Sign in", "Shipping", "Payment", "Done"];
 
-export const ADMIN_SECTIONS = ["Overview", "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content", "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Live Messages", "Audit Log", "Settings"];
+export const ADMIN_SECTIONS = ["Overview", "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content", "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Newsletter", "Live Messages", "Audit Log", "Settings"];
 
 // Real path-based routing map (e.g. /shop or /shop/geisha-panama) -- requires a real server for
 // every environment that serves this app (a real SPA-fallback server in production, and Vite's

@@ -31,9 +31,25 @@ a { color: inherit; text-decoration: none; }
 }
 .hero-overlay {
   position: absolute; inset: 0;
+  /* The existing top-to-bottom fade (0.6 at the very top, down to 0.35 through the middle) put
+     its darkest band above the headline, not behind it -- measured the actual text position
+     (hero-title sits roughly 35-55% down the hero) against the gradient's own stops and confirmed
+     the headline was rendering in the lighter ~0.35 zone, relying entirely on its own text-shadow
+     for contrast. This adds a radial darken centered on the text block itself (50% 45%, matching
+     where the eyebrow-through-subhead content actually sits), layered on top of the original
+     linear fade rather than replacing it, so the effect stays local to the text -- the corners
+     and edges of the frame keep their original brightness instead of the whole image going darker. */
   background-image:
-    linear-gradient(180deg, rgba(20,13,9,0.6) 0%, rgba(20,13,9,0.35) 45%, rgba(253,248,240,0.94) 92%),
+    radial-gradient(ellipse 600px 420px at 50% 45%, rgba(20,13,9,0.42) 0%, rgba(20,13,9,0.12) 60%, transparent 100%),
+    linear-gradient(180deg, rgba(20,13,9,0.5) 0%, rgba(20,13,9,0.28) 45%, rgba(253,248,240,0.94) 92%),
     radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
+}
+@media (max-width: 700px) {
+  .hero-overlay { background-image:
+    radial-gradient(ellipse 90vw 360px at 50% 45%, rgba(20,13,9,0.45) 0%, rgba(20,13,9,0.15) 60%, transparent 100%),
+    linear-gradient(180deg, rgba(20,13,9,0.5) 0%, rgba(20,13,9,0.28) 45%, rgba(253,248,240,0.94) 92%),
+    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
+  }
 }
 @media (prefers-reduced-motion: reduce) { .hero-video { display: none; } .hero { background: #14100d center/cover url('/video/hero-poster.jpg'); } }
 
@@ -59,6 +75,13 @@ a { color: inherit; text-decoration: none; }
 .nav { position: sticky; top: 0; z-index: 40; background: rgba(253,248,240,0.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--gold); }
 .nav-inner { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; row-gap: 8px; align-items: center; justify-content: space-between; padding: 14px 24px; }
 .brand { display: flex; align-items: center; gap: 8px; }
+/* The logo is a <div role="link" tabIndex={0}>, genuinely keyboard-focusable -- browsers apply
+   their own default blue focus outline to any focusable element with nothing overriding it,
+   which is the visible box reported in production. Removes that default and replaces it with a
+   real, visible focus ring (same pattern already used for .country-select-trigger and the
+   login form's inputs elsewhere in this file) rather than just deleting focus indication
+   outright, which would be a real accessibility regression for keyboard users. */
+.brand:focus-visible { outline: none; border-radius: 8px; box-shadow: 0 0 0 3px rgba(139,90,58,0.3); }
 .brand-mark-img { height: 46px; width: auto; display: block; }
 .brand-name { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 1.3rem; color: var(--chestnut); }
 .brand-name.light { color: var(--cream); }
@@ -184,7 +207,21 @@ a { color: inherit; text-decoration: none; }
 }
 .premium-card { scroll-snap-align: start; min-width: 240px; background: rgba(255,255,255,0.08); backdrop-filter: blur(6px); border: 1px solid rgba(232,213,181,0.25); border-radius: 14px; padding: 16px; color: var(--cream); transition: transform .2s ease, background .2s ease; }
 .premium-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.13); }
-.premium-photo { height: 120px; border-radius: 10px; margin-bottom: 12px; background: linear-gradient(135deg, var(--chestnut), var(--espresso)); background-size: contain; background-repeat: no-repeat; background-position: center; }
+/* Every card previously shared the exact same translucent-white background, making distinct
+   origins read as visually repetitive despite genuinely different copy. Three subtle tints cycle
+   by card position, built from the site's own existing tokens (gold/terracotta/green -- already
+   used elsewhere on this page, not new colors) rather than an arbitrary per-country hash, so the
+   result stays clearly "on brand" instead of risking a clash. Barely-there (6-8% opacity) so the
+   glass-card look and photo/price/button layout are unchanged -- confirmed each is still legible
+   against the dark .premium section background. */
+.premium-card.accent-a { background: rgba(232,213,181,0.10); }
+.premium-card.accent-a:hover { background: rgba(232,213,181,0.16); }
+.premium-card.accent-b { background: rgba(200,130,99,0.08); }
+.premium-card.accent-b:hover { background: rgba(200,130,99,0.14); }
+.premium-card.accent-c { background: rgba(107,123,80,0.08); }
+.premium-card.accent-c:hover { background: rgba(107,123,80,0.14); }
+.premium-photo { position: relative; height: 120px; border-radius: 10px; margin-bottom: 12px; background: linear-gradient(135deg, var(--chestnut), var(--espresso)); background-size: contain; background-repeat: no-repeat; background-position: center; }
+.premium-flag { position: absolute; top: 8px; right: 8px; font-size: 1.3rem; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
 .premium-card h3 { color: var(--gold); font-size: 1.2rem; }
 .premium-card .note { color: var(--steam); font-size: 1.1rem; margin: 6px 0 14px; }
 .premium-foot { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
@@ -239,10 +276,28 @@ a { color: inherit; text-decoration: none; }
 .academy-teaser .section-sub { margin-left: auto; margin-right: auto; }
 .academy-teaser-cta { text-align: center; margin-top: 36px; }
 
+/* social proof -- reuses .review-card's real bordered-card treatment (already used for genuine
+   product-page reviews) rather than a new style, since these are the same kind of real customer
+   feedback, just surfaced here. Section itself only ever renders when real written reviews exist
+   (see the loading/empty guard in the component) -- no placeholder card, no invented count. */
+.social-proof { padding: 70px 24px; background: var(--steam); }
+.social-proof .section-head { text-align: center; }
+.social-proof .section-sub { margin-left: auto; margin-right: auto; }
+.social-proof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap: 20px; max-width: 1100px; margin: 30px auto 0; }
+.social-proof-card { background: white; border: 1px solid var(--gold); border-radius: 12px; padding: 20px; }
+.social-proof-beans { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+.social-proof-note { margin: 0 0 10px; font-style: italic; color: var(--espresso); line-height: 1.55; }
+.social-proof-attribution { margin: 0; font-size: 0.82rem; color: var(--almond-text); font-weight: 700; }
+
 /* trust */
 .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 20px; max-width: 900px; margin: 0 auto; padding: 30px 24px 60px; text-align: center; }
 .trust-col h4 { color: var(--chestnut); }
 .trust-col p { font-size: 0.9rem; color: #6b5647; }
+/* Thin, single-row strip directly under the hero -- deliberately minimal (no cards, no borders,
+   no background of its own beyond the plain cream page) so it reads as a quiet confirmation line,
+   not a second content section competing with the hero above it. */
+.trust-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; padding: 16px 24px; max-width: 1100px; margin: 0 auto; }
+.trust-bar-item { font-size: 0.82rem; font-weight: 600; color: var(--almond-text); white-space: nowrap; }
 
 /* seasonal */
 .seasonal {
@@ -269,15 +324,18 @@ a { color: inherit; text-decoration: none; }
 .footer-form form { display: flex; flex-direction: column; gap: 8px; }
 .footer-form input, .footer-form select, .footer-form textarea { padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(232,213,181,0.3); background: rgba(255,255,255,0.06); color: var(--cream); font-family: inherit; }
 .form-success { color: var(--gold); font-size: 0.9rem; }
-/* The quotation form used to always render in full (5 fields) in every page's footer -- this is
-   the only place addQuotation is ever called (the admin dashboard's "Quotation requests" section
-   depends on it), so the capability had to stay, but the height it was flagged for only needs to
-   exist once someone actually wants to request one. */
-.footer-quote-toggle { margin-top: 4px; }
 .footer-contact-hint { line-height: 1.6; margin-bottom: 8px; }
 .footer-contact-hint .link-btn { color: var(--gold); margin-left: 0; text-decoration: underline; }
 .footer-email { display: block; font-size: 0.9rem; opacity: 0.85; margin-bottom: 14px; }
 .footer-email:hover { opacity: 1; }
+/* Real newsletter signup -- addNewsletterSubscriber genuinely persists the email (see
+   server/migrations/021_newsletter.sql), replacing the old wholesale-quotation form this slot
+   used to hold (moved to its own section on Services). One field, one line of incentive copy,
+   deliberately small so it doesn't reintroduce the height this footer was already cut down for. */
+.footer-newsletter-label { display: block; margin-bottom: 8px; }
+.footer-newsletter-row { display: flex; gap: 8px; }
+.footer-newsletter-row input { flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(232,213,181,0.3); background: rgba(255,255,255,0.06); color: var(--cream); font-family: inherit; min-width: 0; }
+.footer-newsletter-row input::placeholder { color: rgba(253,248,240,0.4); }
 /* Real Privacy/Terms links moved into the brand column -- it used to be the one column with real
    empty space below the tagline whenever a site hadn't set social handles yet (confirmed: this
    dev instance has neither set), and folding the legal links up here both fills that gap and
@@ -1119,6 +1177,11 @@ a { color: inherit; text-decoration: none; }
 .process-card p { font-size: 0.88rem; color: #6b5647; }
 
 .service-inquiry { background: var(--espresso); padding: 70px 24px; }
+/* Two .service-inquiry sections now sit back to back (Request a Consultation, then Wholesale &
+   Bulk Orders below it) -- same dark background and layout by design (genuinely the same kind of
+   section, just two different forms), but stacked with nothing between them they'd blend into
+   one block. A thin gold seam marks where one ends and the other begins. */
+.wholesale-inquiry { border-top: 1px solid rgba(232,213,181,0.15); }
 .service-inquiry-inner { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
 @media (max-width: 760px) { .service-inquiry-inner { grid-template-columns: 1fr; } }
 .service-inquiry h2 { color: var(--ivory); font-size: 2rem; }

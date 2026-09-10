@@ -6,7 +6,7 @@ import { useStructuredData } from "../hooks";
 export function OurServicesPage() {
   const { user } = useAuth();
   const { go } = useRoute();
-  const { addServiceInquiry } = useAdmin();
+  const { addServiceInquiry, addQuotation } = useAdmin();
   const { addToast } = useToast();
   const [sent, setSent] = useState(false);
   const [name, setName] = useState(user?.name || "");
@@ -15,6 +15,17 @@ export function OurServicesPage() {
   const [interest, setInterest] = useState("Remote Consulting");
   const [message, setMessage] = useState("");
   const [openFaqIdx, setOpenFaqIdx] = useState(null);
+  // The wholesale quotation form previously lived in the global footer (every page) as a
+  // collapsed button; this moves the actual page it opens onto here, its own dedicated section --
+  // a genuinely different intent from the consultation form above it (bulk/retail coffee orders,
+  // not roasting consulting or auction representation), so it gets its own state and its own
+  // addQuotation call rather than folding into the interest dropdown above.
+  const [quoteSent, setQuoteSent] = useState(false);
+  const [quoteName, setQuoteName] = useState(user?.name || "");
+  const [quoteEmail, setQuoteEmail] = useState(user?.email || "");
+  const [variety, setVariety] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [quoteMessage, setQuoteMessage] = useState("");
 
   // Real Service structured data -- the same pattern ProductPage and CoursePage already use,
   // previously missing here even though this page is exactly the kind of commercial-offering
@@ -144,6 +155,52 @@ export function OurServicesPage() {
                 <label htmlFor="svc-message">Tell us more</label>
                 <textarea id="svc-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={4} maxLength={1000} placeholder="What are you hoping to get out of this?" required />
                 <button className="btn-primary full" type="submit" style={{ marginTop: 14 }}>Send request</button>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="service-inquiry wholesale-inquiry">
+        <div className="service-inquiry-inner">
+          <div>
+            <p className="eyebrow">bulk &amp; retail orders</p>
+            <h2>Wholesale &amp; Bulk Orders</h2>
+            <p className="shop-sub" style={{ margin: "8px 0 0", maxWidth: 420 }}>
+              Roasting for a café, restaurant, or office? Tell us the variety and volume and we'll send a quotation — usually within two business days.
+            </p>
+          </div>
+          <div className="service-inquiry-form">
+            {quoteSent ? (
+              <p className="form-success">Thank you — your note has reached us. We'll reply within two business days.</p>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  addQuotation({ name: quoteName, email: quoteEmail, variety, quantity, message: quoteMessage });
+                  setQuoteSent(true);
+                  addToast("Quotation request sent");
+                }}
+              >
+                <label htmlFor="quote-name">Name</label>
+                <input id="quote-name" value={quoteName} onChange={(e) => setQuoteName(e.target.value)} autoComplete="name" maxLength={120} required />
+                <label htmlFor="quote-email">Email</label>
+                <input id="quote-email" type="email" value={quoteEmail} onChange={(e) => setQuoteEmail(e.target.value)} autoComplete="email" maxLength={254} required />
+                <label htmlFor="quote-variety">Variety of interest</label>
+                <select id="quote-variety" value={variety} onChange={(e) => setVariety(e.target.value)} required>
+                  <option value="" disabled>Variety of interest</option>
+                  <option>Premium</option>
+                  <option>Everyday</option>
+                  <option>Not sure yet</option>
+                </select>
+                <label htmlFor="quote-quantity">Estimated quantity</label>
+                <input id="quote-quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 40kg/month" maxLength={60} />
+                <label htmlFor="quote-message">Tell us what you're looking for</label>
+                <textarea id="quote-message" value={quoteMessage} onChange={(e) => setQuoteMessage(e.target.value)} rows={4} maxLength={1000} />
+                <button className="btn-primary full" type="submit" style={{ marginTop: 14 }}>Send request</button>
+                <p className="hint" style={{ marginTop: 10 }}>
+                  {user ? "Signed in — we'll route this straight to our trade team." : "Already work with us as a roaster? Sign in and this goes straight to your account rep."}
+                </p>
               </form>
             )}
           </div>

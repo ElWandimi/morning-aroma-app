@@ -1597,6 +1597,33 @@ export function AdminFeedback() {
   );
 }
 
+export function AdminNewsletter() {
+  const { newsletterSubscribers, newsletterSubscribersLoading } = useAdmin();
+
+  if (newsletterSubscribersLoading) return <p className="hint">Loading subscribers…</p>;
+
+  return (
+    <div>
+      <h3 className="matched-head">Newsletter subscribers ({newsletterSubscribers.length})</h3>
+      {newsletterSubscribers.length === 0 ? (
+        <p className="hint">No subscribers yet — they'll appear here from the footer signup form.</p>
+      ) : (
+        <div className="admin-table">
+          <div className="admin-row admin-header"><span>Email</span><span>Name</span><span>Source</span><span>Signed up</span></div>
+          {newsletterSubscribers.map((s) => (
+            <div key={s.id} className="admin-row">
+              <span>{s.email}</span>
+              <span>{s.name || "—"}</span>
+              <span>{s.source}</span>
+              <span>{s.date}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminLiveMessages() {
   const { kenyaMessages, addKenyaMessage, updateKenyaMessage, removeKenyaMessage } = useAdmin();
   const { addToast } = useToast();
@@ -2592,6 +2619,7 @@ export function AdminDashboard() {
         {section === "Green Orders" && <AdminGreenOrders />}
         {section === "Live Chat" && <AdminLiveChat />}
         {section === "Feedback" && <AdminFeedback />}
+        {section === "Newsletter" && <AdminNewsletter />}
         {section === "Live Messages" && <AdminLiveMessages />}
         {section === "Audit Log" && <AdminAuditLog />}
         {section === "Settings" && <AdminSettings />}

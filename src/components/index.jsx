@@ -1170,15 +1170,11 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
 export function Footer() {
   const { user } = useAuth();
   const { go } = useRoute();
-  const { addQuotation, settings } = useAdmin();
+  const { addNewsletterSubscriber, settings } = useAdmin();
   const { addToast } = useToast();
-  const [sent, setSent] = useState(false);
-  const [quoteFormOpen, setQuoteFormOpen] = useState(false);
-  const [name, setName] = useState(user?.name || "");
-  const [email, setEmail] = useState(user?.email || "");
-  const [variety, setVariety] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [message, setMessage] = useState("");
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterSent, setNewsletterSent] = useState(false);
+  const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
 
   return (
     <footer className="footer">
@@ -1232,46 +1228,52 @@ export function Footer() {
             Questions, press, or a coffee story to share? <button type="button" className="link-btn" onClick={() => go("contact")}>Contact us</button> — we read every message.
           </p>
           <a href={`mailto:${settings.contactEmail}`} className="footer-email">{settings.contactEmail}</a>
-          {/* The real wholesale-quotation form and its addQuotation call are unchanged below --
-              this is the only place in the app that creates a quotation the admin dashboard's
-              "Quotation requests" section tracks, so the capability itself had to stay. Collapsed
-              behind a button by default instead of always rendering 5 fields in every page's
-              footer -- the actual height cost this section was flagged for only exists once
-              someone genuinely wants to request a quotation, not on every page load. */}
-          {!quoteFormOpen && !sent && (
-            <button className="btn-outline light small footer-quote-toggle" onClick={() => setQuoteFormOpen(true)}>
-              Request a Quotation
-            </button>
-          )}
-          {quoteFormOpen && (
-            sent ? (
-              <p className="form-success">Thank you — your note has reached us. We'll reply within two business days.</p>
+          {/* Roasting for a café or restaurant? links to the real wholesale form -- now its own
+              section on the Services page (see OurServicesPage's "Wholesale & Bulk Orders"),
+              not squeezed into this footer as its primary CTA on a retail-facing homepage. */}
+          <p className="hint footer-contact-hint">
+            Roasting for a café or restaurant? <button type="button" className="link-btn" onClick={() => go("services")}>Request a wholesale quotation</button>.
+          </p>
+          {/* Real, backend-persisted newsletter capture (server/migrations/021_newsletter.sql +
+              server/src/routes/newsletter.js) -- addNewsletterSubscriber actually stores the
+              email, visible to admins in the dashboard's new Newsletter section, not a form that
+              only shows a "Thanks!" message with nowhere real for the address to go. */}
+          <form
+            className="footer-newsletter"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setNewsletterSubmitting(true);
+              const result = await addNewsletterSubscriber({ email: newsletterEmail, name: user?.name, source: "footer" });
+              setNewsletterSubmitting(false);
+              if (result.ok) {
+                setNewsletterSent(true);
+                addToast("You're on the list");
+              } else {
+                addToast(result.error);
+              }
+            }}
+          >
+            {newsletterSent ? (
+              <p className="form-success">You're subscribed — welcome to the list.</p>
             ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  addQuotation({ name, email, variety, quantity, message });
-                  setSent(true);
-                  addToast("Quotation request sent");
-                }}
-              >
-                <input aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={120} required />
-                <input aria-label="Email" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" maxLength={254} required />
-                <select aria-label="Variety of interest" value={variety} onChange={(e) => setVariety(e.target.value)} required>
-                  <option value="" disabled>Variety of interest</option>
-                  <option>Premium</option>
-                  <option>Everyday</option>
-                  <option>Not sure yet</option>
-                </select>
-                <input aria-label="Estimated quantity" placeholder="Estimated quantity (e.g. 40kg/month)" value={quantity} onChange={(e) => setQuantity(e.target.value)} maxLength={60} />
-                <textarea aria-label="Message" placeholder="Tell us what you're looking for" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} maxLength={1000} />
-                <button className="btn-primary full" type="submit">Send request</button>
-                <p className="hint" style={{ color: "var(--steam)", opacity: 0.8 }}>
-                  {user ? "Signed in — we'll route this straight to our trade team." : "Already work with us as a roaster? Sign in and this goes straight to your account rep."}
-                </p>
-              </form>
-            )
-          )}
+              <>
+                <label htmlFor="footer-newsletter-email" className="hint footer-newsletter-label">Get 10% off your first bag — join the list.</label>
+                <div className="footer-newsletter-row">
+                  <input
+                    id="footer-newsletter-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={newsletterEmail}
+                    onChange={(e) => setNewsletterEmail(e.target.value)}
+                    autoComplete="email"
+                    maxLength={254}
+                    required
+                  />
+                  <button className="btn-primary small" type="submit" disabled={newsletterSubmitting}>{newsletterSubmitting ? "…" : "Join"}</button>
+                </div>
+              </>
+            )}
+          </form>
         </div>
       </div>
       <div className="footer-legal">

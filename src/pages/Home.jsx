@@ -1,9 +1,35 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { Glass, PhotoMarquee, WaveDivider } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
-import { COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
+import { COUNTRIES, COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 import { usePrefersReducedMotion } from "../hooks";
+
+export function TrustBar() {
+  // Every item here is a real, already-substantiated fact elsewhere in the app -- not invented
+  // marketing copy. $60 matches the live announcement bar's free-shipping threshold; Paystack is
+  // the actual checkout provider (see Checkout.jsx); "small batches" and the two-week ship window
+  // are the FAQ's real answer on freshness, not "roasted to order" (which the FAQ doesn't
+  // actually claim -- roasting doesn't happen after purchase here). No customer/order count is
+  // used since there's no real figure anywhere in the app to cite -- "Traceable to origin" (a
+  // shorter teaser of the same claim SourceTrust makes further down the page) fills that slot
+  // honestly instead.
+  const items = [
+    { icon: "🚚", text: "Free shipping over $60" },
+    { icon: "🔒", text: "Secure checkout via Paystack" },
+    { icon: "☕", text: "Small-batch roasted, shipped within 2 weeks" },
+    { icon: "🌍", text: "Traceable to origin" },
+  ];
+  return (
+    <div className="trust-bar">
+      {items.map((item) => (
+        <span key={item.text} className="trust-bar-item">
+          <span aria-hidden="true">{item.icon}</span> {item.text}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export function Hero() {
   const { go } = useRoute();
@@ -51,6 +77,14 @@ export function PremiumTier() {
   // section's own dark photo background and heading around an empty scroll row would look like a
   // real bug rather than a quiet moment, so nothing to show means the section doesn't render.
   if (premiumProducts.length === 0) return null;
+  // A real flag per card (COUNTRIES already has one for every country a real product uses,
+  // verified against the live catalog, not just the specific names an example list happened to
+  // mention) plus one of 3 subtle warm-palette tint variants, cycled by position -- reusing the
+  // site's own existing tokens (gold/terracotta/green, already used elsewhere on this page)
+  // rather than generating arbitrary per-origin colors that could clash with the palette. The
+  // card layout, photo, price, and button are all untouched -- only a small flag badge and a
+  // barely-there tint are added.
+  const accentClasses = ["accent-a", "accent-b", "accent-c"];
   return (
     <section className="premium">
       <div className="section-head dark">
@@ -58,17 +92,22 @@ export function PremiumTier() {
         <h2>The Premium &amp; Rare Tier</h2>
       </div>
       <div className="hscroll">
-        {premiumProducts.map((c) => (
-          <div key={c.id} className="premium-card">
-            <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }} />
-            <h3>{c.name} — {c.country}</h3>
-            <p className="note handwritten">{c.note}</p>
-            <div className="premium-foot">
-              <span>{format(getPrice(c.id))}</span>
-              <button className="btn-outline light small" onClick={() => go("product", { id: c.id })}>View</button>
+        {premiumProducts.map((c, i) => {
+          const countryInfo = COUNTRIES.find((co) => co.name === c.country);
+          return (
+            <div key={c.id} className={`premium-card ${accentClasses[i % accentClasses.length]}`}>
+              <div className="premium-photo" aria-hidden="true" style={{ backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }}>
+                {countryInfo?.flag && <span className="premium-flag" aria-hidden="true">{countryInfo.flag}</span>}
+              </div>
+              <h3>{c.name} — {c.country}</h3>
+              <p className="note handwritten">{c.note}</p>
+              <div className="premium-foot">
+                <span>{format(getPrice(c.id))}</span>
+                <button className="btn-outline light small" onClick={() => go("product", { id: c.id })}>View</button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -151,6 +190,66 @@ export function MomentsSnapshot() {
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+export function SocialProof() {
+  const { getAllProducts, getProductFeedback, realProductsLoading } = useAdmin();
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const premiumProducts = getAllProducts().filter((p) => p.tier === "premium");
+
+  useEffect(() => {
+    if (realProductsLoading || premiumProducts.length === 0) return;
+    let cancelled = false;
+    // Real, already-public per-product feedback (the same api.getProductFeedback ProductPage
+    // uses, no auth token required) -- sampled across a handful of premium products rather than
+    // one hardcoded product id, matching how PremiumTier itself reads the live catalog instead of
+    // assuming a fixed list. Real customer feedback here is intentionally anonymous (no name
+    // field exists on a review record at all, confirmed against ProductPage's own rendering of
+    // it) -- quotes are attributed by what was bought, not a fabricated customer name.
+    const sample = premiumProducts.slice(0, 5);
+    Promise.all(sample.map((p) => getProductFeedback(p.id).then((list) => list.map((r) => ({ ...r, product: p })))))
+      .then((results) => {
+        if (cancelled) return;
+        const withNotes = results.flat().filter((r) => r.note && r.note.trim());
+        setReviews(withNotes);
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [realProductsLoading, premiumProducts.length]);
+
+  // Nothing invented here: this only renders once real, written feedback actually exists (a note
+  // field a customer genuinely typed, not a rating alone) -- an empty state that shows nothing is
+  // more honest than a placeholder implying reviews exist when this environment simply hasn't
+  // collected any yet.
+  if (loading || reviews.length === 0) return null;
+
+  const featured = reviews.slice(0, 4);
+  const avgRating = (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1);
+
+  return (
+    <section className="social-proof">
+      <div className="section-head">
+        <p className="eyebrow">from real orders</p>
+        <h2>What People Are Saying</h2>
+        <p className="section-sub">{avgRating}/5 average from {reviews.length} review{reviews.length === 1 ? "" : "s"} across our premium lots.</p>
+      </div>
+      <div className="social-proof-grid">
+        {featured.map((r) => (
+          <div key={r.id} className="social-proof-card">
+            <div className="social-proof-beans">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <span key={n} className="bean-shape small" style={{ background: n <= r.rating ? "var(--terracotta-btn)" : "var(--gold)", opacity: n <= r.rating ? 1 : 0.4 }} />
+              ))}
+            </div>
+            <p className="social-proof-note">"{r.note}"</p>
+            <p className="social-proof-attribution">— {r.product.name}, {r.product.country}</p>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -250,6 +349,7 @@ export function HomePage() {
   return (
     <>
       <Hero />
+      <TrustBar />
       <PhotoMarquee />
       <LiveMessageBar messages={kenyaMessages} />
       <PremiumTier />
@@ -258,6 +358,7 @@ export function HomePage() {
       <EverydayTier />
       <MomentsSnapshot />
       <AcademyTeaser />
+      <SocialProof />
       <SourceTrust />
       <SeasonalBanner />
     </>
