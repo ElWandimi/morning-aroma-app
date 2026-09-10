@@ -34,7 +34,7 @@ export function Hero() {
         </p>
         <div className="hero-actions">
           <button className="btn-primary" onClick={() => go("quiz")}>Take the Aroma Quiz</button>
-          <button className="btn-ghost" onClick={() => go("shop")}>Explore the Shop</button>
+          <button className="btn-outline light" onClick={() => go("shop")}>Explore the Shop</button>
         </div>
       </div>
       <div className="pour-line" />
@@ -92,30 +92,38 @@ export function EverydayTier() {
   const { getPrice, getAllProducts } = useAdmin();
   const { format } = useCurrency();
   const everydayProducts = getAllProducts().filter((p) => p.tier === "everyday");
+  // Unlike MOMENTS (static data below, always non-empty), everyday-tier products come from the
+  // live catalog -- if every one is ever discontinued or briefly unset, rendering the section's
+  // own background wash and heading around an empty grid would look like a real bug rather than
+  // an intentionally quiet moment, so this follows the same convention as LiveMessageBar above:
+  // nothing to show means the section doesn't render at all.
+  if (everydayProducts.length === 0) return null;
   return (
     <section className="everyday">
-      <div className="section-head">
-        <p className="eyebrow">poured every morning</p>
-        <h2>Most Consumed</h2>
-      </div>
-      <div className="grid4">
-        {everydayProducts.map((c) => (
-          <div key={c.id} className="everyday-card">
-            <div
-              className="everyday-photo"
-              onClick={() => go("product", { id: c.id })}
-              onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
-              role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
-              style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
-            />
-            <h3><span onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</span></h3>
-            <p>{c.note}</p>
-            <div className="premium-foot">
-              <span>{format(getPrice(c.id))}</span>
-              <button className="btn-cart" onClick={() => add(c.id)}>🛒 Add to cart</button>
+      <div className="everyday-inner">
+        <div className="section-head">
+          <h2>Most Consumed</h2>
+          <p className="section-sub">The bags our regulars keep reordering — what's actually poured every morning, not just what's featured.</p>
+        </div>
+        <div className="grid4">
+          {everydayProducts.map((c) => (
+            <div key={c.id} className="everyday-card">
+              <div
+                className="everyday-photo"
+                onClick={() => go("product", { id: c.id })}
+                onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
+                role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
+                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 450)}')` }}
+              />
+              <h3><span onClick={() => go("product", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{c.name} — {c.country}</span></h3>
+              <p>{c.note}</p>
+              <div className="premium-foot">
+                <span>{format(getPrice(c.id))}</span>
+                <button className="btn-cart" onClick={() => add(c.id)}>🛒 Add to cart</button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -125,18 +133,20 @@ export function MomentsSnapshot() {
   const { go } = useRoute();
   return (
     <section className="moments">
-      <div className="section-head">
-        <p className="eyebrow">a cup for every hour</p>
-        <h2>Coffee Moments</h2>
-      </div>
-      <div className="grid4">
-        {MOMENTS.map((m) => (
-          <div key={m.id} className="moment-card" onClick={() => go("moment", { id: m.id })} style={{ cursor: "pointer" }}>
-            <span className="moment-icon">{m.icon}</span>
-            <h4>{m.name}</h4>
-            <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }} aria-label={`Explore ${m.name}`}>Explore →</a>
-          </div>
-        ))}
+      <div className="moments-inner">
+        <div className="section-head">
+          <h2>Coffee Moments</h2>
+          <p className="section-sub">Every hour of the day has its own cup. Find the one that matches yours.</p>
+        </div>
+        <div className="grid4">
+          {MOMENTS.map((m) => (
+            <div key={m.id} className="moment-card" onClick={() => go("moment", { id: m.id })} style={{ cursor: "pointer" }}>
+              <span className="moment-icon">{m.icon}</span>
+              <h4>{m.name}</h4>
+              <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }} aria-label={`Explore ${m.name}`}>Explore →</a>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );

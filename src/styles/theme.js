@@ -120,7 +120,16 @@ a { color: inherit; text-decoration: none; }
 .section-head { max-width: 1200px; margin: 0 auto 26px; padding: 0 24px; }
 .section-head.dark h2 { color: var(--gold); }
 .section-head h2 { font-size: 2rem; }
+.section-sub { max-width: 480px; color: #6b5647; margin: 8px 0 0; font-size: 0.98rem; }
 .hscroll { display: flex; gap: 18px; overflow-x: auto; padding: 0 24px 12px; scroll-snap-type: x mandatory; }
+/* Nothing about a horizontally-scrolling row signals it's scrollable until a user happens to
+   drag it -- the last visible card gets a soft fade toward the section's own background, a
+   deliberately small hint (not an arrow icon competing with the cards) that there's more to the
+   right. Purely decorative -- doesn't block scroll or clicks (pointer-events: none). */
+.premium::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 64px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(20,13,9,0.7));
+}
 .premium-card { scroll-snap-align: start; min-width: 240px; background: rgba(255,255,255,0.08); backdrop-filter: blur(6px); border: 1px solid rgba(232,213,181,0.25); border-radius: 14px; padding: 16px; color: var(--cream); transition: transform .2s ease, background .2s ease; }
 .premium-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.13); }
 .premium-photo { height: 120px; border-radius: 10px; margin-bottom: 12px; background: linear-gradient(135deg, var(--chestnut), var(--espresso)); background-size: contain; background-repeat: no-repeat; background-position: center; }
@@ -144,15 +153,24 @@ a { color: inherit; text-decoration: none; }
 .quiz-copy { margin: 12px 0 22px; color: #6b5647; }
 
 /* everyday grid */
-.everyday { padding: 60px 24px; max-width: 1200px; margin: 0 auto; }
+/* Home's two "everyday"/"moments" sections used to sit as bare text on the same flat cream as
+   the page background -- functionally fine, but visually weightless between two sections that
+   each carry a full photo treatment (.premium, .quiz-section), so they read as a gap in the
+   scroll rather than a section. A subtle warm wash (existing tokens, no new photo) gives them
+   the same sense of "this is its own place" the rest of the page already has, without competing
+   with the cards inside. */
+.everyday { padding: 60px 24px 70px; background: linear-gradient(180deg, var(--steam) 0%, rgba(249,230,212,0.3) 100%); }
+.everyday-inner { max-width: 1200px; margin: 0 auto; }
 .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
 .everyday-card { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 16px; }
 .everyday-photo { height: 100px; border-radius: 10px; background: linear-gradient(135deg, var(--almond), var(--gold)); background-size: contain; background-repeat: no-repeat; background-position: center; margin-bottom: 10px; position: relative; }
 .everyday-card p { font-size: 0.9rem; color: #6b5647; margin: 6px 0 12px; }
 
 /* moments */
-.moments { padding: 60px 24px; max-width: 1200px; margin: 0 auto; }
-.moment-card { background: var(--steam); border-radius: 14px; padding: 24px; text-align: center; }
+.moments { padding: 70px 24px; background: linear-gradient(180deg, rgba(249,230,212,0.3) 0%, var(--steam) 100%); }
+.moments-inner { max-width: 1200px; margin: 0 auto; }
+.moment-card { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 24px; text-align: center; transition: transform .15s ease, box-shadow .15s ease; }
+.moment-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(62,44,35,0.1); }
 .moment-icon { font-size: 2rem; }
 .moment-card h4 { margin: 10px 0 6px; }
 .moment-card a { font-weight: 700; color: var(--chestnut); }
