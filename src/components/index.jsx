@@ -964,6 +964,14 @@ export function LanguageSwitcher({ open, onToggle, onClose }) {
   const ref = useRef(null);
   useEscapeKey(open, onClose);
   useClickOutside(ref, open, onClose);
+  // Replaces the old TranslateSuggestBanner -- a persistent, full-width bar every page carried
+  // above the header, on top of the real site-wide announcement bar it sat directly beneath (two
+  // full-width strips stacked before anyone even reached the nav). A country-based suggestion is
+  // a "here's an option," not urgent site news, so it doesn't need that much weight: a small dot
+  // on the globe icon signals there's a suggestion, and opening the panel surfaces it as the
+  // first, highlighted option instead of a whole separate banner someone has to read and dismiss.
+  const { suggestedLang, countryName } = useGeoLocale(COUNTRY_TO_LANGUAGE);
+  const suggested = TRANSLATE_LANGUAGES.find((l) => l.code === suggestedLang);
 
   const select = (lang) => {
     onClose();
@@ -975,9 +983,19 @@ export function LanguageSwitcher({ open, onToggle, onClose }) {
     <div className="lang-switcher" ref={ref}>
       <button className="cart-btn" onClick={onToggle} aria-label="Change language" aria-expanded={open}>
         🌐
+        {suggested && <span className="lang-suggest-dot" aria-hidden="true" />}
       </button>
       {open && (
         <div className="lang-panel notranslate" role="menu" aria-label="Choose a language">
+          {suggested && (
+            <>
+              <button className="lang-option lang-option-suggested" role="menuitem" onClick={() => select(suggested)}>
+                <span aria-hidden="true">{suggested.flag}</span>
+                {countryName ? `Browsing from ${countryName}? Try ${suggested.label}` : `Try ${suggested.label}`}
+              </button>
+              <div className="lang-panel-divider" />
+            </>
+          )}
           {TRANSLATE_LANGUAGES.map((l) => (
             <button key={l.code} className="lang-option" role="menuitem" onClick={() => select(l)}>
               <span aria-hidden="true">{l.flag}</span> {l.label}
@@ -986,33 +1004,6 @@ export function LanguageSwitcher({ open, onToggle, onClose }) {
           <p className="lang-credit">Powered by Google Translate — machine translation, may not be perfect.</p>
         </div>
       )}
-    </div>
-  );
-}
-
-export function TranslateSuggestBanner() {
-  const { suggestedLang, countryName } = useGeoLocale(COUNTRY_TO_LANGUAGE);
-  const { changeLanguage } = useGoogleTranslate();
-  const [dismissed, setDismissed] = useState(false);
-  const langInfo = TRANSLATE_LANGUAGES.find((l) => l.code === suggestedLang);
-
-  if (dismissed || !langInfo) return null;
-
-  return (
-    <div className="translate-suggest-bar notranslate">
-      <span>
-        {countryName ? `Browsing from ${countryName}? ` : "Prefer a different language? "}
-        View this site in {langInfo.flag} {langInfo.label}?
-      </span>
-      <div className="translate-suggest-actions">
-        <button
-          className="btn-outline light small"
-          onClick={() => { changeLanguage(suggestedLang); setDismissed(true); }}
-        >
-          Translate
-        </button>
-        <button className="translate-suggest-close" onClick={() => setDismissed(true)} aria-label="Dismiss">×</button>
-      </div>
     </div>
   );
 }

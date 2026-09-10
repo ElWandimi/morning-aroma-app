@@ -98,8 +98,22 @@ a { color: inherit; text-decoration: none; }
    separate Sign out link/button all sitting inline in the header. One trigger (name + caret,
    matching the Explore dropdown's own look) opens a panel with the role, the Journey link, and
    Sign out, instead of five separate elements competing for space next to the cart/search icons. */
-.profile-trigger { display: inline-flex; align-items: center; gap: 6px; }
-.profile-trigger .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; flex-shrink: 0; }
+/* .profile-trigger inherited .nav-dropdown-trigger's plain-text, no-border styling (built for
+   "Explore" sitting among Shop/Academy/Our Services, where an underlined word is the right
+   weight) -- but this sits directly next to the real pill-shaped "Admin" button, not among plain
+   nav links, so the mismatch was real: a bordered button next to bare text with a colored dot.
+   Matches .admin-btn's own chestnut-outline pill treatment for a consistent, professional pair,
+   with enough right-padding for the dropdown caret rendered by .nav-dropdown-caret afterward. */
+.profile-trigger {
+  display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--chestnut);
+  color: var(--chestnut); border-radius: 30px; padding: 7px 14px; font-size: 0.85rem;
+  transition: background .2s ease, color .2s ease;
+}
+.profile-trigger:hover { background: var(--chestnut); color: var(--cream); }
+.profile-trigger:hover .dot { box-shadow: 0 0 0 1.5px var(--cream); }
+.profile-trigger[aria-expanded="true"] { background: var(--chestnut); color: var(--cream); }
+.profile-trigger::after { display: none; } /* drop the plain-nav-link underline-on-hover it would otherwise inherit */
+.profile-trigger .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; flex-shrink: 0; transition: box-shadow .2s ease; }
 .profile-panel { min-width: 220px; }
 .profile-panel-role { font-size: 0.78rem; color: var(--almond-text); font-weight: 700; padding: 6px 12px 8px; margin: 0; border-bottom: 1px solid var(--gold); margin-bottom: 4px; }
 .profile-panel .profile-signout { color: #a8433f; }
@@ -1217,6 +1231,14 @@ a { color: inherit; text-decoration: none; }
 .lang-option:hover { background: var(--steam); }
 .lang-option.active { background: var(--steam); font-weight: 700; }
 .lang-option-code { margin-left: auto; font-size: 0.72rem; color: var(--almond-text); font-weight: 700; }
+/* Small presence dot on the globe icon when useGeoLocale has a real language suggestion --
+   replaces the old full-width TranslateSuggestBanner (a persistent bar every page carried above
+   the header, doubling up with the real site-wide announcement bar right above it) with a quiet
+   signal on the button that already exists for this, rather than a second banner. */
+.lang-suggest-dot { position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; background: var(--chestnut); border: 1.5px solid var(--cream); border-radius: 50%; }
+.lang-option-suggested { background: var(--steam); font-weight: 700; }
+.lang-option-suggested:hover { background: var(--gold); }
+.lang-panel-divider { height: 1px; background: var(--gold); margin: 6px 4px; }
 .lang-credit { font-size: 0.68rem; color: var(--almond-text); padding: 8px 10px 2px; margin: 0; border-top: 1px solid var(--gold); margin-top: 4px; }
 /* Checkout's country / phone-code fields -- same idea as .lang-panel above (bounded height,
    internal scroll, click-outside/Escape to close) but wider, since a country name needs more
@@ -1259,14 +1281,6 @@ a { color: inherit; text-decoration: none; }
 @keyframes currency-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .currency-loading-dot { animation: none; } }
 
-/* translate suggestion bar */
-.translate-suggest-bar {
-  background: var(--chestnut); color: var(--cream); padding: 10px 20px; font-size: 0.85rem;
-  display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; position: relative;
-}
-.translate-suggest-actions { display: flex; align-items: center; gap: 10px; }
-.translate-suggest-close { background: none; border: none; color: var(--cream); font-size: 1.1rem; cursor: pointer; opacity: 0.8; line-height: 1; }
-.translate-suggest-close:hover { opacity: 1; }
 
 /* polished "Add to cart" button for product grid cards — replaces the plain outline pill */
 .btn-cart {

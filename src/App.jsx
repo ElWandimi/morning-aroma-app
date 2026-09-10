@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext, lazy, Suspense } from "react";
 const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
-import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, TranslateSuggestBanner, WishlistDrawer } from "./components";
+import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, WishlistDrawer } from "./components";
 import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
 import { BREW_GUIDES, COUNTRIES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META } from "./data";
 import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
@@ -127,7 +127,6 @@ export function AppShell() {
       <style>{CSS}</style>
       <a href="#main-content" className="skip-link">Skip to content</a>
       <AnnouncementBar />
-      <TranslateSuggestBanner />
       <Nav onOpenLogin={() => setAuthView("signin")} onOpenSearch={() => setSearchOpen(true)} />
       <div key={routeKey} id="main-content" className="page-fade">
         {route.page === "home" ? (
