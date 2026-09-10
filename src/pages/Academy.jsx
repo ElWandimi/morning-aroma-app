@@ -101,7 +101,7 @@ export function AcademyHubPage() {
       {lifetimeError && <p className="form-error">{lifetimeError}</p>}
 
       {stats && stats.xp > 0 && (
-        <div className="academy-lifetime-banner">
+        <div className="academy-lifetime-banner stats">
           <div>
             <p className="academy-lifetime-title">{stats.level} · {stats.xp} XP</p>
             <p className="hint">
@@ -535,10 +535,10 @@ export function CoursePage({ id }) {
                       ))}
                     </>
                   ) : null}
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+                  <div className="lesson-reading-nav">
                     <button
                       type="button"
-                      className="link-btn"
+                      className="btn-outline small"
                       disabled={chapters.findIndex((c) => c.id === readingChapterId) <= 0}
                       onClick={() => goToAdjacentChapter(-1)}
                     >
@@ -546,7 +546,7 @@ export function CoursePage({ id }) {
                     </button>
                     <button
                       type="button"
-                      className="link-btn"
+                      className="btn-outline small"
                       disabled={chapters.findIndex((c) => c.id === readingChapterId) >= chapters.length - 1}
                       onClick={() => goToAdjacentChapter(1)}
                     >
@@ -578,18 +578,21 @@ export function CoursePage({ id }) {
                   ) : (
                     <div>
                       {quizQuestions.map((q, qi) => (
-                        <div key={q.id} style={{ marginBottom: 12 }}>
-                          <p>{q.question}</p>
-                          {q.options.map((opt, oi) => (
-                            <label key={oi} style={{ display: "block" }}>
-                              <input
-                                type="radio"
-                                name={`quiz-${q.id}`}
-                                checked={quizAnswers[qi] === oi}
-                                onChange={() => selectQuizAnswer(qi, oi)}
-                              /> {opt}
-                            </label>
-                          ))}
+                        <div key={q.id} className="quiz-question">
+                          <p className="quiz-question-text">{q.question}</p>
+                          <div className="lesson-quiz-options">
+                            {q.options.map((opt, oi) => (
+                              <label key={oi} className={`lesson-quiz-option ${quizAnswers[qi] === oi ? "selected" : ""}`}>
+                                <input
+                                  type="radio"
+                                  name={`quiz-${q.id}`}
+                                  checked={quizAnswers[qi] === oi}
+                                  onChange={() => selectQuizAnswer(qi, oi)}
+                                />
+                                <span>{opt}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       ))}
                       <button
@@ -612,7 +615,7 @@ export function CoursePage({ id }) {
       )}
 
       {hasAccess && certEligibility && certEligibility.assessedChapterCount > 0 && (
-        <div className="academy-lifetime-banner" style={{ marginTop: 24 }}>
+        <div className={`academy-lifetime-banner ${certEligibility.eligible ? "" : "stats"}`} style={{ marginTop: 24 }}>
           {certEligibility.eligible ? (
             <>
               <div>
@@ -642,16 +645,8 @@ export function CoursePage({ id }) {
               <p className="hint" style={{ marginBottom: 6 }}>
                 {certEligibility.passedChapterCount} of {certEligibility.assessedChapterCount} lessons passed — pass every lesson's quiz to earn a certificate.
               </p>
-              <div style={{ background: "#e8d5b5", borderRadius: 6, height: 8, overflow: "hidden" }}>
-                <div
-                  style={{
-                    width: `${Math.round((certEligibility.passedChapterCount / certEligibility.assessedChapterCount) * 100)}%`,
-                    background: "#8B5A3A",
-                    height: "100%",
-                    borderRadius: 6,
-                    transition: "width 0.3s ease",
-                  }}
-                />
+              <div className="admin-status-track">
+                <div className="admin-status-fill" style={{ width: `${Math.round((certEligibility.passedChapterCount / certEligibility.assessedChapterCount) * 100)}%` }} />
               </div>
             </div>
           )}

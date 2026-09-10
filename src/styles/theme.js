@@ -425,6 +425,15 @@ a { color: inherit; text-decoration: none; }
 .course-price { margin-top: 12px; font-weight: 700; color: var(--chestnut); font-size: 0.95rem; }
 .academy-lifetime-banner { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; background: var(--espresso); color: var(--cream); border-radius: 16px; padding: 24px 28px; max-width: 1100px; margin: 0 auto 30px; }
 .academy-lifetime-banner.unlocked { background: var(--green); text-align: center; justify-content: center; }
+/* A signed-in, engaged, non-lifetime user sees the lifetime-access upsell banner AND (further
+   down, or right below it on the hub) an XP/progress readout -- both used to be this exact same
+   high-contrast dark banner, so two of them stacked read as one repetitive block instead of two
+   distinct kinds of content. .stats is for status/progress readouts specifically (XP, streak, "X
+   of Y lessons passed") -- a real completion moment (the certificate-eligible banner) keeps the
+   bold treatment, since that's an earned, celebratory result, not a quiet status line. */
+.academy-lifetime-banner.stats { background: white; border: 1px solid var(--gold); color: var(--espresso); }
+.academy-lifetime-banner.stats .academy-lifetime-title { color: var(--chestnut); }
+.academy-lifetime-banner.stats .hint { color: var(--almond-text); }
 .academy-lifetime-title { font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; margin: 0 0 4px; color: var(--cream); }
 .academy-lifetime-banner .hint { color: var(--beige-text); }
 .academy-lifetime-cta { display: flex; align-items: center; gap: 14px; }
@@ -455,8 +464,32 @@ a { color: inherit; text-decoration: none; }
 .lesson-signin-prompt { padding: 0 16px 14px 60px; }
 .lesson-signin-prompt .link-btn { margin-left: 0; }
 .lesson-detail-panel { margin: 0 16px 16px 60px; max-width: 640px; background: var(--cream); padding: 16px; border-radius: 8px; }
+.lesson-reading-nav { display: flex; justify-content: space-between; margin-top: 16px; }
 @media (max-width: 560px) {
   .lesson-actions, .lesson-signin-prompt, .lesson-detail-panel { padding-left: 16px; margin-left: 0; }
+}
+
+/* Academy lesson-quiz answer options -- previously a bare browser-default radio input with no
+   wrapping style at all, the one remaining choice control on the site (after chips, the
+   mode-toggle, and star ratings) still using raw defaults. Named lesson-quiz-* rather than
+   quiz-* -- a completely unrelated feature (the homepage "Take the Aroma Quiz" onboarding flow,
+   .quiz-page/.quiz-question-panel below) already owns .quiz-option/.quiz-options for its own,
+   differently-styled pill buttons; reusing those names meant this rule silently lost the
+   cascade to that other one, since it happens to appear later in the file. The radio input
+   itself stays in the DOM and functional for keyboard/screen-reader users -- the label around it
+   becomes the actual clickable, bordered row, matching the visual language chips already use
+   elsewhere on this page. */
+.quiz-question { margin-bottom: 20px; }
+.quiz-question-text { font-weight: 700; margin-bottom: 10px; }
+.lesson-quiz-options { display: flex; flex-direction: column; gap: 8px; }
+.lesson-quiz-option {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--gold);
+  border-radius: 10px; background: white; cursor: pointer; transition: border-color .15s ease, background .15s ease;
+}
+.lesson-quiz-option:hover { border-color: var(--almond); background: var(--steam); }
+.lesson-quiz-option.selected { border-color: var(--chestnut); background: var(--steam); font-weight: 600; }
+.lesson-quiz-option input[type="radio"] {
+  width: 18px; height: 18px; margin: 0; accent-color: var(--chestnut); flex-shrink: 0;
 }
 
 /* live message bar */
@@ -727,6 +760,10 @@ a { color: inherit; text-decoration: none; }
 .admin-status-row-wide { grid-template-columns: 150px 1fr 70px; }
 .admin-status-track { height: 10px; background: var(--gold); border-radius: 6px; overflow: hidden; }
 .admin-status-fill { height: 100%; background: var(--chestnut); }
+/* Academy's certificate-progress bar reuses the admin dashboard's status-bar styling, but wants
+   the fill to visibly animate when it updates (e.g. right after passing a quiz) rather than snap
+   -- scoped so the admin dashboard's own bars (which don't need this) are unaffected. */
+.academy-lifetime-banner .admin-status-fill { transition: width 0.3s ease; }
 
 .admin-table { display: flex; flex-direction: column; gap: 2px; border-radius: 10px; box-shadow: 0 4px 14px rgba(62,44,35,0.06); overflow-x: auto; overflow-y: hidden; }
 .admin-table .admin-row:first-child { border-top-left-radius: 10px; border-top-right-radius: 10px; }
