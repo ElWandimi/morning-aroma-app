@@ -1747,13 +1747,26 @@ export function NotFoundPage() {
   );
 }
 
+// A dynamic import (every lazy-loaded route -- Services included) fetches a specific hashed
+// chunk file. After a deploy, those hashes change; a browser tab that had the site open before
+// the deploy, or one with a stale cached index.html, tries to fetch a chunk the server no longer
+// has, and that failed import throws during render -- caught here as a generic error, even though
+// it isn't a real bug in the page itself. The reported symptom matches this exactly: works on
+// normal in-app navigation (chunks already loaded), fails specifically on a direct load or
+// reload of a route whose chunk reference has gone stale, and a plain reload doesn't reliably
+// fix it since the browser can still serve the same stale cached index.html on the next request.
+function isChunkLoadError(error) {
+  const msg = String(error && error.message || "");
+  return /dynamically imported module|Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk|Loading CSS chunk/i.test(msg);
+}
+
 export class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, chunkError: false };
   }
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, chunkError: isChunkLoadError(error) };
   }
   componentDidCatch(error, info) {
     console.error("Morning Aroma — unexpected error:", error, info);
@@ -1761,6 +1774,22 @@ export class ErrorBoundary extends React.Component {
   }
   render() {
     if (this.state.hasError) {
+      if (this.state.chunkError) {
+        // Reload once, forcing a real re-fetch of index.html rather than trusting whatever the
+        // browser has cached -- the session-storage flag is the single source of truth for
+        // "have we already tried this," checked here and set here, so a second genuine chunk
+        // error (e.g. truly offline) falls through to the normal error screen below instead of
+        // either looping forever or (the earlier draft's actual bug) getting stuck rendering
+        // nothing because a flag that gated the blank state was never the one being set.
+        const key = "ma_chunk_reload_attempted";
+        if (!window.sessionStorage.getItem(key)) {
+          window.sessionStorage.setItem(key, "1");
+          window.location.reload();
+          // Renders nothing for the instant before the reload actually takes effect, rather than
+          // flashing the full error screen right before the page reloads itself away.
+          return null;
+        }
+      }
       const wrap = { fontFamily: "system-ui, sans-serif", textAlign: "center", padding: "100px 24px", background: "#FDF8F0", minHeight: "100vh", color: "#3E2C23" };
       const btn = { background: "#8B5A3A", color: "#FDF8F0", border: "none", padding: "12px 22px", borderRadius: 30, fontWeight: 700, cursor: "pointer", fontSize: "1rem", marginTop: 8 };
       return (
@@ -1768,7 +1797,19 @@ export class ErrorBoundary extends React.Component {
           <div style={{ width: 34, height: 44, background: "#E8D5B5", borderRadius: "50%", margin: "0 auto 20px" }} />
           <h2 style={{ marginBottom: 10 }}>Something went wrong brewing this page</h2>
           <p style={{ marginBottom: 8, opacity: 0.8 }}>A prototype hiccup, not your fault. Reloading usually clears it.</p>
-          <button style={btn} onClick={() => window.location.reload()}>Reload the page</button>
+          <button
+            style={btn}
+            onClick={() => {
+              // A plain reload can still serve the same stale cached index.html that caused this
+              // in the first place -- clearing the guard flag and reloading gives the manual
+              // retry another real attempt at the same auto-recovery above, rather than assuming
+              // a plain reload alone fixes it.
+              window.sessionStorage.removeItem("ma_chunk_reload_attempted");
+              window.location.reload();
+            }}
+          >
+            Reload the page
+          </button>
         </div>
       );
     }
