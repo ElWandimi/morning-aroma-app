@@ -5,6 +5,13 @@
 // real verification logic in routes/orders.js unmodified.
 
 const PAYSTACK_API = "https://api.paystack.co";
+// No outbound call in this file previously had a timeout -- a hung connection to Paystack or the
+// exchange-rate API could stall a request indefinitely rather than failing fast. 10s is generous
+// enough for a normal API round-trip (these aren't large payloads) while still bounding the worst
+// case; every caller already treats a thrown error here as "couldn't verify/process right now,
+// try again shortly" (see paymentVerification.js's 502 handling), which is exactly the right
+// response to a genuine timeout too -- fails closed, same as any other upstream failure.
+const REQUEST_TIMEOUT_MS = 10_000;
 
 function requireSecretKey() {
   const key = process.env.PAYSTACK_SECRET_KEY;
@@ -16,13 +23,30 @@ function requireSecretKey() {
   return key;
 }
 
+// A timed-out fetch throws a generic AbortError/TimeoutError whose message doesn't mention
+// Paystack or the timeout at all -- wrapping it here so every caller's error message stays
+// accurate about what actually happened, instead of surfacing "This operation was aborted" or
+// similar to an admin/customer reading it later.
+function describeNetworkError(e, action) {
+  if (e.name === "TimeoutError" || e.name === "AbortError") {
+    return new Error(`${action} timed out. Please try again shortly.`);
+  }
+  return e;
+}
+
 // Verifies a transaction reference against Paystack's own record of it -- the only trustworthy
 // source for whether a payment actually succeeded. Never trust a client-reported "success" alone;
 // this is what routes/orders.js calls before marking any order paid.
 async function verifyTransaction(reference) {
-  const res = await fetch(`${PAYSTACK_API}/transaction/verify/${encodeURIComponent(reference)}`, {
-    headers: { Authorization: `Bearer ${requireSecretKey()}` },
-  });
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_API}/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${requireSecretKey()}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw describeNetworkError(e, "Verifying this payment with Paystack");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.status) {
     throw new Error(body.message || "Could not verify this transaction with Paystack.");
@@ -35,7 +59,12 @@ async function verifyTransaction(reference) {
 // customer would have actually seen, not a differently-sourced rate that could disagree for
 // reasons unrelated to genuine market movement.
 async function getUsdToKesRate() {
-  const res = await fetch("https://open.er-api.com/v6/latest/USD");
+  let res;
+  try {
+    res = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (e) {
+    throw describeNetworkError(e, "Fetching the current exchange rate");
+  }
   if (!res.ok) throw new Error("Could not fetch the current exchange rate.");
   const body = await res.json();
   const rate = body?.rates?.KES;
@@ -48,11 +77,17 @@ async function getUsdToKesRate() {
 // customer's original payment method, which can take up to 10 business days to actually land --
 // this call only confirms Paystack has ACCEPTED the refund request, not that funds have arrived.
 async function initiateRefund(reference) {
-  const res = await fetch(`${PAYSTACK_API}/refund`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ transaction: reference }),
-  });
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_API}/refund`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ transaction: reference }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw describeNetworkError(e, "Initiating this refund with Paystack");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.status) {
     throw new Error(body.message || "Could not initiate this refund with Paystack.");
@@ -64,11 +99,17 @@ async function initiateRefund(reference) {
 // Subscription can attach to it. See findOrCreateSubscriptionPlan in routes/subscriptions.js for
 // why this is cached rather than called fresh for every subscriber.
 async function createPlan(name, amountCents, interval) {
-  const res = await fetch(`${PAYSTACK_API}/plan`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ name, amount: amountCents, interval, currency: "KES" }),
-  });
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_API}/plan`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name, amount: amountCents, interval, currency: "KES" }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw describeNetworkError(e, "Creating this plan with Paystack");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.status) throw new Error(body.message || "Could not create this plan with Paystack.");
   return body.data; // { plan_code, ... } -- see Paystack's Create Plan docs
@@ -79,11 +120,17 @@ async function createPlan(name, amountCents, interval) {
 // email that already exists returns the existing customer rather than erroring), so this can
 // always just call create rather than needing its own separate lookup-then-create logic.
 async function findOrCreateCustomer(email, firstName, lastName) {
-  const res = await fetch(`${PAYSTACK_API}/customer`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ email, first_name: firstName, last_name: lastName }),
-  });
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_API}/customer`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ email, first_name: firstName, last_name: lastName }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw describeNetworkError(e, "Creating this customer with Paystack");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.status) throw new Error(body.message || "Could not create this customer with Paystack.");
   return body.data; // { customer_code, ... } -- see Paystack's Create Customer docs
@@ -95,11 +142,17 @@ async function findOrCreateCustomer(email, firstName, lastName) {
 // saved card automatically. Paystack does NOT retry a failed renewal charge (confirmed directly
 // from their own docs, not assumed) -- see webhooks.js for how a failed renewal is handled here.
 async function createSubscription(customerCode, planCode, authorizationCode) {
-  const res = await fetch(`${PAYSTACK_API}/subscription`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ customer: customerCode, plan: planCode, authorization: authorizationCode }),
-  });
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_API}/subscription`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ customer: customerCode, plan: planCode, authorization: authorizationCode }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw describeNetworkError(e, "Creating this subscription with Paystack");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.status) throw new Error(body.message || "Could not create this subscription with Paystack.");
   return body.data; // { subscription_code, email_token, next_payment_date, ... } -- see Paystack's Create Subscription docs
@@ -109,11 +162,17 @@ async function createSubscription(customerCode, planCode, authorizationCode) {
 // email_token (returned once, at creation) as a pair; the subscription code alone isn't enough
 // to authorize disabling it.
 async function disableSubscription(subscriptionCode, emailToken) {
-  const res = await fetch(`${PAYSTACK_API}/subscription/disable`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ code: subscriptionCode, token: emailToken }),
-  });
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_API}/subscription/disable`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ code: subscriptionCode, token: emailToken }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw describeNetworkError(e, "Pausing this subscription with Paystack");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.status) throw new Error(body.message || "Could not pause this subscription with Paystack.");
   return body.data;
@@ -121,11 +180,17 @@ async function disableSubscription(subscriptionCode, emailToken) {
 
 // Real resume -- the same code/token pair, against Paystack's enable endpoint instead.
 async function enableSubscription(subscriptionCode, emailToken) {
-  const res = await fetch(`${PAYSTACK_API}/subscription/enable`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ code: subscriptionCode, token: emailToken }),
-  });
+  let res;
+  try {
+    res = await fetch(`${PAYSTACK_API}/subscription/enable`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${requireSecretKey()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ code: subscriptionCode, token: emailToken }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw describeNetworkError(e, "Resuming this subscription with Paystack");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.status) throw new Error(body.message || "Could not resume this subscription with Paystack.");
   return body.data;
