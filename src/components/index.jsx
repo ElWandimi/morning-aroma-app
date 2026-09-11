@@ -1207,7 +1207,7 @@ export function Footer() {
           </div>
         </div>
         <div className="footer-links">
-          <h5>Shop</h5>
+          <h4>Shop</h4>
           <a href={pathFor("shop")} onClick={(e) => { e.preventDefault(); go("shop"); }}>All Coffee</a>
           <a href={pathFor("academy")} onClick={(e) => { e.preventDefault(); go("academy"); }}>Academy</a>
           <a href={pathFor("greenbeans")} onClick={(e) => { e.preventDefault(); go("greenbeans"); }}>Green Coffee</a>
@@ -1215,7 +1215,7 @@ export function Footer() {
           {user && <a href={pathFor("journey")} onClick={(e) => { e.preventDefault(); go("journey"); }}>My Aroma Journey</a>}
         </div>
         <div className="footer-links">
-          <h5>Explore</h5>
+          <h4>Explore</h4>
           <a href={pathFor("worldjourney")} onClick={(e) => { e.preventDefault(); go("worldjourney"); }}>The World Journey</a>
           <a href={pathFor("sourcelibrary")} onClick={(e) => { e.preventDefault(); go("sourcelibrary"); }}>Source Library</a>
           <a href={pathFor("rituals")} onClick={(e) => { e.preventDefault(); go("rituals"); }}>Global Rituals</a>
@@ -1223,7 +1223,7 @@ export function Footer() {
           <a href={pathFor("faq")} onClick={(e) => { e.preventDefault(); go("faq"); }}>FAQ</a>
         </div>
         <div className="footer-form">
-          <h5>Get in Touch</h5>
+          <h4>Get in Touch</h4>
           <p className="hint footer-contact-hint">
             Questions, press, or a coffee story to share? <button type="button" className="link-btn" onClick={() => go("contact")}>Contact us</button> — we read every message.
           </p>

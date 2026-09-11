@@ -185,7 +185,7 @@ export function MomentsSnapshot() {
           {MOMENTS.map((m) => (
             <div key={m.id} className="moment-card" onClick={() => go("moment", { id: m.id })} style={{ cursor: "pointer" }}>
               <span className="moment-icon">{m.icon}</span>
-              <h4>{m.name}</h4>
+              <h3>{m.name}</h3>
               <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }} aria-label={`Explore ${m.name}`}>Explore →</a>
             </div>
           ))}
@@ -304,7 +304,7 @@ export function SourceTrust() {
     <section className="trust">
       {items.map((i) => (
         <div key={i.t} className="trust-col">
-          <h4>{i.t}</h4>
+          <h3>{i.t}</h3>
           <p>{i.d}</p>
         </div>
       ))}

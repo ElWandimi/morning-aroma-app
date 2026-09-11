@@ -1,11 +1,13 @@
-# Note: this app uses hash-based routing (e.g. example.com/#/admin), and robots.txt Disallow
-# rules can only match URL paths -- the #fragment portion is never sent to the server and is
-# invisible to robots.txt parsers by spec, so per-page Disallow rules aren't achievable here.
-# Keeping this simple and honest rather than shipping rules that look like they work but don't.
-# (The admin dashboard, checkout, and personal account pages are already excluded from
-# sitemap.xml, and admin is gated behind sign-in regardless.)
+# Path-based routing (e.g. example.com/checkout), not hash-based -- real Disallow rules below
+# actually work here, since the server sees these paths in the request itself. This file used to
+# say the opposite (hash-fragment routing, where Disallow can't match anything), which was true
+# when written but went stale once the app migrated to real paths -- this replaces that outdated
+# reasoning with the real rules it was describing as impossible.
 
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /checkout
+Disallow: /journey
 
 Sitemap: https://morning-aroma.com/sitemap.xml

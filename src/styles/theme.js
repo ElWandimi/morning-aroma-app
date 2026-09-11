@@ -261,7 +261,7 @@ a { color: inherit; text-decoration: none; }
 .moment-card { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 24px; text-align: center; transition: transform .15s ease, box-shadow .15s ease; }
 .moment-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(62,44,35,0.1); }
 .moment-icon { font-size: 2rem; }
-.moment-card h4 { margin: 10px 0 6px; }
+.moment-card h3 { font-size: 1rem; margin: 10px 0 6px; }
 .moment-card a { font-weight: 700; color: var(--chestnut); }
 
 /* academy teaser -- picks up the .course-card styling Academy's own catalog page already uses
@@ -291,7 +291,7 @@ a { color: inherit; text-decoration: none; }
 
 /* trust */
 .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 20px; max-width: 900px; margin: 0 auto; padding: 30px 24px 60px; text-align: center; }
-.trust-col h4 { color: var(--chestnut); }
+.trust-col h3 { font-size: 1rem; color: var(--chestnut); }
 .trust-col p { font-size: 0.9rem; color: #6b5647; }
 /* Thin, single-row strip directly under the hero -- deliberately minimal (no cards, no borders,
    no background of its own beyond the plain cream page) so it reads as a quiet confirmation line,
@@ -318,7 +318,7 @@ a { color: inherit; text-decoration: none; }
 }
 .footer-grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 30px; }
 .footer .tagline { margin-top: 8px; font-size: 1.2rem; color: var(--gold); }
-.footer-links h5, .footer-form h5 { color: var(--gold); font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; margin-bottom: 10px; }
+.footer-links h4, .footer-form h4 { color: var(--gold); font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; margin-bottom: 10px; }
 .footer-links a { display: block; margin-bottom: 6px; font-size: 0.9rem; opacity: 0.85; transition: opacity .15s, padding-left .15s; }
 .footer-links a:hover { opacity: 1; padding-left: 4px; }
 .footer-form form { display: flex; flex-direction: column; gap: 8px; }
@@ -391,7 +391,7 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 800px) { .shop-layout { grid-template-columns: 1fr; } }
 .shop-filters { position: sticky; top: 90px; background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 18px; }
 .filters-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.filters-head h4 { font-size: 1.1rem; }
+.filters-head h2 { font-size: 1.1rem; }
 .filters-head-actions { display: flex; align-items: center; gap: 10px; }
 /* Six filter groups (Aroma/Body/Acidity/Roast/Moment/Brew) stacked in a narrow 220px column,
    each headed by the same tracked-out caps label, read as one undifferentiated block on the

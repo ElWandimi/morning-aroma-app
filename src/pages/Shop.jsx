@@ -23,6 +23,18 @@ export function ShopPage() {
 
   const setSingle = (key, val) => setFilters((f) => ({ ...f, [key]: f[key] === val ? "" : val }));
 
+  // Real hub-level BreadcrumbList -- previously the shop hub page had no structured data at all
+  // (only individual product pages did), even though it's a real, meaningful step in the site's
+  // hierarchy a crawler benefits from seeing explicitly.
+  useStructuredData({
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${window.location.origin}/` },
+      { "@type": "ListItem", position: 2, name: "Shop", item: `${window.location.origin}${pathFor("shop")}` },
+    ],
+  });
+
   const clearAll = () => setFilters({ aroma: [], body: "", acidity: "", roast: "", moment: "", brew: "" });
 
   const filtered = allProducts.filter((p) => {
@@ -52,7 +64,7 @@ export function ShopPage() {
       <div className="shop-layout">
         <aside className={`shop-filters ${filtersOpen ? "shop-filters-open" : ""}`}>
           <div className="filters-head">
-            <h4>Filter</h4>
+            <h2>Filter</h2>
             <span className="filters-head-actions">
               {activeCount > 0 && <button className="link-btn" onClick={clearAll}>Clear ({activeCount})</button>}
               <button className="shop-filter-close" onClick={() => setFiltersOpen(false)} aria-label="Close filters">✕</button>
@@ -228,6 +240,24 @@ export function ProductPage({ id }) {
           ...(reviews.length > 0 ? {
             aggregateRating: { "@type": "AggregateRating", ratingValue: avgRating.toFixed(1), reviewCount: reviews.length, bestRating: 5, worstRating: 1 },
           } : {}),
+        }
+      : null
+  );
+  // A second, independent useStructuredData call -- the hook itself supports this cleanly (each
+  // call gets its own counter-based script tag id and its own cleanup, confirmed in hooks/index.js),
+  // and keeping BreadcrumbList as its own JSON-LD object is the more common convention rather than
+  // merging unrelated schema types into one script tag. Real hierarchy (Home > Shop > this
+  // product), not a fabricated one -- matches how a visitor actually reaches this page.
+  useStructuredData(
+    product
+      ? {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: `${window.location.origin}/` },
+            { "@type": "ListItem", position: 2, name: "Shop", item: `${window.location.origin}${pathFor("shop")}` },
+            { "@type": "ListItem", position: 3, name: `${product.name} — ${product.country}`, item: `${window.location.origin}${pathFor("product", { id: product.id })}` },
+          ],
         }
       : null
   );

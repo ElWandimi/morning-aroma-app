@@ -67,6 +67,15 @@ function resolveMeta(pageRoute) {
     const f = GROWING_FACTORS.find((f) => slugify(f.name) === id);
     return f ? { title: `${f.name}${suffix}`, description: f.explain } : PAGE_META.growing;
   }
+  // Real course data lives in the database, not this script's static build-time data (same
+  // limitation the sitemap generator documents for the same reason) -- a crawler that doesn't
+  // execute JS previously saw the plain HOMEPAGE'S title/description here for every single course
+  // page, since "course" has no entry in PAGE_META at all and this function's final line falls
+  // all the way back to PAGE_META.home. Falls back to Academy's own real hub meta instead --
+  // still generic for a specific course, but genuinely about coffee courses rather than an
+  // unrelated homepage description, and a real fix that doesn't require adding a network
+  // dependency to the build to fetch live course data.
+  if (page === "course") return PAGE_META.academy;
   return PAGE_META[page] || PAGE_META.home;
 }
 
@@ -145,6 +154,7 @@ function renderIndexWithMeta(urlPath) {
     .replace(/<meta property="og:title" content=".*?"\s*\/?>/, `<meta property="og:title" content="${title}" />`)
     .replace(/<meta property="og:description" content=".*?"\s*\/?>/, `<meta property="og:description" content="${description}" />`)
     .replace(/<meta property="og:url" content=".*?"\s*\/?>/, `<meta property="og:url" content="${realUrl}" />`)
+    .replace(/<link rel="canonical" href=".*?"\s*\/?>/, `<link rel="canonical" href="${realUrl}" />`)
     .replace(/<meta name="twitter:title" content=".*?"\s*\/?>/, `<meta name="twitter:title" content="${title}" />`)
     .replace(/<meta name="twitter:description" content=".*?"\s*\/?>/, `<meta name="twitter:description" content="${description}" />`);
   if (urlPath.split("?")[0] === "/privacy") {
