@@ -13,8 +13,8 @@ const router = express.Router();
 // frontend either way.
 const VALID_PERMISSIONS = [
   "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content",
-  "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Live Messages",
-  "Audit Log", "Settings",
+  "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Newsletter",
+  "Live Messages", "Audit Log", "Settings",
 ];
 const VALID_ROLES = ["customer", "staff", "super_admin"];
 
