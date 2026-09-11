@@ -816,6 +816,57 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Payments/API-routes/dependencies security review — real findings, most areas confirmed
+  clean rather than assumed clean, closing out the remaining scope from the earlier full-app
+  security audit below.** Payments (`webhooks.js`, `paymentVerification.js`, `paystack.js`):
+  webhook signature verification, server-side amount verification, race-safe payment
+  confirmation, and refund authorization all confirmed solid on direct read. One real gap found
+  and fixed — none of the 8 outbound Paystack/exchange-rate `fetch` calls had a timeout, so a
+  hung upstream connection could stall a request indefinitely; added a shared 10s
+  `AbortSignal.timeout()` to all of them, plus honest per-call error messages instead of a
+  generic abort error. Verified for real, not just written: built an actual hung TCP server in a
+  throwaway script and confirmed the timeout genuinely fires and produces the intended message.
+  API routes: every mutating route's middleware chain checked directly — consistent
+  ownership-scoped queries (`WHERE id = $1 AND user_id = $2`) across subscriptions, orders, and
+  certificates, no IDOR found; `requireAdmin`/`requirePermission` both re-check role fresh from
+  the database on every request rather than trusting a possibly-stale JWT; `/users` deliberately
+  stays locked to `requireAdmin` alone, not delegable via `requirePermission`, to close a real
+  self-promotion path. One real, unrelated bug found while reading these files: `"Newsletter"` is
+  a valid admin permission on the frontend (`ADMIN_SECTIONS`) but was missing from the backend's
+  own allowlist (`VALID_PERMISSIONS` in `users.js`) — meaning it could never actually be granted
+  to a staff member, silently rejected with a 400 the moment anyone tried. Fixed. Dependencies:
+  `npm audit` run fresh (not from a stale lockfile) on both frontend (218 packages) and backend
+  (168 packages) — zero known vulnerabilities either side.
+- **Homepage reorganized into a denser, structured section layout, and a real two-column hero
+  split — reusing only existing site content throughout, per an explicit no-fabrication brief the
+  project owner set up front.** Before building anything, proposed a section-by-section mapping
+  (which existing component/copy fills each slot, or "drop — no existing content") and got it
+  approved first, rather than guessing. New `TrustGrid`, `SignatureCollection`, `QualitySplit`,
+  and `FeatureTiles` components all reuse the same real data `TrustBar`, `PremiumTier`/
+  `EverydayTier`, `SourceTrust`, and the Academy/Services pages already had — no invented copy,
+  stats, or sections. The hero itself was restructured into a real two-column split (an existing
+  bundled product photo, SL28 — Kenya, alongside the existing headline/CTAs), with the existing
+  background video kept full-bleed behind it rather than dropped, and the overlay's radial darken
+  repositioned to actually sit behind the now-right-aligned text instead of the frame's center.
+  **Two real bugs found and fixed along the way, not left as loose ends**: `SignatureCollection`'s
+  photo tiles used `background-size: cover`, cropping product bag photography into an
+  over-zoomed close-up — switched to the same `contain` + gradient-fill convention already used
+  by every other product photo on the site. `FeatureTiles`' two clickable tiles had no
+  `aria-label`, so each one's computed accessible name was its heading, blurb, and link text all
+  concatenated together, not just the intended link name — fixed with explicit labels.
+  **Real Playwright coverage added for all of it** (6 new tests) — and writing it surfaced two
+  genuinely pre-existing test bugs, unrelated to anything built this round: the original "nav
+  links reach their pages" test tried to click "Moments" as a bare top-level link, never
+  accounting for an earlier, separate round that moved it into a collapsed "Explore" dropdown;
+  and its "Academy" click was ambiguous under Playwright's strict mode the whole time, since
+  Academy is genuinely linked from both the nav and the footer — neither was ever run for real
+  before now to catch it. Both fixed. Confirmed passing for real on the project owner's own
+  machine against the real dev server, not just structurally validated — 8 passed, 1 skipped (the
+  admin test gated behind real credentials), 0 failed, 0 flaky, after two real iterations
+  (async-loading race conditions in two of the new sections needed a longer, real-backend-scale
+  timeout instead of Playwright's 5s default, the same class of fix the existing suite's own
+  history already used elsewhere).
+
 - **Full-app bug and security audit — real findings, most areas confirmed clean rather than
   assumed clean.** SQL injection: checked every `query()` call across every backend route for
   string-concatenated SQL; the one dynamic `IN (...)` clause found (`orders.js`) builds its
@@ -828,6 +879,7 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
   properly rate-limited and input-validated). Rate limiting on auth routes confirmed real and
   sanely configured (20 attempts/15 min in production). **Playwright e2e suite**: structurally
   validated (20 tests, 6 files, `--list` confirms no syntax errors) but genuinely NOT executed —
+
   this sandbox's network egress blocks `cdn.playwright.dev`, the same documented limitation
   `tests/e2e/README.md` already recorded; confirmed still accurate rather than assumed, including
   attempting a real `playwright install` to verify the block is still in effect. Six stale,
