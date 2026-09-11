@@ -1,6 +1,8 @@
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const { requireCsrfToken } = require("./utils/csrf");
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
 const ordersRoutes = require("./routes/orders");
@@ -67,6 +69,15 @@ app.use(express.json({ limit: "5mb" }));
 // open-by-default.
 const allowedOrigins = [process.env.FRONTEND_URL, "http://localhost:5173"].filter(Boolean);
 app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+// Must come after CORS (a cross-origin request's cookies are only readable here once CORS has
+// already decided whether to allow it) and before every route below, including the webhook route
+// -- cookie-parser itself is harmless there (Paystack's request has no cookies to parse), but
+// requireCsrfToken specifically already exempts /webhooks/ internally rather than relying on route
+// order to skip it, so a future reordering of these lines can't accidentally start requiring a
+// browser-only CSRF header on a server-to-server call.
+app.use(cookieParser());
+app.use(requireCsrfToken);
 
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);

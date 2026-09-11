@@ -35,20 +35,48 @@ function check(label, condition) {
 async function main() {
   const server = app.listen(4321);
   const base = "http://localhost:4321";
+  // The real access token now lives only in an httpOnly cookie, never in the response body (see
+  // server/src/utils/tokens.js -- the whole point of this change was making sure page JS, and by
+  // extension anything reading response bodies the way this helper used to, can't get at it
+  // directly). "token" here is genuinely a misnomer now, kept as the parameter name only because
+  // ~140 existing call sites in this file already pass it through positionally and renaming it
+  // everywhere would be a much larger, purely cosmetic diff -- what it actually holds is a raw
+  // Cookie header string (both the session and CSRF cookie, semicolon-joined), extracted from a
+  // previous response's real Set-Cookie headers by sessionCookies() below.
+  const csrfHeaderFrom = (cookieString) => {
+    if (!cookieString) return {};
+    const match = /ma_csrf=([^;]+)/.exec(cookieString);
+    return match ? { "x-csrf-token": match[1] } : {};
+  };
   const post = (path, body, token) =>
     fetch(base + path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Cookie: token, ...csrfHeaderFrom(token) } : {}),
+      },
       body: JSON.stringify(body),
-    }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    }).then(async (r) => ({ status: r.status, body: await r.json(), headers: r.headers }));
   const get = (path, token) =>
-    fetch(base + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    fetch(base + path, { headers: token ? { Cookie: token } : {} }).then(async (r) => ({ status: r.status, body: await r.json(), headers: r.headers }));
   const patch = (path, body, token) =>
     fetch(base + path, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Cookie: token, ...csrfHeaderFrom(token) } : {}),
+      },
       body: JSON.stringify(body),
-    }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    }).then(async (r) => ({ status: r.status, body: await r.json(), headers: r.headers }));
+  // A real response's Set-Cookie header(s) -> a ready-to-send Cookie header string for the next
+  // request, the same job a browser's own cookie jar does automatically and fetch() does not.
+  // Node's fetch exposes multiple Set-Cookie values via getSetCookie() (each is its own header on
+  // the wire, name=value plus attributes like Path/HttpOnly/SameSite that a Cookie header must NOT
+  // repeat back -- only the name=value pairs), so this takes just the first segment of each.
+  const sessionCookies = (response) => {
+    const raw = response.headers.getSetCookie ? response.headers.getSetCookie() : [];
+    return raw.map((c) => c.split(";")[0]).join("; ");
+  };
 
   // Real, since resend.mock.js captures actual sent emails rather than short-circuiting -- lets
   // this suite extract a real verification code the same way a real user reading their real inbox
@@ -92,7 +120,7 @@ async function main() {
   const reg = await post("/auth/register", { email: "test@morningaroma.local", password: "correcthorsebattery1", name: "Test User" });
   check("returns 201", reg.status === 201);
   check("requires email verification, not an immediate real session", reg.body.requiresEmailVerification === true && typeof reg.body.pendingToken === "string");
-  check("does not return a user or a real session token yet", !reg.body.user && !reg.body.token);
+  check("does not return a user or a real session cookie yet", !reg.body.user && !sessionCookies(reg));
   const testCode = extractCode();
   check("a real verification code email was actually sent through the provider", !!testCode);
 
@@ -106,12 +134,12 @@ async function main() {
   check("returns 200", verify.status === 200);
   check("returns a user object with expected shape", verify.body.user && verify.body.user.email === "test@morningaroma.local");
   check("the very first user on an empty database becomes super_admin", verify.body.user && verify.body.user.role === "super_admin");
-  check("returns a real token", typeof verify.body.token === "string" && verify.body.token.length > 20);
+  check("sets a real session cookie", sessionCookies(verify).includes("ma_session=") && sessionCookies(verify).length > 40);
   check("never returns the password hash", !("password_hash" in (verify.body.user || {})) && !("passwordHash" in (verify.body.user || {})));
   const welcomeEmails = resendMock.getSentEmails();
   check("the welcome email fires on successful verification, not at registration time", welcomeEmails.length === 1 && welcomeEmails[0].subject === "Welcome to Morning Aroma — where quality meets its scent.");
   check("welcome email addresses the user by their actual registered name", welcomeEmails[0] && welcomeEmails[0].text.includes("Hi Test User,"));
-  const token = verify.body.token;
+  const token = sessionCookies(verify);
 
   console.log("\nPOST /auth/verify-email again on an already-verified account, with the same, already-consumed code:");
   const reusedVerify = await post("/auth/verify-email", { pendingToken: reg.body.pendingToken, code: testCode });
@@ -120,7 +148,7 @@ async function main() {
   // two tabs both submitting the same valid code around the same time, where the second shouldn't
   // fail just because the first already won the race). This grants nothing an already-verified
   // account couldn't already get via a normal /auth/login anyway.
-  check("returns 200 -- already verified, treated as success rather than an error", reusedVerify.status === 200 && reusedVerify.body.token);
+  check("returns 200 -- already verified, treated as success rather than an error", reusedVerify.status === 200 && !!sessionCookies(reusedVerify));
 
   console.log("\nPOST /auth/login with the right password, before ever verifying a separate new account:");
   resendMock.resetSentEmails();
@@ -130,7 +158,7 @@ async function main() {
   check("a fresh code was sent for this real sign-in attempt too, not just at the original registration", resendMock.getSentEmails().length >= 1);
   const unverifiedCode = extractCode();
   const unverifiedVerify = await post("/auth/verify-email", { pendingToken: unverifiedLogin.body.pendingToken, code: unverifiedCode });
-  check("verifying from the login-triggered code completes sign-in correctly", unverifiedVerify.status === 200 && unverifiedVerify.body.token);
+  check("verifying from the login-triggered code completes sign-in correctly", unverifiedVerify.status === 200 && !!sessionCookies(unverifiedVerify));
 
   console.log("\nPOST /auth/verify-email/resend, then verify with the newly-resent code:");
   resendMock.resetSentEmails();
@@ -139,7 +167,7 @@ async function main() {
   check("returns 200", resendReq.status === 200);
   const resentCode = extractCode();
   const resentVerify = await post("/auth/verify-email", { pendingToken: resendReg.body.pendingToken, code: resentCode });
-  check("the newly-resent code genuinely works", resentVerify.status === 200 && resentVerify.body.token);
+  check("the newly-resent code genuinely works", resentVerify.status === 200 && !!sessionCookies(resentVerify));
 
   console.log("\nLocked out after 3 wrong attempts, even against the real correct code:");
   resendMock.resetSentEmails();
@@ -178,7 +206,7 @@ async function main() {
   check("returns 200 once verified", reg2.status === 200);
   check("the second user is a normal customer, not admin", reg2.body.user && reg2.body.user.role === "customer");
   const customerId = reg2.body.user.id;
-  const customerToken = reg2.body.token;
+  const customerToken = sessionCookies(reg2);
 
   console.log("\nGET /users without a token:");
   const usersNoAuth = await get("/users");
@@ -231,7 +259,7 @@ async function main() {
   check("returns 200", manualVerify.status === 200);
   check("the account genuinely reflects verified now", manualVerify.body.user && manualVerify.body.user.emailVerified === true);
   const lockoutNowSignsIn = await post("/auth/login", { email: "verify-lockout@morningaroma.local", password: "correcthorsebattery1" });
-  check("that real, previously-permanently-locked-out account can now genuinely sign in normally -- not just a cosmetic flag flip", lockoutNowSignsIn.status === 200 && typeof lockoutNowSignsIn.body.token === "string");
+  check("that real, previously-permanently-locked-out account can now genuinely sign in normally -- not just a cosmetic flag flip", lockoutNowSignsIn.status === 200 && sessionCookies(lockoutNowSignsIn).includes("ma_session="));
 
   console.log("\nPATCH /users/:id — refuse to demote the last remaining admin:");
   const adminId = verify.body.user.id;
@@ -245,6 +273,23 @@ async function main() {
   console.log("\nPOST /orders without a token:");
   const orderNoAuth = await post("/orders", { items: [{ id: "sl28-kenya", qty: 2, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" });
   check("returns 401", orderNoAuth.status === 401);
+
+  console.log("\nPOST /orders with a real session cookie but no CSRF header -- the actual attack this defends against, a forged cross-site request that has the session cookie (a browser attaches it automatically) but not the CSRF token (only this app's own JS can read that cookie to echo it back):");
+  const sessionOnlyCookie = customerToken.split(";").filter((c) => c.trim().startsWith("ma_session=")).join("; ");
+  const orderSessionNoCsrf = await fetch(base + "/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: sessionOnlyCookie },
+    body: JSON.stringify({ items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }),
+  }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  check("returns 403 -- a real session cookie alone isn't enough without the matching CSRF header", orderSessionNoCsrf.status === 403);
+
+  console.log("\nPOST /orders with a real session cookie and a wrong CSRF header (not matching the real CSRF cookie's value):");
+  const orderWrongCsrf = await fetch(base + "/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: sessionOnlyCookie, "x-csrf-token": "not-the-real-token" },
+    body: JSON.stringify({ items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }),
+  }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  check("returns 403 -- a mismatched CSRF header is rejected the same as a missing one", orderWrongCsrf.status === 403);
 
   console.log("\nPOST /orders with no items:");
   const orderNoItems = await post("/orders", { items: [], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
@@ -264,7 +309,7 @@ async function main() {
 
   console.log("\nPOST /orders referencing a real but discontinued product:");
   const discontinuedProduct = await post("/products", { name: "Discontinued Bean", country: "Nowhereland", tier: "everyday", priceCents: 1000, stock: 5 }, token);
-  await fetch(base + `/products/${discontinuedProduct.body.product.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  await fetch(base + `/products/${discontinuedProduct.body.product.id}`, { method: "DELETE", headers: { Cookie: token, ...csrfHeaderFrom(token) } });
   const orderDiscontinued = await post("/orders", { items: [{ id: discontinuedProduct.body.product.id, qty: 1, unitPriceCents: 1000 }], shippingName: "Test", shippingAddress: "1 Main St", shippingCity: "Nairobi" }, customerToken);
   check("a real product that's been discontinued since can no longer be ordered", orderDiscontinued.status === 400);
 
@@ -585,12 +630,12 @@ async function main() {
   const secondSubOrder = await post(
     "/orders",
     { items: [{ id: "sl28-kenya", qty: 1, unitPriceCents: 1500 }], shippingName: "Second Sub", shippingAddress: "2 Coffee Lane", shippingCity: "Nairobi" },
-    secondSubReg.body.token
+    sessionCookies(secondSubReg)
   );
   const secondSubOrderNumber = secondSubOrder.body.order.orderNumber.replace("MA-", "");
   const secondSubReference = `MA-${secondSubOrderNumber}-${Date.now()}`;
   paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000, authorization: { authorization_code: "AUTH_test_second" } });
-  await post(`/orders/${secondSubOrder.body.order.id}/verify-payment`, { reference: secondSubReference }, secondSubReg.body.token);
+  await post(`/orders/${secondSubOrder.body.order.id}/verify-payment`, { reference: secondSubReference }, sessionCookies(secondSubReg));
   paystackMock.setNextVerifyResponse({ status: "success", currency: "KES", amount: 195000, authorization: { authorization_code: "AUTH_test_second" } });
   // Deliberately configures createPlan to error -- if the route tries to call it again for this
   // exact same product+interval+KES-amount instead of reusing the cached plan from the first
@@ -601,7 +646,7 @@ async function main() {
   const secondSubCreate = await post(
     "/subscriptions",
     { reference: secondSubReference, productId: "sl28-kenya", quantity: 1, interval: "monthly", shippingName: "Second Sub", shippingAddress: "2 Coffee Lane", shippingCity: "Nairobi" },
-    secondSubReg.body.token
+    sessionCookies(secondSubReg)
   );
   check("succeeds -- proves the plan really was reused, since createPlan was configured to fail if called", secondSubCreate.status === 201);
 
@@ -612,7 +657,7 @@ async function main() {
   check("does not include the second customer's own subscription", !subMine.body.subscriptions.some((s) => s.paystackSubscriptionCode === "SUB_test_002"));
 
   console.log("\nPOST /subscriptions/:id/pause as a different customer entirely:");
-  const subPauseWrongUser = await post(`/subscriptions/${subId}/pause`, {}, secondSubReg.body.token);
+  const subPauseWrongUser = await post(`/subscriptions/${subId}/pause`, {}, sessionCookies(secondSubReg));
   check("returns 404 -- doesn't even reveal the subscription exists to someone who doesn't own it", subPauseWrongUser.status === 404);
 
   console.log("\nPOST /subscriptions/:id/pause — the real owner:");
@@ -687,7 +732,7 @@ async function main() {
   const subAdminAfterDisable = await get("/subscriptions", token);
   const disabledEntry = subAdminAfterDisable.body.subscriptions.find((s) => s.paystackSubscriptionCode === "SUB_test_002");
   check("the real subscription's status genuinely reflects cancelled now", disabledEntry === undefined || true); // see note below
-  const secondCustomerSubs = await get("/subscriptions/mine", secondSubReg.body.token);
+  const secondCustomerSubs = await get("/subscriptions/mine", sessionCookies(secondSubReg));
   const secondCustomerSub = secondCustomerSubs.body.subscriptions.find((s) => s.id);
   check("that customer's own subscription now shows cancelled", secondCustomerSub && secondCustomerSub.status === "cancelled");
 
@@ -714,7 +759,7 @@ async function main() {
   check("the derived annual price updated to match", coursePriceEdit.body.course && coursePriceEdit.body.course.annualPriceCents === Math.round(1499 * 12 * 0.8));
 
   console.log("\nDELETE /courses/:id -- soft delete, matching how products handle discontinuing:");
-  const courseDeleteRes = await fetch(base + `/courses/${testCourseId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  const courseDeleteRes = await fetch(base + `/courses/${testCourseId}`, { method: "DELETE", headers: { Cookie: token, ...csrfHeaderFrom(token) } });
   const courseDelete = { status: courseDeleteRes.status, body: await courseDeleteRes.json() };
   check("returns 200", courseDelete.status === 200);
   const coursesAfterDelete = await get("/courses");
@@ -749,7 +794,7 @@ async function main() {
   paystackMock.setNextCustomerResponse({ customer_code: "CUS_test_course_sub_2" });
   paystackMock.setNextSubscriptionResponse({ subscription_code: "SUB_test_course_002", email_token: "test_email_token_course_002" });
   const secondCourseSubReg = await registerAndVerify(`course-sub-${Date.now()}@example.com`, "correcthorsebattery1", "Course Subscriber");
-  const courseSubAnnual = await post("/subscriptions", { reference: "course-ref-annual", courseId: liveCourseId, interval: "annually" }, secondCourseSubReg.body.token);
+  const courseSubAnnual = await post("/subscriptions", { reference: "course-ref-annual", courseId: liveCourseId, interval: "annually" }, sessionCookies(secondCourseSubReg));
   check("returns 201", courseSubAnnual.status === 201);
   // 1000 cents/month x 12 x 0.8 (20% off) = 9600 cents/year -- the real, applied discount, not
   // just a number shown on the frontend that the actual charge might not match.
@@ -801,7 +846,7 @@ async function main() {
   check("returns 400 -- already has real lifetime access, can't buy it twice", lifetimeSecondPurchase.status === 400);
 
   console.log("\nA different customer checking lifetime access before ever buying it:");
-  const lifetimeMineOther = await get("/subscriptions/lifetime/mine", secondCourseSubReg.body.token);
+  const lifetimeMineOther = await get("/subscriptions/lifetime/mine", sessionCookies(secondCourseSubReg));
   check("correctly reports no lifetime access for a customer who never purchased it", lifetimeMineOther.body.hasLifetimeAccess === false);
 
   console.log("\nGET /subscriptions/lifetime as a non-admin:");
@@ -926,11 +971,11 @@ async function main() {
   check("returns 404", patchMissing404.status === 404);
 
   console.log("\nDELETE /products/:id as a non-admin:");
-  const deleteAsCustomer = await fetch(base + `/products/${testProductId}`, { method: "DELETE", headers: { Authorization: `Bearer ${customerToken}` } });
+  const deleteAsCustomer = await fetch(base + `/products/${testProductId}`, { method: "DELETE", headers: { Cookie: customerToken, ...csrfHeaderFrom(customerToken) } });
   check("returns 403", deleteAsCustomer.status === 403);
 
   console.log("\nDELETE /products/:id — real soft-delete:");
-  const deleteOk = await fetch(base + `/products/${testProductId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  const deleteOk = await fetch(base + `/products/${testProductId}`, { method: "DELETE", headers: { Cookie: token, ...csrfHeaderFrom(token) } });
   check("returns 200", deleteOk.status === 200);
   const productsAfterDelete = await get("/products");
   check("the discontinued product no longer appears in the public list", !productsAfterDelete.body.products.some((p) => p.id === testProductId));
@@ -1108,11 +1153,11 @@ async function main() {
   check("returns 400 -- this lot's real minOrderKg (5) would now exceed the new stock (2), checked against current state not just the request body", greenPatchTooLowStock.status === 400);
 
   console.log("\nDELETE /green-beans/:id as a non-admin:");
-  const greenDeleteAsCustomer = await fetch(base + `/green-beans/${testGreenBeanId}`, { method: "DELETE", headers: { Authorization: `Bearer ${customerToken}` } });
+  const greenDeleteAsCustomer = await fetch(base + `/green-beans/${testGreenBeanId}`, { method: "DELETE", headers: { Cookie: customerToken, ...csrfHeaderFrom(customerToken) } });
   check("returns 403", greenDeleteAsCustomer.status === 403);
 
   console.log("\nDELETE /green-beans/:id — real soft-delete:");
-  const greenDeleteOk = await fetch(base + `/green-beans/${testGreenBeanId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  const greenDeleteOk = await fetch(base + `/green-beans/${testGreenBeanId}`, { method: "DELETE", headers: { Cookie: token, ...csrfHeaderFrom(token) } });
   check("returns 200", greenDeleteOk.status === 200);
   const greenAfterDelete = await get("/green-beans");
   check("the discontinued lot no longer appears in the public list", !greenAfterDelete.body.greenBeans.some((g) => g.id === testGreenBeanId));
@@ -1132,7 +1177,7 @@ async function main() {
   console.log("\nLogin with correct credentials:");
   const login = await post("/auth/login", { email: "test@morningaroma.local", password: "correcthorsebattery1" });
   check("returns 200", login.status === 200);
-  check("returns a token", typeof login.body.token === "string");
+  check("sets a session cookie", sessionCookies(login).includes("ma_session="));
 
   console.log("\nLogin with wrong password:");
   const wrongPw = await post("/auth/login", { email: "test@morningaroma.local", password: "wrongpassword" });
@@ -1229,7 +1274,7 @@ async function main() {
   const otplib = require("otplib");
   const twoFaReg = await registerAndVerify("twofa@morningaroma.local", "correcthorsebattery1", "Two Factor Test");
   check("returns 200 once verified", twoFaReg.status === 200);
-  const twoFaToken = twoFaReg.body.token;
+  const twoFaToken = sessionCookies(twoFaReg);
 
   console.log("\nPOST /auth/2fa/verify-setup before ever calling /auth/2fa/setup:");
   const verifyBeforeSetup = await post("/auth/2fa/verify-setup", { code: "123456" }, twoFaToken);
@@ -1266,7 +1311,7 @@ async function main() {
   console.log("\nPOST /auth/login with the right password, now that 2FA is on:");
   const twoFaLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery1" });
   check("returns 200", twoFaLogin.status === 200);
-  check("does NOT return a real access token", twoFaLogin.body.token === undefined);
+  check("does NOT set a real session cookie", !sessionCookies(twoFaLogin).includes("ma_session="));
   check("signals a second step is required", twoFaLogin.body.requiresTwoFactor === true);
   check("returns a pending session token instead", typeof twoFaLogin.body.pendingToken === "string" && twoFaLogin.body.pendingToken.length > 20);
   const pendingToken1 = twoFaLogin.body.pendingToken;
@@ -1288,8 +1333,8 @@ async function main() {
   const verifyLoginOk = await post("/auth/2fa/verify-login", { pendingToken: pendingToken1, code: realCode2 });
   check("returns 200", verifyLoginOk.status === 200);
   check("returns a real user object", verifyLoginOk.body.user && verifyLoginOk.body.user.email === "twofa@morningaroma.local");
-  check("returns a real, usable access token this time", typeof verifyLoginOk.body.token === "string" && verifyLoginOk.body.token.length > 20);
-  const twoFaRealToken = verifyLoginOk.body.token;
+  check("sets a real, usable session cookie this time", sessionCookies(verifyLoginOk).includes("ma_session="));
+  const twoFaRealToken = sessionCookies(verifyLoginOk);
 
   console.log("\nThat real token genuinely works on a protected route:");
   const meWithRealToken = await get("/auth/me", twoFaRealToken);
@@ -1303,7 +1348,7 @@ async function main() {
   const verifyLoginBackup = await post("/auth/2fa/verify-login", { pendingToken: pendingToken2, code: backupCodes[0] });
   check("returns 200", verifyLoginBackup.status === 200);
   check("signals a backup code was used", verifyLoginBackup.body.usedBackupCode === true);
-  check("still returns a real, usable token", typeof verifyLoginBackup.body.token === "string");
+  check("still sets a real, usable session cookie", sessionCookies(verifyLoginBackup).includes("ma_session="));
 
   console.log("\nReusing that exact same backup code a second time:");
   const thirdLogin = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery1" });
@@ -1321,7 +1366,7 @@ async function main() {
 
   console.log("\nPOST /auth/login again, now that 2FA is off:");
   const loginAfterDisable = await post("/auth/login", { email: "twofa@morningaroma.local", password: "correcthorsebattery1" });
-  check("returns a real token directly again, no second step", typeof loginAfterDisable.body.token === "string" && loginAfterDisable.body.requiresTwoFactor === undefined);
+  check("sets a real session cookie directly again, no second step", sessionCookies(loginAfterDisable).includes("ma_session=") && loginAfterDisable.body.requiresTwoFactor === undefined);
 
   console.log("\nGoogle sign-in -- register a real, verified email+password account first, to prove Google resolves to it:");
   const googleReg = await registerAndVerify("linked@morningaroma.local", "correcthorsebattery1", "Linked Account");
@@ -1348,7 +1393,7 @@ async function main() {
   check("creates a real user with the email from the token", googleNewAccount.body.user && googleNewAccount.body.user.email === "new-via-google@morningaroma.local");
   check("falls back to given_name + family_name when the token has no top-level name", googleNewAccount.body.user.name === "New ViaGoogle");
   check("a fresh account this far into the run is never the bootstrap admin", googleNewAccount.body.user.role === "customer");
-  check("returns a real, usable access token", typeof googleNewAccount.body.token === "string" && googleNewAccount.body.token.length > 20);
+  check("sets a real, usable session cookie", sessionCookies(googleNewAccount).includes("ma_session="));
   const newGoogleUserId = googleNewAccount.body.user.id;
 
   console.log("\nSigning in via Google again with that exact same email:");
@@ -1363,19 +1408,19 @@ async function main() {
   check("resolves to the SAME account created via email+password -- not a second, duplicate one", googleLinked.body.user.id === linkedUserId);
 
   console.log("\nThat Google-issued token genuinely works on a protected route:");
-  const meViaGoogle = await get("/auth/me", googleNewAccount.body.token);
+  const meViaGoogle = await get("/auth/me", sessionCookies(googleNewAccount));
   check("returns 200", meViaGoogle.status === 200);
 
   console.log("\nSetting up a fresh account with real 2FA on, to test it against Google sign-in (not reusing the earlier 2FA account -- it gets disabled again by the end of that test block):");
   const googleTwoFaReg = await registerAndVerify("google-twofa@morningaroma.local", "correcthorsebattery1", "Google Two Factor Test");
-  const googleTwoFaSetup = await post("/auth/2fa/setup", {}, googleTwoFaReg.body.token);
+  const googleTwoFaSetup = await post("/auth/2fa/setup", {}, sessionCookies(googleTwoFaReg));
   const googleTwoFaRealCode = await otplib.generate({ secret: googleTwoFaSetup.body.secret });
-  await post("/auth/2fa/verify-setup", { code: googleTwoFaRealCode }, googleTwoFaReg.body.token);
+  await post("/auth/2fa/verify-setup", { code: googleTwoFaRealCode }, sessionCookies(googleTwoFaReg));
 
   console.log("\nAn account with real 2FA on still gets gated behind it when signing in via Google:");
   googleMock.setNextGooglePayload({ email: "google-twofa@morningaroma.local", email_verified: true, name: "Google Two Factor Test" });
   const googleTwoFaLogin = await post("/auth/google", { idToken: "real-looking-token" });
-  check("does NOT return a real access token", googleTwoFaLogin.body.token === undefined);
+  check("does NOT set a real session cookie", !sessionCookies(googleTwoFaLogin).includes("ma_session="));
   check("signals a second step is required, same as password login would", googleTwoFaLogin.body.requiresTwoFactor === true);
   check("returns a real pending session token", typeof googleTwoFaLogin.body.pendingToken === "string");
 
@@ -1416,7 +1461,7 @@ async function main() {
   check("returns 200", otpVerify.status === 200);
   check("creates a real user with the email that requested the code", otpVerify.body.user && otpVerify.body.user.email === "otp-new@morningaroma.local");
   check("a fresh account this far into the run is never the bootstrap admin", otpVerify.body.user.role === "customer");
-  check("returns a real, usable access token", typeof otpVerify.body.token === "string" && otpVerify.body.token.length > 20);
+  check("sets a real, usable session cookie", sessionCookies(otpVerify).includes("ma_session="));
   const otpNewUserId = otpVerify.body.user.id;
 
   console.log("\nReusing that exact same code a second time:");
@@ -1441,21 +1486,21 @@ async function main() {
 
   console.log("\nAn account with real 2FA on still gets gated behind it when signing in via OTP:");
   const otpTwoFaReg = await registerAndVerify("otp-twofa@morningaroma.local", "correcthorsebattery1", "OTP Two Factor Test");
-  const otpTwoFaSetup = await post("/auth/2fa/setup", {}, otpTwoFaReg.body.token);
+  const otpTwoFaSetup = await post("/auth/2fa/setup", {}, sessionCookies(otpTwoFaReg));
   const otpTwoFaRealCode = await otplib.generate({ secret: otpTwoFaSetup.body.secret });
-  await post("/auth/2fa/verify-setup", { code: otpTwoFaRealCode }, otpTwoFaReg.body.token);
+  await post("/auth/2fa/verify-setup", { code: otpTwoFaRealCode }, sessionCookies(otpTwoFaReg));
   resendMock.resetSentEmails();
   await post("/auth/otp/request", { email: "otp-twofa@morningaroma.local" });
   const otpTwoFaLoginCode = resendMock.getSentEmails()[0].text.match(/\n(\d{6})\n/)[1];
   const otpTwoFaLogin = await post("/auth/otp/verify", { email: "otp-twofa@morningaroma.local", code: otpTwoFaLoginCode });
-  check("does NOT return a real access token", otpTwoFaLogin.body.token === undefined);
+  check("does NOT set a real session cookie", !sessionCookies(otpTwoFaLogin).includes("ma_session="));
   check("signals a second step is required, same as password and Google login would", otpTwoFaLogin.body.requiresTwoFactor === true);
   check("returns a real pending session token", typeof otpTwoFaLogin.body.pendingToken === "string");
   delete process.env.RESEND_API_KEY;
 
   console.log("\nStaff permissions -- previously cosmetic only (every route rejected any non-super_admin regardless of what was granted). Setting up a staff account with real, granted permissions:");
   const staffCandidate = await registerAndVerify("staff-inventory@morningaroma.local", "correcthorsebattery1", "Staff Inventory Test");
-  const staffToken = staffCandidate.body.token;
+  const staffToken = sessionCookies(staffCandidate);
   await patch(`/users/${staffCandidate.body.user.id}`, { role: "staff", permissions: ["Inventory"] }, token);
 
   console.log("\nA staff member granted \"Inventory\" can now genuinely create a green bean lot, not just see the panel and get rejected on every action:");
@@ -1472,7 +1517,7 @@ async function main() {
   console.log("\nGranting a second staff member \"Customers\" specifically, to confirm the one real security boundary that must NOT have moved:");
   const staffCustomersCandidate = await registerAndVerify("staff-customers@morningaroma.local", "correcthorsebattery1", "Staff Customers Test");
   await patch(`/users/${staffCustomersCandidate.body.user.id}`, { role: "staff", permissions: ["Customers"] }, token);
-  const staffCustomersToken = staffCustomersCandidate.body.token;
+  const staffCustomersToken = sessionCookies(staffCustomersCandidate);
 
   const staffViewUsers = await get("/users", staffCustomersToken);
   check("still returns 403, even with \"Customers\" granted -- role/permission management stays super_admin-only, since a safe subset genuinely doesn't exist here (granting this would let a staff member change roles, including their own)", staffViewUsers.status === 403);

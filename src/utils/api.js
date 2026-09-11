@@ -12,10 +12,35 @@ if (!API_URL && import.meta.env.PROD) {
   console.error("VITE_API_URL is not set — the app cannot reach the auth backend. Set it in the frontend service's environment variables.");
 }
 
+// The real session token now lives only in an httpOnly cookie the backend sets (see
+// server/src/utils/tokens.js) -- this app's own JS genuinely cannot read it, which is the whole
+// point (an XSS payload can no longer exfiltrate it the way reading it out of localStorage would
+// have let one). credentials: "include" below is what makes the browser actually attach that
+// cookie to a cross-origin request at all; without it, every request would silently go out
+// unauthenticated regardless of whether a real session exists.
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", undefined]);
+
+// The CSRF cookie is deliberately NOT httpOnly (see server/src/utils/csrf.js) -- this app's own
+// frontend JS has to be able to read it to echo it back in a header, since proving "this request
+// came from a page that can read this origin's cookies" is the entire mechanism. A third-party
+// site can plant its own cookies here but can't read this one back off this origin to forge the
+// matching header, which is what actually makes the check meaningful.
+function readCsrfCookie() {
+  const match = document.cookie.match(/(?:^|; )ma_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function request(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const csrfToken = !SAFE_METHODS.has(method) ? readCsrfCookie() : null;
   const res = await fetch(`${API_URL || ""}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...options.headers },
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
+      ...options.headers,
+    },
   });
   let body;
   try {
@@ -36,26 +61,26 @@ export const api = {
     request("/auth/register", { method: "POST", body: JSON.stringify({ email, password, name }) }),
   login: (email, password) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  me: (token) =>
-    request("/auth/me", { headers: { Authorization: `Bearer ${token}` } }),
-  logout: (token) =>
-    request("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
+  me: () =>
+    request("/auth/me"),
+  logout: () =>
+    request("/auth/logout", { method: "POST" }),
   requestPasswordReset: (email) =>
     request("/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email }) }),
   confirmPasswordReset: (token, newPassword) =>
     request("/auth/password-reset/confirm", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
-  setupTwoFactor: (token) =>
-    request("/auth/2fa/setup", { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
-  verifyTwoFactorSetup: (token, code) =>
-    request("/auth/2fa/verify-setup", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ code }) }),
+  setupTwoFactor: () =>
+    request("/auth/2fa/setup", { method: "POST" }),
+  verifyTwoFactorSetup: (code) =>
+    request("/auth/2fa/verify-setup", { method: "POST", body: JSON.stringify({ code }) }),
   // Deliberately no Authorization header -- there's no real session yet at this point (that's the
   // whole reason a *pending* token exists), so the pending token itself, in the body, is what
   // authorizes this specific call. See signPendingTwoFactorToken's own comment (server/src/utils/tokens.js)
   // for why it can't be used as a Bearer token to reach anything else.
   verifyTwoFactorLogin: (pendingToken, code) =>
     request("/auth/2fa/verify-login", { method: "POST", body: JSON.stringify({ pendingToken, code }) }),
-  disableTwoFactor: (token, password) =>
-    request("/auth/2fa/disable", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) }),
+  disableTwoFactor: (password) =>
+    request("/auth/2fa/disable", { method: "POST", body: JSON.stringify({ password }) }),
   // Same reasoning as verifyTwoFactorLogin above -- deliberately no Authorization header, the
   // pending token in the body is what authorizes this specific call.
   verifyEmailCode: (pendingToken, code) =>
@@ -70,105 +95,105 @@ export const api = {
     request("/auth/otp/request", { method: "POST", body: JSON.stringify({ email }) }),
   verifyOtpLogin: (email, code) =>
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ email, code }) }),
-  getUsers: (token) =>
-    request("/users", { headers: { Authorization: `Bearer ${token}` } }),
-  updateUser: (token, id, updates) =>
-    request(`/users/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
-  createOrder: (token, order) =>
-    request("/orders", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(order) }),
-  getMyOrders: (token) =>
-    request("/orders/mine", { headers: { Authorization: `Bearer ${token}` } }),
-  getAllOrders: (token) =>
-    request("/orders", { headers: { Authorization: `Bearer ${token}` } }),
-  updateOrderStatus: (token, id, status) =>
-    request(`/orders/${id}/status`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }),
-  cancelOrder: (token, id) =>
-    request(`/orders/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
-  verifyPayment: (token, id, reference) =>
-    request(`/orders/${id}/verify-payment`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reference }) }),
-  refundOrder: (token, id) =>
-    request(`/orders/${id}/refund`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
-  createSubscription: (token, subscription) =>
-    request("/subscriptions", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(subscription) }),
-  getMySubscriptions: (token) =>
-    request("/subscriptions/mine", { headers: { Authorization: `Bearer ${token}` } }),
-  pauseSubscription: (token, id) =>
-    request(`/subscriptions/${id}/pause`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
-  resumeSubscription: (token, id) =>
-    request(`/subscriptions/${id}/resume`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
-  cancelSubscription: (token, id) =>
-    request(`/subscriptions/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
-  getAllSubscriptions: (token) =>
-    request("/subscriptions", { headers: { Authorization: `Bearer ${token}` } }),
-  purchaseLifetimeAccess: (token, reference) =>
-    request("/subscriptions/lifetime", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reference }) }),
-  getMyLifetimeAccess: (token) =>
-    request("/subscriptions/lifetime/mine", { headers: { Authorization: `Bearer ${token}` } }),
-  getAllLifetimeAccess: (token) =>
-    request("/subscriptions/lifetime", { headers: { Authorization: `Bearer ${token}` } }),
+  getUsers: () =>
+    request("/users"),
+  updateUser: (id, updates) =>
+    request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+  createOrder: (order) =>
+    request("/orders", { method: "POST", body: JSON.stringify(order) }),
+  getMyOrders: () =>
+    request("/orders/mine"),
+  getAllOrders: () =>
+    request("/orders"),
+  updateOrderStatus: (id, status) =>
+    request(`/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  cancelOrder: (id) =>
+    request(`/orders/${id}/cancel`, { method: "POST" }),
+  verifyPayment: (id, reference) =>
+    request(`/orders/${id}/verify-payment`, { method: "POST", body: JSON.stringify({ reference }) }),
+  refundOrder: (id) =>
+    request(`/orders/${id}/refund`, { method: "POST" }),
+  createSubscription: (subscription) =>
+    request("/subscriptions", { method: "POST", body: JSON.stringify(subscription) }),
+  getMySubscriptions: () =>
+    request("/subscriptions/mine"),
+  pauseSubscription: (id) =>
+    request(`/subscriptions/${id}/pause`, { method: "POST" }),
+  resumeSubscription: (id) =>
+    request(`/subscriptions/${id}/resume`, { method: "POST" }),
+  cancelSubscription: (id) =>
+    request(`/subscriptions/${id}/cancel`, { method: "POST" }),
+  getAllSubscriptions: () =>
+    request("/subscriptions"),
+  purchaseLifetimeAccess: (reference) =>
+    request("/subscriptions/lifetime", { method: "POST", body: JSON.stringify({ reference }) }),
+  getMyLifetimeAccess: () =>
+    request("/subscriptions/lifetime/mine"),
+  getAllLifetimeAccess: () =>
+    request("/subscriptions/lifetime"),
   submitFeedback: (feedback) =>
     request("/feedback", { method: "POST", body: JSON.stringify(feedback) }),
   getProductFeedback: (productId) => request(`/feedback/product/${productId}`),
-  getAllFeedback: (token) =>
-    request("/feedback", { headers: { Authorization: `Bearer ${token}` } }),
-  setFeedbackReviewed: (token, id, reviewed) =>
-    request(`/feedback/${id}/reviewed`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ reviewed }) }),
+  getAllFeedback: () =>
+    request("/feedback"),
+  setFeedbackReviewed: (id, reviewed) =>
+    request(`/feedback/${id}/reviewed`, { method: "PATCH", body: JSON.stringify({ reviewed }) }),
   subscribeNewsletter: (subscriber) =>
     request("/newsletter", { method: "POST", body: JSON.stringify(subscriber) }),
-  getNewsletterSubscribers: (token) =>
-    request("/newsletter", { headers: { Authorization: `Bearer ${token}` } }),
+  getNewsletterSubscribers: () =>
+    request("/newsletter"),
   getCourses: () => request("/courses"),
-  createCourse: (token, course) =>
-    request("/courses", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(course) }),
-  updateCourse: (token, id, updates) =>
-    request(`/courses/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
-  deleteCourse: (token, id) =>
-    request(`/courses/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  createCourse: (course) =>
+    request("/courses", { method: "POST", body: JSON.stringify(course) }),
+  updateCourse: (id, updates) =>
+    request(`/courses/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+  deleteCourse: (id) =>
+    request(`/courses/${id}`, { method: "DELETE" }),
   getChapters: (courseId) => request(`/courses/${courseId}/chapters`),
-  getChapterContent: (token, chapterId) => request(`/chapters/${chapterId}/content`, { headers: { Authorization: `Bearer ${token}` } }),
-  getChapterContentAdmin: (token, chapterId) => request(`/admin/chapters/${chapterId}/content`, { headers: { Authorization: `Bearer ${token}` } }),
-  createChapter: (token, courseId, chapter) =>
-    request(`/courses/${courseId}/chapters`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(chapter) }),
-  updateChapter: (token, id, updates) =>
-    request(`/chapters/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
-  deleteChapter: (token, id) =>
-    request(`/chapters/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  getChapterContent: (chapterId) => request(`/chapters/${chapterId}/content`),
+  getChapterContentAdmin: (chapterId) => request(`/admin/chapters/${chapterId}/content`),
+  createChapter: (courseId, chapter) =>
+    request(`/courses/${courseId}/chapters`, { method: "POST", body: JSON.stringify(chapter) }),
+  updateChapter: (id, updates) =>
+    request(`/chapters/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+  deleteChapter: (id) =>
+    request(`/chapters/${id}`, { method: "DELETE" }),
   getQuizExists: (chapterId) => request(`/chapters/${chapterId}/quiz/exists`),
-  getQuiz: (token, chapterId) => request(`/chapters/${chapterId}/quiz`, { headers: { Authorization: `Bearer ${token}` } }),
-  submitQuiz: (token, chapterId, answers) =>
-    request(`/chapters/${chapterId}/quiz/submit`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ answers }) }),
-  getMyQuizAttempts: (token, chapterId) =>
-    request(`/chapters/${chapterId}/quiz/my-attempts`, { headers: { Authorization: `Bearer ${token}` } }),
-  getQuizQuestionsAdmin: (token, chapterId) =>
-    request(`/admin/chapters/${chapterId}/quiz-questions`, { headers: { Authorization: `Bearer ${token}` } }),
-  createQuizQuestion: (token, chapterId, question) =>
-    request(`/chapters/${chapterId}/quiz-questions`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(question) }),
-  updateQuizQuestion: (token, id, updates) =>
-    request(`/quiz-questions/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
-  deleteQuizQuestion: (token, id) =>
-    request(`/quiz-questions/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
-  getCertificateEligibility: (token, courseId) =>
-    request(`/courses/${courseId}/certificate-eligibility`, { headers: { Authorization: `Bearer ${token}` } }),
-  issueCertificate: (token, courseId) =>
-    request(`/courses/${courseId}/certificate`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
-  getMyCertificates: (token) => request("/users/me/certificates", { headers: { Authorization: `Bearer ${token}` } }),
+  getQuiz: (chapterId) => request(`/chapters/${chapterId}/quiz`),
+  submitQuiz: (chapterId, answers) =>
+    request(`/chapters/${chapterId}/quiz/submit`, { method: "POST", body: JSON.stringify({ answers }) }),
+  getMyQuizAttempts: (chapterId) =>
+    request(`/chapters/${chapterId}/quiz/my-attempts`),
+  getQuizQuestionsAdmin: (chapterId) =>
+    request(`/admin/chapters/${chapterId}/quiz-questions`),
+  createQuizQuestion: (chapterId, question) =>
+    request(`/chapters/${chapterId}/quiz-questions`, { method: "POST", body: JSON.stringify(question) }),
+  updateQuizQuestion: (id, updates) =>
+    request(`/quiz-questions/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+  deleteQuizQuestion: (id) =>
+    request(`/quiz-questions/${id}`, { method: "DELETE" }),
+  getCertificateEligibility: (courseId) =>
+    request(`/courses/${courseId}/certificate-eligibility`),
+  issueCertificate: (courseId) =>
+    request(`/courses/${courseId}/certificate`, { method: "POST" }),
+  getMyCertificates: () => request("/users/me/certificates"),
   verifyCertificate: (code) => request(`/certificates/verify/${code}`),
-  getAcademyStats: (token) => request("/users/me/academy-stats", { headers: { Authorization: `Bearer ${token}` } }),
+  getAcademyStats: () => request("/users/me/academy-stats"),
   getProducts: () => request("/products"),
-  createProduct: (token, product) =>
-    request("/products", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(product) }),
-  updateProduct: (token, id, updates) =>
-    request(`/products/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
-  deleteProduct: (token, id) =>
-    request(`/products/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  createProduct: (product) =>
+    request("/products", { method: "POST", body: JSON.stringify(product) }),
+  updateProduct: (id, updates) =>
+    request(`/products/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+  deleteProduct: (id) =>
+    request(`/products/${id}`, { method: "DELETE" }),
   getGreenBeans: () => request("/green-beans"),
-  createGreenBean: (token, greenBean) =>
-    request("/green-beans", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(greenBean) }),
-  updateGreenBean: (token, id, updates) =>
-    request(`/green-beans/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) }),
-  deleteGreenBean: (token, id) =>
-    request(`/green-beans/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  createGreenBean: (greenBean) =>
+    request("/green-beans", { method: "POST", body: JSON.stringify(greenBean) }),
+  updateGreenBean: (id, updates) =>
+    request(`/green-beans/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+  deleteGreenBean: (id) =>
+    request(`/green-beans/${id}`, { method: "DELETE" }),
   getSettings: () => request("/settings"),
-  updateSettings: (token, patch) =>
-    request("/settings", { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(patch) }),
+  updateSettings: (patch) =>
+    request("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
 };

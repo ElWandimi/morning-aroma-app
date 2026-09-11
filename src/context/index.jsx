@@ -39,7 +39,6 @@ export function AuthProvider({ children }) {
   ]);
   const [passwords, setPasswords] = useState({ [DEMO_ADMIN.email]: DEMO_ADMIN.password });
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [error, setError] = useState("");
   // Holds the short-lived pending-2FA session token (server/src/utils/tokens.js) between "password
@@ -51,25 +50,21 @@ export function AuthProvider({ children }) {
   // less commonly, a later /login on a still-unverified account) can now require.
   const [pendingEmailVerificationToken, setPendingEmailVerificationToken] = useState(null);
 
-  // On mount, try to restore a real session from a previously-saved token -- without this, a real
-  // registered/logged-in user would be signed out every time they refresh the page, which is a
-  // meaningfully worse experience than the old demo (which never persisted anything anyway, so
-  // there was nothing to lose before). Gated behind the same storage-consent check as everything
-  // else that touches localStorage in this app.
+  // On mount, try to restore a real session -- without this, a real registered/logged-in user
+  // would be signed out every time they refresh the page, which is a meaningfully worse
+  // experience than the old demo (which never persisted anything anyway, so there was nothing to
+  // lose before). The real session token now lives only in an httpOnly cookie the browser
+  // attaches automatically (see src/utils/api.js) -- there's no local value to check for before
+  // asking; api.me() itself is the check, succeeding if a valid session cookie came along and
+  // failing (silently, here) if it didn't or has expired. Genuinely simpler than the previous
+  // localStorage-token version, not just different: there's no saved value to read, restore, or
+  // invalidate on this end at all anymore.
   useEffect(() => {
-    if (getStorageConsent() !== "accepted") { setSessionLoading(false); return; }
-    const saved = storage.get("ma_auth_token", null);
-    if (!saved) { setSessionLoading(false); return; }
-    api.me(saved)
-      .then((body) => { setUser(pluck(body, "user")); setToken(saved); })
-      .catch(() => { storage.set("ma_auth_token", null); }) // expired/invalid token (or a malformed response) — fail silently, just stay signed out
+    api.me()
+      .then((body) => setUser(pluck(body, "user")))
+      .catch(() => {}) // no session cookie, or an expired one -- either way, just stay signed out
       .finally(() => setSessionLoading(false));
   }, []);
-
-  const persistToken = (newToken) => {
-    setToken(newToken);
-    if (getStorageConsent() === "accepted") storage.set("ma_auth_token", newToken);
-  };
 
   // Real registration against the actual backend. No longer signs the person in directly -- a
   // password-based signup now requires verifying a real code sent to the email first (see
@@ -110,7 +105,6 @@ export function AuthProvider({ children }) {
       }
       setError("");
       setUser(pluck(body, "user"));
-      persistToken(pluck(body, "token"));
       return { ok: true, requiresTwoFactor: false };
     } catch (e) {
       setError(e.message);
@@ -138,7 +132,6 @@ export function AuthProvider({ children }) {
         return { ok: true, requiresTwoFactor: true };
       }
       setUser(pluck(body, "user"));
-      persistToken(pluck(body, "token"));
       setPendingEmailVerificationToken(null);
       setError("");
       return { ok: true };
@@ -172,7 +165,6 @@ export function AuthProvider({ children }) {
     try {
       const body = await api.verifyTwoFactorLogin(pendingTwoFactorToken, code);
       setUser(pluck(body, "user"));
-      persistToken(pluck(body, "token"));
       setPendingTwoFactorToken(null);
       setError("");
       return { ok: true, usedBackupCode: !!body.usedBackupCode };
@@ -190,7 +182,7 @@ export function AuthProvider({ children }) {
   // produce a matching code from it.
   const startTwoFactorSetup = async () => {
     try {
-      const body = await api.setupTwoFactor(token);
+      const body = await api.setupTwoFactor();
       return { ok: true, secret: body.secret, uri: body.uri, qrDataUrl: body.qrDataUrl };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -199,7 +191,7 @@ export function AuthProvider({ children }) {
 
   const confirmTwoFactorSetup = async (code) => {
     try {
-      const body = await api.verifyTwoFactorSetup(token, code);
+      const body = await api.verifyTwoFactorSetup(code);
       // Backup codes are returned exactly once, right here -- there's no way to see them again
       // later, since the backend only ever stores their hashes. The caller (Journey.jsx) is
       // responsible for actually showing them to the person before this moment passes.
@@ -215,7 +207,7 @@ export function AuthProvider({ children }) {
   // off 2FA is a real security downgrade, not a cosmetic preference toggle.
   const disableTwoFactor = async (password) => {
     try {
-      await api.disableTwoFactor(token, password);
+      await api.disableTwoFactor(password);
       setUser((prev) => (prev ? { ...prev, twoFactorEnabled: false } : prev));
       return { ok: true };
     } catch (e) {
@@ -255,7 +247,6 @@ export function AuthProvider({ children }) {
       }
       setError("");
       setUser(pluck(body, "user"));
-      persistToken(pluck(body, "token"));
       return { ok: true, requiresTwoFactor: false };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -277,7 +268,6 @@ export function AuthProvider({ children }) {
       }
       setError("");
       setUser(pluck(body, "user"));
-      persistToken(pluck(body, "token"));
       return { ok: true, requiresTwoFactor: false };
     } catch (e) {
       setError(e.message);
@@ -286,9 +276,14 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    if (token) api.logout(token).catch(() => {}); // best-effort; stateless JWT means there's nothing to actually invalidate server-side yet
+    // No longer just best-effort -- the backend now actually clears both the session and CSRF
+    // cookies server-side (server/src/routes/auth.js), which is the ONLY way they get cleared at
+    // all: an httpOnly cookie can't be removed by this app's own JS the way the old localStorage
+    // token could. Still fire-and-forget from this function's own perspective (don't block
+    // clearing local UI state on the network round-trip), but it's doing real, necessary work now,
+    // not a no-op kept around for API-shape consistency.
+    api.logout().catch(() => {});
     setUser(null);
-    persistToken(null);
   };
 
   const setRole = (email, role) => {
@@ -313,7 +308,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthCtx.Provider
       value={{
-        user, token, users, login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, logout, setRole, setPermissions, error, setError,
+        user, users, login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, logout, setRole, setPermissions, error, setError,
         pendingTwoFactorToken, verifyTwoFactorLogin, cancelTwoFactorLogin,
         pendingEmailVerificationToken, verifyEmailCode, resendEmailVerificationCode, cancelEmailVerification,
         startTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, setNotificationsEnabled,
@@ -455,16 +450,16 @@ export const useJournal = () => useContext(JournalCtx);
 export const OrdersCtx = createContext(null);
 
 export function OrdersProvider({ children }) {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const [myOrders, setMyOrders] = useState([]);
   const [myOrdersLoading, setMyOrdersLoading] = useState(true);
   const [myOrdersError, setMyOrdersError] = useState("");
 
   const refetchMyOrders = () => {
-    if (!token) { setMyOrdersLoading(false); return; }
+    if (!user) { setMyOrdersLoading(false); return; }
     setMyOrdersLoading(true);
     setMyOrdersError("");
-    api.getMyOrders(token)
+    api.getMyOrders()
       .then((body) => setMyOrders(pluck(body, "orders", { array: true })))
       .catch((e) => setMyOrdersError(e.message))
       .finally(() => setMyOrdersLoading(false));
@@ -472,13 +467,13 @@ export function OrdersProvider({ children }) {
   useEffect(() => {
     if (user) refetchMyOrders();
     else { setMyOrders([]); setMyOrdersLoading(false); }
-  }, [token, user && user.email]);
+  }, [user && user.email]);
 
   // Both return { ok, order? / error? } rather than throwing, so callers (Checkout, Journey) can
   // show an inline error without needing their own try/catch around every call site.
   const createOrder = async (orderData) => {
     try {
-      const { order } = await api.createOrder(token, orderData);
+      const { order } = await api.createOrder(orderData);
       setMyOrders((prev) => [order, ...prev]);
       return { ok: true, order };
     } catch (e) {
@@ -487,7 +482,7 @@ export function OrdersProvider({ children }) {
   };
   const cancelOrder = async (orderId) => {
     try {
-      const { order } = await api.cancelOrder(token, orderId);
+      const { order } = await api.cancelOrder(orderId);
       setMyOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
       return { ok: true };
     } catch (e) {
@@ -496,7 +491,7 @@ export function OrdersProvider({ children }) {
   };
   const verifyPayment = async (orderId, reference) => {
     try {
-      const { order } = await api.verifyPayment(token, orderId, reference);
+      const { order } = await api.verifyPayment(orderId, reference);
       setMyOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
       return { ok: true, order };
     } catch (e) {
@@ -516,16 +511,16 @@ export const useOrders = () => useContext(OrdersCtx);
 export const SubscriptionsCtx = createContext(null);
 
 export function SubscriptionsProvider({ children }) {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const [mySubscriptions, setMySubscriptions] = useState([]);
   const [mySubscriptionsLoading, setMySubscriptionsLoading] = useState(true);
   const [mySubscriptionsError, setMySubscriptionsError] = useState("");
 
   const refetchMySubscriptions = () => {
-    if (!token) { setMySubscriptionsLoading(false); return; }
+    if (!user) { setMySubscriptionsLoading(false); return; }
     setMySubscriptionsLoading(true);
     setMySubscriptionsError("");
-    api.getMySubscriptions(token)
+    api.getMySubscriptions()
       .then((body) => setMySubscriptions(pluck(body, "subscriptions", { array: true })))
       .catch((e) => setMySubscriptionsError(e.message))
       .finally(() => setMySubscriptionsLoading(false));
@@ -533,13 +528,13 @@ export function SubscriptionsProvider({ children }) {
   useEffect(() => {
     if (user) refetchMySubscriptions();
     else { setMySubscriptions([]); setMySubscriptionsLoading(false); }
-  }, [token, user && user.email]);
+  }, [user && user.email]);
 
   // All four return { ok, error? } rather than throwing, matching useOrders' own pattern, so
   // callers (Checkout, Journey) can show an inline error without their own try/catch.
   const createSubscription = async (subscriptionData) => {
     try {
-      const { subscription } = await api.createSubscription(token, subscriptionData);
+      const { subscription } = await api.createSubscription(subscriptionData);
       setMySubscriptions((prev) => [subscription, ...prev]);
       return { ok: true, subscription };
     } catch (e) {
@@ -548,7 +543,7 @@ export function SubscriptionsProvider({ children }) {
   };
   const pauseSubscription = async (id) => {
     try {
-      const { subscription } = await api.pauseSubscription(token, id);
+      const { subscription } = await api.pauseSubscription(id);
       setMySubscriptions((prev) => prev.map((s) => (s.id === id ? subscription : s)));
       return { ok: true };
     } catch (e) {
@@ -557,7 +552,7 @@ export function SubscriptionsProvider({ children }) {
   };
   const resumeSubscription = async (id) => {
     try {
-      const { subscription } = await api.resumeSubscription(token, id);
+      const { subscription } = await api.resumeSubscription(id);
       setMySubscriptions((prev) => prev.map((s) => (s.id === id ? subscription : s)));
       return { ok: true };
     } catch (e) {
@@ -566,7 +561,7 @@ export function SubscriptionsProvider({ children }) {
   };
   const cancelSubscription = async (id) => {
     try {
-      const { subscription } = await api.cancelSubscription(token, id);
+      const { subscription } = await api.cancelSubscription(id);
       setMySubscriptions((prev) => prev.map((s) => (s.id === id ? subscription : s)));
       return { ok: true };
     } catch (e) {
@@ -580,9 +575,9 @@ export function SubscriptionsProvider({ children }) {
   const [hasLifetimeAccess, setHasLifetimeAccess] = useState(false);
   const [lifetimeAccessLoading, setLifetimeAccessLoading] = useState(true);
   const refetchLifetimeAccess = () => {
-    if (!token) { setLifetimeAccessLoading(false); return; }
+    if (!user) { setLifetimeAccessLoading(false); return; }
     setLifetimeAccessLoading(true);
-    api.getMyLifetimeAccess(token)
+    api.getMyLifetimeAccess()
       .then((body) => setHasLifetimeAccess(!!body.hasLifetimeAccess))
       .catch(() => {})
       .finally(() => setLifetimeAccessLoading(false));
@@ -590,10 +585,10 @@ export function SubscriptionsProvider({ children }) {
   useEffect(() => {
     if (user) refetchLifetimeAccess();
     else { setHasLifetimeAccess(false); setLifetimeAccessLoading(false); }
-  }, [token, user && user.email]);
+  }, [user && user.email]);
   const purchaseLifetimeAccess = async (reference) => {
     try {
-      await api.purchaseLifetimeAccess(token, reference);
+      await api.purchaseLifetimeAccess(reference);
       setHasLifetimeAccess(true);
       return { ok: true };
     } catch (e) {
@@ -618,15 +613,15 @@ export const useSubscriptions = () => useContext(SubscriptionsCtx);
 export const AdminCtx = createContext(null);
 
 export function AdminDataProvider({ children }) {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [realUsers, setRealUsers] = useState([]);
   const [realUsersLoading, setRealUsersLoading] = useState(true);
   const [realUsersError, setRealUsersError] = useState("");
   const refetchRealUsers = () => {
-    if (!token) { setRealUsersLoading(false); return; }
+    if (!user) { setRealUsersLoading(false); return; }
     setRealUsersLoading(true);
     setRealUsersError("");
-    api.getUsers(token)
+    api.getUsers()
       .then((body) => setRealUsers(pluck(body, "users", { array: true })))
       .catch((e) => {
         // A non-admin's token 403ing here is expected and not a real error -- their dashboard
@@ -643,16 +638,16 @@ export function AdminDataProvider({ children }) {
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealUsers();
     else setRealUsersLoading(false);
-  }, [token, user && user.role]);
+  }, [user && user.role]);
 
   const [realOrders, setRealOrders] = useState([]);
   const [realOrdersLoading, setRealOrdersLoading] = useState(true);
   const [realOrdersError, setRealOrdersError] = useState("");
   const refetchRealOrders = () => {
-    if (!token) { setRealOrdersLoading(false); return; }
+    if (!user) { setRealOrdersLoading(false); return; }
     setRealOrdersLoading(true);
     setRealOrdersError("");
-    api.getAllOrders(token)
+    api.getAllOrders()
       .then((body) => setRealOrders(pluck(body, "orders", { array: true })))
       .catch((e) => { if (e.status !== 403) setRealOrdersError(e.message); }) // same reasoning as realUsers above -- a non-admin 403ing here is expected, not a real error
       .finally(() => setRealOrdersLoading(false));
@@ -660,16 +655,16 @@ export function AdminDataProvider({ children }) {
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealOrders();
     else setRealOrdersLoading(false);
-  }, [token, user && user.role]);
+  }, [user && user.role]);
 
   const [realSubscriptions, setRealSubscriptions] = useState([]);
   const [realSubscriptionsLoading, setRealSubscriptionsLoading] = useState(true);
   const [realSubscriptionsError, setRealSubscriptionsError] = useState("");
   const refetchRealSubscriptions = () => {
-    if (!token) { setRealSubscriptionsLoading(false); return; }
+    if (!user) { setRealSubscriptionsLoading(false); return; }
     setRealSubscriptionsLoading(true);
     setRealSubscriptionsError("");
-    api.getAllSubscriptions(token)
+    api.getAllSubscriptions()
       .then((body) => setRealSubscriptions(pluck(body, "subscriptions", { array: true })))
       .catch((e) => { if (e.status !== 403) setRealSubscriptionsError(e.message); }) // same reasoning as realUsers/realOrders above
       .finally(() => setRealSubscriptionsLoading(false));
@@ -677,16 +672,16 @@ export function AdminDataProvider({ children }) {
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealSubscriptions();
     else setRealSubscriptionsLoading(false);
-  }, [token, user && user.role]);
+  }, [user && user.role]);
 
   const [realLifetimeAccess, setRealLifetimeAccess] = useState([]);
   const [realLifetimeAccessLoading, setRealLifetimeAccessLoading] = useState(true);
   const [realLifetimeAccessError, setRealLifetimeAccessError] = useState("");
   const refetchRealLifetimeAccess = () => {
-    if (!token) { setRealLifetimeAccessLoading(false); return; }
+    if (!user) { setRealLifetimeAccessLoading(false); return; }
     setRealLifetimeAccessLoading(true);
     setRealLifetimeAccessError("");
-    api.getAllLifetimeAccess(token)
+    api.getAllLifetimeAccess()
       .then((body) => setRealLifetimeAccess(pluck(body, "lifetimeAccess", { array: true })))
       .catch((e) => { if (e.status !== 403) setRealLifetimeAccessError(e.message); })
       .finally(() => setRealLifetimeAccessLoading(false));
@@ -694,7 +689,7 @@ export function AdminDataProvider({ children }) {
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchRealLifetimeAccess();
     else setRealLifetimeAccessLoading(false);
-  }, [token, user && user.role]);
+  }, [user && user.role]);
 
   // Real, backend-persisted feedback/reviews -- was purely local, in-memory state before this
   // (see ROADMAP.md). Exposed as feedbackList (the same name it always had) so AdminFeedback.jsx
@@ -703,10 +698,10 @@ export function AdminDataProvider({ children }) {
   const [feedbackListLoading, setFeedbackListLoading] = useState(true);
   const [feedbackListError, setFeedbackListError] = useState("");
   const refetchFeedbackList = () => {
-    if (!token) { setFeedbackListLoading(false); return; }
+    if (!user) { setFeedbackListLoading(false); return; }
     setFeedbackListLoading(true);
     setFeedbackListError("");
-    api.getAllFeedback(token)
+    api.getAllFeedback()
       .then((body) => setFeedbackList(pluck(body, "feedback", { array: true })))
       .catch((e) => { if (e.status !== 403) setFeedbackListError(e.message); })
       .finally(() => setFeedbackListLoading(false));
@@ -714,11 +709,11 @@ export function AdminDataProvider({ children }) {
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchFeedbackList();
     else setFeedbackListLoading(false);
-  }, [token, user && user.role]);
+  }, [user && user.role]);
 
   const updateOrderStatus = async (orderId, status) => {
     try {
-      await api.updateOrderStatus(token, orderId, status);
+      await api.updateOrderStatus(orderId, status);
       refetchRealOrders();
       return { ok: true };
     } catch (e) {
@@ -732,7 +727,7 @@ export function AdminDataProvider({ children }) {
   // cancellation window), enforced server-side, not just by hiding the button.
   const refundOrder = async (orderId) => {
     try {
-      await api.refundOrder(token, orderId);
+      await api.refundOrder(orderId);
       refetchRealOrders();
       return { ok: true };
     } catch (e) {
@@ -830,7 +825,7 @@ export function AdminDataProvider({ children }) {
   };
   const setPrice = async (id, cents) => {
     try {
-      await api.updateProduct(token, id, { priceCents: cents });
+      await api.updateProduct(id, { priceCents: cents });
       refetchRealProducts();
       logAction("Price changed", `${id} → ${fmtPrice(cents)}`);
       return { ok: true };
@@ -847,7 +842,7 @@ export function AdminDataProvider({ children }) {
   // country, or tier at all once created, only price/stock/photo.
   const updateProductDetails = async (id, patch) => {
     try {
-      await api.updateProduct(token, id, patch);
+      await api.updateProduct(id, patch);
       refetchRealProducts();
       logAction("Product details updated", id);
       return { ok: true };
@@ -862,7 +857,7 @@ export function AdminDataProvider({ children }) {
   };
   const setTier = async (id, tier) => {
     try {
-      await api.updateProduct(token, id, { tier });
+      await api.updateProduct(id, { tier });
       refetchRealProducts();
       logAction("Tier changed", `${id} → ${tier}`);
       return { ok: true };
@@ -885,10 +880,10 @@ export function AdminDataProvider({ children }) {
     const isRealProduct = realProducts.some((p) => p.id === id);
     try {
       if (isRealProduct) {
-        await api.updateProduct(token, id, { stock: safeQty });
+        await api.updateProduct(id, { stock: safeQty });
         refetchRealProducts();
       } else {
-        await api.updateGreenBean(token, id, { stockKg: safeQty });
+        await api.updateGreenBean(id, { stockKg: safeQty });
         refetchRealGreenBeans();
       }
       logAction("Stock updated", `${id} → ${safeQty} units`);
@@ -908,7 +903,7 @@ export function AdminDataProvider({ children }) {
   const getAllProducts = () => realProducts;
   const setProductPhoto = async (id, dataUrl) => {
     try {
-      await api.updateProduct(token, id, { photoUrl: dataUrl });
+      await api.updateProduct(id, { photoUrl: dataUrl });
       refetchRealProducts();
       logAction("Product photo updated", id);
       return { ok: true };
@@ -918,7 +913,7 @@ export function AdminDataProvider({ children }) {
   };
   const addProduct = async (data) => {
     try {
-      const { product } = await api.createProduct(token, data);
+      const { product } = await api.createProduct(data);
       refetchRealProducts();
       logAction("Product added", `${data.name} — ${data.country}`);
       return { product };
@@ -928,7 +923,7 @@ export function AdminDataProvider({ children }) {
   };
   const removeProduct = async (id) => {
     try {
-      await api.deleteProduct(token, id);
+      await api.deleteProduct(id);
       refetchRealProducts();
       logAction("Product discontinued", id);
       return { ok: true };
@@ -950,7 +945,7 @@ export function AdminDataProvider({ children }) {
   const getAllCourses = () => realCourses;
   const addCourse = async (data) => {
     try {
-      const { course } = await api.createCourse(token, data);
+      const { course } = await api.createCourse(data);
       refetchRealCourses();
       logAction("Course added", data.name);
       return { course };
@@ -960,7 +955,7 @@ export function AdminDataProvider({ children }) {
   };
   const updateCourseDetails = async (id, patch) => {
     try {
-      await api.updateCourse(token, id, patch);
+      await api.updateCourse(id, patch);
       refetchRealCourses();
       logAction("Course details updated", id);
       return { ok: true };
@@ -970,7 +965,7 @@ export function AdminDataProvider({ children }) {
   };
   const removeCourse = async (id) => {
     try {
-      await api.deleteCourse(token, id);
+      await api.deleteCourse(id);
       refetchRealCourses();
       logAction("Course discontinued", id);
       return { ok: true };
@@ -989,7 +984,7 @@ export function AdminDataProvider({ children }) {
   };
   const addChapter = async (courseId, data) => {
     try {
-      const { chapter } = await api.createChapter(token, courseId, data);
+      const { chapter } = await api.createChapter(courseId, data);
       logAction("Chapter added", `${courseId} — ${data.title}`);
       return { chapter };
     } catch (e) {
@@ -998,7 +993,7 @@ export function AdminDataProvider({ children }) {
   };
   const updateChapterDetails = async (id, patch) => {
     try {
-      const { chapter } = await api.updateChapter(token, id, patch);
+      const { chapter } = await api.updateChapter(id, patch);
       logAction("Chapter updated", id);
       return { ok: true, chapter };
     } catch (e) {
@@ -1007,7 +1002,7 @@ export function AdminDataProvider({ children }) {
   };
   const removeChapter = async (id) => {
     try {
-      await api.deleteChapter(token, id);
+      await api.deleteChapter(id);
       logAction("Chapter removed", id);
       return { ok: true };
     } catch (e) {
@@ -1019,7 +1014,7 @@ export function AdminDataProvider({ children }) {
   // a specific lesson, same on-demand reasoning as getCourseChapters and getQuiz above.
   const getChapterContent = async (chapterId) => {
     try {
-      const body = await api.getChapterContent(token, chapterId);
+      const body = await api.getChapterContent(chapterId);
       return { ok: true, ...body };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -1027,7 +1022,7 @@ export function AdminDataProvider({ children }) {
   };
   const getChapterContentAdmin = async (chapterId) => {
     try {
-      const body = await api.getChapterContentAdmin(token, chapterId);
+      const body = await api.getChapterContentAdmin(chapterId);
       return { ok: true, ...body };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -1043,28 +1038,28 @@ export function AdminDataProvider({ children }) {
     return !!(body && body.exists);
   };
   const getQuiz = async (chapterId) => {
-    const body = await api.getQuiz(token, chapterId);
+    const body = await api.getQuiz(chapterId);
     return Array.isArray(body && body.questions) ? body.questions : [];
   };
   const submitQuiz = async (chapterId, answers) => {
     try {
-      const body = await api.submitQuiz(token, chapterId, answers);
+      const body = await api.submitQuiz(chapterId, answers);
       return { ok: true, ...body };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   };
   const getMyQuizAttempts = async (chapterId) => {
-    const body = await api.getMyQuizAttempts(token, chapterId);
+    const body = await api.getMyQuizAttempts(chapterId);
     return Array.isArray(body && body.attempts) ? body.attempts : [];
   };
   const getQuizQuestionsAdmin = async (chapterId) => {
-    const body = await api.getQuizQuestionsAdmin(token, chapterId);
+    const body = await api.getQuizQuestionsAdmin(chapterId);
     return Array.isArray(body && body.questions) ? body.questions : [];
   };
   const addQuizQuestion = async (chapterId, data) => {
     try {
-      const { question } = await api.createQuizQuestion(token, chapterId, data);
+      const { question } = await api.createQuizQuestion(chapterId, data);
       logAction("Quiz question added", chapterId);
       return { question };
     } catch (e) {
@@ -1073,7 +1068,7 @@ export function AdminDataProvider({ children }) {
   };
   const updateQuizQuestionDetails = async (id, patch) => {
     try {
-      const { question } = await api.updateQuizQuestion(token, id, patch);
+      const { question } = await api.updateQuizQuestion(id, patch);
       logAction("Quiz question updated", id);
       return { ok: true, question };
     } catch (e) {
@@ -1082,7 +1077,7 @@ export function AdminDataProvider({ children }) {
   };
   const removeQuizQuestion = async (id) => {
     try {
-      await api.deleteQuizQuestion(token, id);
+      await api.deleteQuizQuestion(id);
       logAction("Quiz question removed", id);
       return { ok: true };
     } catch (e) {
@@ -1096,21 +1091,21 @@ export function AdminDataProvider({ children }) {
   // provider at all -- see api.verifyCertificate, called directly from the public verify page.
   const getCertificateEligibility = async (courseId) => {
     try {
-      return await api.getCertificateEligibility(token, courseId);
+      return await api.getCertificateEligibility(courseId);
     } catch {
       return { eligible: false, assessedChapterCount: 0, passedChapterCount: 0 };
     }
   };
   const issueCertificate = async (courseId) => {
     try {
-      const { certificate } = await api.issueCertificate(token, courseId);
+      const { certificate } = await api.issueCertificate(courseId);
       return { ok: true, certificate };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   };
   const getMyCertificates = async () => {
-    const body = await api.getMyCertificates(token);
+    const body = await api.getMyCertificates();
     return Array.isArray(body && body.certificates) ? body.certificates : [];
   };
 
@@ -1119,7 +1114,7 @@ export function AdminDataProvider({ children }) {
   // that can ever drift out of sync with what a user actually did.
   const getAcademyStats = async () => {
     try {
-      return await api.getAcademyStats(token);
+      return await api.getAcademyStats();
     } catch {
       return null;
     }
@@ -1128,7 +1123,7 @@ export function AdminDataProvider({ children }) {
   const getAllGreenBeans = () => realGreenBeans;
   const addGreenBean = async (data) => {
     try {
-      const { greenBean } = await api.createGreenBean(token, data);
+      const { greenBean } = await api.createGreenBean(data);
       refetchRealGreenBeans();
       logAction("Green bean lot added", `${data.name} — ${data.country}`);
       return { bean: greenBean };
@@ -1138,7 +1133,7 @@ export function AdminDataProvider({ children }) {
   };
   const removeGreenBean = async (id) => {
     try {
-      await api.deleteGreenBean(token, id);
+      await api.deleteGreenBean(id);
       refetchRealGreenBeans();
       logAction("Green bean lot discontinued", id);
       return { ok: true };
@@ -1156,7 +1151,7 @@ export function AdminDataProvider({ children }) {
   };
   const setGreenPrice = async (id, cents) => {
     try {
-      await api.updateGreenBean(token, id, { pricePerKgCents: cents });
+      await api.updateGreenBean(id, { pricePerKgCents: cents });
       refetchRealGreenBeans();
       logAction("Green bean price changed", `${id} → ${fmtPrice(cents)}/kg`);
       return { ok: true };
@@ -1251,7 +1246,7 @@ export function AdminDataProvider({ children }) {
   const toggleFeedbackReviewed = async (id) => {
     try {
       const current = feedbackList.find((f) => f.id === id);
-      const { feedback } = await api.setFeedbackReviewed(token, id, !(current && current.reviewed));
+      const { feedback } = await api.setFeedbackReviewed(id, !(current && current.reviewed));
       setFeedbackList((prev) => prev.map((f) => (f.id === id ? feedback : f)));
       return { ok: true };
     } catch (e) {
@@ -1273,9 +1268,9 @@ export function AdminDataProvider({ children }) {
   const [newsletterSubscribers, setNewsletterSubscribers] = useState([]);
   const [newsletterSubscribersLoading, setNewsletterSubscribersLoading] = useState(true);
   const refetchNewsletterSubscribers = () => {
-    if (!token) { setNewsletterSubscribersLoading(false); return; }
+    if (!user) { setNewsletterSubscribersLoading(false); return; }
     setNewsletterSubscribersLoading(true);
-    api.getNewsletterSubscribers(token)
+    api.getNewsletterSubscribers()
       .then((body) => setNewsletterSubscribers(pluck(body, "subscribers", { array: true })))
       .catch(() => {})
       .finally(() => setNewsletterSubscribersLoading(false));
@@ -1283,7 +1278,7 @@ export function AdminDataProvider({ children }) {
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchNewsletterSubscribers();
     else setNewsletterSubscribersLoading(false);
-  }, [token, user && user.role]);
+  }, [user && user.role]);
 
   const getMomentContent = (m) => ({ ...m, ...(momentOverrides[m.id] || {}) });
   const setMomentContent = (id, patch) => {
@@ -1305,7 +1300,7 @@ export function AdminDataProvider({ children }) {
 
   const setSettings = async (patch) => {
     try {
-      const { settings: updated } = await api.updateSettings(token, patch);
+      const { settings: updated } = await api.updateSettings(patch);
       setSettingsState(updated);
       logAction("Settings updated", Object.keys(patch).join(", "));
       return { ok: true };

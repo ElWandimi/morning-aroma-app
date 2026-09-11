@@ -4,7 +4,8 @@ const rateLimit = require("express-rate-limit");
 const { OAuth2Client } = require("google-auth-library");
 const { query } = require("../db");
 const { hashPassword, verifyPassword, isPasswordStrongEnough } = require("../utils/password");
-const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken, signPendingEmailVerificationToken, verifyPendingEmailVerificationToken } = require("../utils/tokens");
+const { signAccessToken, generateResetToken, hashResetToken, signPendingTwoFactorToken, verifyPendingTwoFactorToken, signPendingEmailVerificationToken, verifyPendingEmailVerificationToken, setSessionCookie, clearSessionCookie } = require("../utils/tokens");
+const { generateCsrfToken, setCsrfCookie, clearCsrfCookie } = require("../utils/csrf");
 const { newSecret, totpQrCode, verifyTotp, generateBackupCodes, hashBackupCode } = require("../utils/twoFactor");
 const { generateLoginCode, hashLoginCode } = require("../utils/otp");
 const { generateVerificationCode, hashVerificationCode } = require("../utils/emailVerification");
@@ -12,6 +13,20 @@ const { requireAuth } = require("../middleware/requireAuth");
 const { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendEmailVerificationCode } = require("../utils/email");
 
 const router = express.Router();
+
+// The one real place a session actually gets established -- every successful auth path (password
+// login, Google, OTP, 2FA verification, email verification) calls this instead of each
+// constructing its own res.json({ user, token }), so "what counts as a real, complete session" (a
+// session cookie AND a CSRF cookie, issued together, every time) can't quietly drift between one
+// path and another the way 7 separate copies of this logic eventually would. token is no longer
+// returned in the response body at all -- it lives only in the httpOnly cookie now, so there's
+// nothing left for page JS (or an XSS payload) to read and exfiltrate the way a body field would
+// have allowed.
+function issueSession(res, user, extra = {}) {
+  setSessionCookie(res, signAccessToken(user));
+  setCsrfCookie(res, generateCsrfToken());
+  return res.json({ user: publicUser(user), ...extra });
+}
 
 // Real, not a placeholder -- verifying a Google-issued ID token needs the actual OAuth Client ID
 // from Google Cloud Console (see ROADMAP.md) as the expected `audience`, or a forged token for a
@@ -134,7 +149,7 @@ router.post("/verify-email", async (req, res) => {
     // Already verified by the time this arrived (e.g. two tabs, or a retried request) -- treat
     // it as success rather than a confusing error, since the actual goal (a verified, signed-in
     // account) is already true.
-    return res.json({ user: publicUser(user), token: signAccessToken(user) });
+    return issueSession(res, user);
   }
   if (typeof code !== "string" || !code.trim()) {
     return res.status(400).json({ error: "Enter the 6-digit code from your email." });
@@ -175,7 +190,7 @@ router.post("/verify-email", async (req, res) => {
     return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(verifiedUser) });
   }
 
-  res.json({ user: publicUser(verifiedUser), token: signAccessToken(verifiedUser) });
+  issueSession(res, verifiedUser);
 });
 
 router.post("/verify-email/resend", async (req, res) => {
@@ -227,7 +242,7 @@ router.post("/login", async (req, res) => {
     return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
   }
 
-  res.json({ user: publicUser(user), token: signAccessToken(user) });
+  issueSession(res, user);
 });
 
 // Real Google sign-in: verifies an ID token Google's own Sign-In button already produced entirely
@@ -310,7 +325,7 @@ router.post("/google", async (req, res) => {
     return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
   }
 
-  res.json({ user: publicUser(user), token: signAccessToken(user) });
+  issueSession(res, user);
 });
 
 // Real OTP (email-code) sign-in: a genuine passwordless alternative to /login, not the old
@@ -401,7 +416,7 @@ router.post("/otp/verify", async (req, res) => {
     return res.json({ requiresTwoFactor: true, pendingToken: signPendingTwoFactorToken(user) });
   }
 
-  res.json({ user: publicUser(user), token: signAccessToken(user) });
+  issueSession(res, user);
 });
 
 router.get("/me", requireAuth, async (req, res) => {
@@ -411,10 +426,14 @@ router.get("/me", requireAuth, async (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
-// Stateless JWT -- there's no server-side session to destroy. This endpoint exists for a
-// consistent API shape and as the natural place to add a token blocklist later if that's ever
-// needed; for now the actual "logout" work is entirely client-side (discarding the stored token).
+// Previously a no-op -- correct for the old design (a stateless JWT living in localStorage,
+// discarded entirely client-side, with nothing server-side to clean up), genuinely wrong for
+// cookie-based sessions: the browser keeps sending an httpOnly cookie on every request until
+// something tells it to stop, and page JS can't clear an httpOnly cookie itself (that's the whole
+// point of httpOnly). This is now the only way a session cookie actually gets removed.
 router.post("/logout", (req, res) => {
+  clearSessionCookie(res);
+  clearCsrfCookie(res);
   res.json({ ok: true });
 });
 
@@ -526,7 +545,7 @@ router.post("/2fa/verify-login", async (req, res) => {
 
   const totpValid = await verifyTotp(user.two_factor_secret, code);
   if (totpValid) {
-    return res.json({ user: publicUser(user), token: signAccessToken(user) });
+    return issueSession(res, user);
   }
 
   // Not a valid live TOTP code -- check whether it matches one of this account's remaining,
@@ -537,7 +556,7 @@ router.post("/2fa/verify-login", async (req, res) => {
   if (remainingCodes.includes(hashedInput)) {
     const updatedCodes = remainingCodes.filter((c) => c !== hashedInput);
     await query("UPDATE users SET two_factor_backup_codes = $1 WHERE id = $2", [updatedCodes, user.id]);
-    return res.json({ user: publicUser(user), token: signAccessToken(user), usedBackupCode: true });
+    return issueSession(res, user, { usedBackupCode: true });
   }
 
   res.status(401).json({ error: "Incorrect code." });
