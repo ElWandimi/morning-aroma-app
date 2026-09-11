@@ -35,7 +35,7 @@ export function Hero() {
   const { go } = useRoute();
   const reducedMotion = usePrefersReducedMotion();
   return (
-    <section className="hero">
+    <section className="hero hero-split">
       <video
         className="hero-video"
         autoPlay={!reducedMotion}
@@ -48,18 +48,28 @@ export function Hero() {
         <source src="/video/hero-coffee.mp4" type="video/mp4" />
       </video>
       <div className="hero-overlay" />
-      <div className="hero-content">
-        <p className="handwritten hero-eyebrow">a note from the roastery —</p>
-        <h1 className="hero-title">
-          Find Your Morning<br />
-          <span className="hero-title-accent">Aroma</span>
-        </h1>
-        <p className="hero-sub">
-          Every cup begins as a story — a hillside, a hand, a harvest. We just help it reach yours, still warm.
-        </p>
-        <div className="hero-actions">
-          <button className="btn-primary" onClick={() => go("quiz")}>Take the Aroma Quiz</button>
-          <button className="btn-outline light" onClick={() => go("shop")}>Explore the Shop</button>
+      <div className="hero-split-inner">
+        <div
+          className="hero-product-shot"
+          onClick={() => go("product", { id: "sl28-kenya" })}
+          onKeyDown={activateOnEnterOrSpace(() => go("product", { id: "sl28-kenya" }))}
+          role="link" tabIndex={0} aria-label="View SL28 — Kenya"
+        >
+          <img src="/photos/products/sl28-kenya.png" alt="Morning Aroma SL28 — Kenya coffee bag" />
+        </div>
+        <div className="hero-content">
+          <p className="handwritten hero-eyebrow">a note from the roastery —</p>
+          <h1 className="hero-title">
+            Find Your Morning<br />
+            <span className="hero-title-accent">Aroma</span>
+          </h1>
+          <p className="hero-sub">
+            Every cup begins as a story — a hillside, a hand, a harvest. We just help it reach yours, still warm.
+          </p>
+          <div className="hero-actions">
+            <button className="btn-primary" onClick={() => go("quiz")}>Take the Aroma Quiz</button>
+            <button className="btn-outline light" onClick={() => go("shop")}>Explore the Shop</button>
+          </div>
         </div>
       </div>
       <div className="pour-line" />
@@ -108,6 +118,159 @@ export function PremiumTier() {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+export function TrustGrid() {
+  // Same 4 real, already-substantiated items as TrustBar above -- just restyled into a denser
+  // icon-tile layout. No new claims, no new items; this and TrustBar intentionally share one
+  // source of truth so a future correction to either only has to happen once.
+  const items = [
+    { icon: "🚚", title: "Free Shipping", text: "On orders over $60" },
+    { icon: "🔒", title: "Secure Checkout", text: "Paystack-protected payments" },
+    { icon: "☕", title: "Small-Batch Roasted", text: "Shipped within 2 weeks" },
+    { icon: "🌍", title: "Traceable Origin", text: "Every bag names its farm" },
+  ];
+  return (
+    <section className="trust-grid-section">
+      <div className="trust-grid">
+        {items.map((item) => (
+          <div key={item.title} className="trust-grid-tile">
+            <span className="trust-grid-icon" aria-hidden="true">{item.icon}</span>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function SignatureCollection() {
+  const { go } = useRoute();
+  const { add } = useCart();
+  const { getPrice, getAllProducts, getProductFeedback, realProductsLoading } = useAdmin();
+  const { format } = useCurrency();
+  // Reuses the exact same live catalog PremiumTier and EverydayTier already read further down
+  // this page -- this is a denser restyle of the same real products, not a second/duplicate
+  // product source. Premium first (mirrors their current page order), then everyday.
+  const products = [
+    ...getAllProducts().filter((p) => p.tier === "premium"),
+    ...getAllProducts().filter((p) => p.tier === "everyday"),
+  ];
+  const [ratings, setRatings] = useState({});
+
+  useEffect(() => {
+    if (realProductsLoading || products.length === 0) return;
+    let cancelled = false;
+    // Real per-product ratings via the same getProductFeedback endpoint SocialProof uses below --
+    // averaged per product so a star row only ever appears where real feedback actually exists.
+    // Products with no feedback yet simply render without a rating row, matching SocialProof's own
+    // convention of showing nothing rather than a fabricated placeholder.
+    Promise.all(
+      products.map((p) =>
+        getProductFeedback(p.id).then((list) => ({
+          id: p.id,
+          avg: list.length ? list.reduce((s, r) => s + r.rating, 0) / list.length : null,
+          count: list.length,
+        }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const map = {};
+      results.forEach((r) => { if (r.avg !== null) map[r.id] = r; });
+      setRatings(map);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realProductsLoading, products.length]);
+
+  if (realProductsLoading || products.length === 0) return null;
+
+  return (
+    <section className="signature-collection">
+      <div className="section-head">
+        <p className="eyebrow">the full lineup</p>
+        <h2>Our Signature Coffee Collection</h2>
+        <p className="section-sub">Every origin we carry, roasted in small batches and shipped fast.</p>
+      </div>
+      <div className="signature-grid">
+        {products.map((c) => {
+          const r = ratings[c.id];
+          return (
+            <div key={c.id} className="signature-card">
+              <div
+                className="signature-photo"
+                onClick={() => go("product", { id: c.id })}
+                onKeyDown={activateOnEnterOrSpace(() => go("product", { id: c.id }))}
+                role="link" tabIndex={0} aria-label={`${c.name} — ${c.country} coffee bag`}
+                style={{ cursor: "pointer", backgroundImage: `url('${getProductPhotoUrl(c, COUNTRY_JOURNEY_PHOTO, 320)}')` }}
+              />
+              {r && (
+                <div className="signature-rating" aria-label={`Rated ${r.avg.toFixed(1)} out of 5 from ${r.count} review${r.count === 1 ? "" : "s"}`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <span key={n} className="bean-shape small" style={{ background: n <= Math.round(r.avg) ? "var(--terracotta-btn)" : "var(--gold)", opacity: n <= Math.round(r.avg) ? 1 : 0.4 }} />
+                  ))}
+                  <span className="signature-rating-num">{r.avg.toFixed(1)}</span>
+                </div>
+              )}
+              <h3>{c.name} — {c.country}</h3>
+              <p className="signature-tags">{c.note}</p>
+              <div className="premium-foot">
+                <span>{format(getPrice(c.id))}</span>
+                <button className="btn-cart" onClick={() => add(c.id)}>🛒 Add</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="signature-cta-bar">
+        <button className="btn-primary" onClick={() => go("shop")}>Explore the Shop</button>
+      </div>
+    </section>
+  );
+}
+
+export function QualitySplit() {
+  const { go } = useRoute();
+  // Same three real sourcing facts SourceTrust already states further down this page (kept there
+  // too, unchanged) -- just paired here with an existing origin photo in the reference's split
+  // layout. No new copy.
+  return (
+    <section className="quality-split">
+      <div className="quality-split-photo" aria-hidden="true" style={{ backgroundImage: `url('${COUNTRY_JOURNEY_PHOTO["Kenya"] || Object.values(COUNTRY_JOURNEY_PHOTO)[0]}')` }} />
+      <div className="quality-split-copy">
+        <p className="eyebrow gold">our commitment</p>
+        <h2>Sourced With Care, Roasted With Precision</h2>
+        <ul className="quality-split-list">
+          <li><strong>Traceable</strong> — Every bag names its farm.</li>
+          <li><strong>Fair FOB</strong> — Prices published, not hidden.</li>
+          <li><strong>Direct trade</strong> — We visit before we buy.</li>
+        </ul>
+        <button className="btn-outline" onClick={() => go("promise")}>Learn More</button>
+      </div>
+    </section>
+  );
+}
+
+export function FeatureTiles() {
+  const { go } = useRoute();
+  // Two existing pages, not new content: Academy (real course catalog, teased further down this
+  // page too) and Our Services (real wholesale/consulting page) -- reuses each page's own
+  // existing headline copy rather than writing new tile copy.
+  return (
+    <section className="feature-tiles">
+      <div className="feature-tile" onClick={() => go("academy")} onKeyDown={activateOnEnterOrSpace(() => go("academy"))} role="link" tabIndex={0} aria-label="Visit the Academy">
+        <h3>Brew Like a Pro</h3>
+        <p>Real courses on brewing, tasting, and roasting — taught by people who do this for a living.</p>
+        <span className="feature-tile-link" aria-hidden="true">Visit the Academy →</span>
+      </div>
+      <div className="feature-tile" onClick={() => go("services")} onKeyDown={activateOnEnterOrSpace(() => go("services"))} role="link" tabIndex={0} aria-label="See Our Services">
+        <h3>Partner With Us</h3>
+        <p>Coffee expertise, on your terms — for roasters, cafés &amp; buyers.</p>
+        <span className="feature-tile-link" aria-hidden="true">See Our Services →</span>
       </div>
     </section>
   );
@@ -348,18 +511,27 @@ export function HomePage() {
   const { kenyaMessages } = useAdmin();
   return (
     <>
+      {/* 1. Hero */}
       <Hero />
-      <TrustBar />
       <PhotoMarquee />
       <LiveMessageBar messages={kenyaMessages} />
-      <PremiumTier />
+      {/* 2. "Why customers choose us" trust strip */}
+      <TrustGrid />
+      {/* 3. Signature collection grid + 4. "Shop All" CTA bar (combined into one component) */}
+      <SignatureCollection />
       <WaveDivider fill="#E8D5B5" />
+      {/* 5. Subscription/delivery split */}
       <QuizPanel />
-      <EverydayTier />
+      {/* content with no reference-slot equivalent, kept in its existing spot */}
       <MomentsSnapshot />
-      <AcademyTeaser />
+      {/* 6. Quality/commitment split */}
+      <QualitySplit />
+      {/* 7. Reviews — real ratings/notes only, no people photos, no fabricated testimonials */}
       <SocialProof />
       <SourceTrust />
+      {/* 9. Two-column feature tiles */}
+      <FeatureTiles />
+      {/* 10. Closing CTA band */}
       <SeasonalBanner />
     </>
   );

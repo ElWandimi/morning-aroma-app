@@ -51,6 +51,18 @@ a { color: inherit; text-decoration: none; }
     radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
   }
 }
+/* hero-split moved the text block from centered to the right column, so the radial darken (tuned
+   above to sit behind centered text at 50% 45%) needs to follow it rather than darkening the
+   middle of the frame, near the product photo, instead. Desktop-only override -- the split layout
+   itself stacks to centered on mobile (see .hero-product-shot's own @media above), where the
+   original centered darken is already correct again. */
+@media (min-width: 761px) {
+  .hero-split .hero-overlay { background-image:
+    radial-gradient(ellipse 620px 440px at 72% 50%, rgba(20,13,9,0.42) 0%, rgba(20,13,9,0.12) 60%, transparent 100%),
+    linear-gradient(180deg, rgba(20,13,9,0.5) 0%, rgba(20,13,9,0.28) 45%, rgba(253,248,240,0.94) 92%),
+    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
+  }
+}
 @media (prefers-reduced-motion: reduce) { .hero-video { display: none; } .hero { background: #14100d center/cover url('/video/hero-poster.jpg'); } }
 
 /* buttons */
@@ -168,6 +180,28 @@ a { color: inherit; text-decoration: none; }
 .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
 .hero .btn-ghost { color: var(--cream); }
 .pour-line { position: absolute; left: 50%; bottom: 0; width: 2px; height: 60px; background: linear-gradient(var(--chestnut), transparent); }
+
+/* hero — two-column split (product shot left, headline/CTA right), video kept full-bleed behind it */
+.hero-split { padding: 70px 24px 110px; text-align: left; }
+.hero-split-inner {
+  position: relative; max-width: 1100px; margin: 0 auto;
+  display: flex; align-items: center; gap: 48px; flex-wrap: wrap-reverse;
+}
+.hero-split .hero-content { max-width: 480px; margin: 0; flex: 1 1 380px; }
+.hero-split .hero-actions { justify-content: flex-start; }
+.hero-product-shot {
+  flex: 1 1 280px; max-width: 340px; cursor: pointer;
+  filter: drop-shadow(0 22px 34px rgba(20,13,9,0.5));
+  transition: transform .3s ease;
+}
+.hero-product-shot:hover, .hero-product-shot:focus-visible { transform: translateY(-6px) rotate(-1deg); }
+.hero-product-shot img { width: 100%; height: auto; display: block; }
+@media (max-width: 760px) {
+  .hero-split-inner { justify-content: center; text-align: center; }
+  .hero-split .hero-content { text-align: center; }
+  .hero-split .hero-actions { justify-content: center; }
+  .hero-product-shot { max-width: 220px; }
+}
 
 /* steam */
 .steam-wrap { position: relative; display: inline-block; width: 40px; height: 60px; }
@@ -298,6 +332,44 @@ a { color: inherit; text-decoration: none; }
    not a second content section competing with the hero above it. */
 .trust-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; padding: 16px 24px; max-width: 1100px; margin: 0 auto; }
 .trust-bar-item { font-size: 0.82rem; font-weight: 600; color: var(--almond-text); white-space: nowrap; }
+
+/* trust grid (denser icon-tile restyle of trust-bar's same 4 items) */
+.trust-grid-section { padding: 50px 24px; background: var(--cream); }
+.trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 20px; max-width: 1100px; margin: 0 auto; text-align: center; }
+.trust-grid-tile { padding: 24px 16px; }
+.trust-grid-icon { font-size: 2rem; display: block; margin-bottom: 10px; }
+.trust-grid-tile h3 { font-size: 1rem; color: var(--chestnut); margin: 0 0 4px; }
+.trust-grid-tile p { font-size: 0.85rem; color: #6b5647; margin: 0; }
+
+/* signature collection (denser restyle of premium-card / everyday-card) */
+.signature-collection { padding: 70px 24px; background: var(--cream); }
+.signature-collection .section-head { text-align: center; }
+.signature-collection .section-sub { margin-left: auto; margin-right: auto; }
+.signature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 18px; max-width: 1200px; margin: 30px auto 0; }
+.signature-card { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 14px; }
+.signature-photo { width: 100%; aspect-ratio: 1/1; border-radius: 10px; background: linear-gradient(135deg, var(--almond), var(--gold)); background-size: contain; background-repeat: no-repeat; background-position: center; margin-bottom: 10px; }
+.signature-rating { display: flex; align-items: center; gap: 3px; margin-bottom: 6px; }
+.signature-rating-num { font-size: 0.78rem; color: var(--almond-text); font-weight: 700; margin-left: 4px; }
+.signature-card h3 { font-size: 0.95rem; margin: 0 0 4px; }
+.signature-tags { font-size: 0.82rem; color: #6b5647; margin: 0 0 10px; }
+.signature-cta-bar { text-align: center; margin-top: 36px; }
+
+/* quality split */
+.quality-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); align-items: stretch; }
+.quality-split-photo { min-height: 320px; background-size: cover; background-position: center; }
+.quality-split-copy { padding: 60px 40px; display: flex; flex-direction: column; justify-content: center; background: var(--cream); }
+.quality-split-copy h2 { margin: 4px 0 18px; }
+.quality-split-list { list-style: none; padding: 0; margin: 0 0 24px; display: flex; flex-direction: column; gap: 10px; }
+.quality-split-list li { font-size: 0.95rem; color: #6b5647; }
+.quality-split-list strong { color: var(--chestnut); }
+
+/* feature tiles */
+.feature-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 2px; background: var(--gold); }
+.feature-tile { background: var(--cream); padding: 48px 32px; cursor: pointer; transition: background .15s; }
+.feature-tile:hover, .feature-tile:focus-visible { background: var(--steam); }
+.feature-tile h3 { margin: 0 0 10px; }
+.feature-tile p { color: #6b5647; font-size: 0.92rem; margin: 0 0 14px; }
+.feature-tile-link { color: var(--terracotta-btn); font-weight: 700; font-size: 0.9rem; }
 
 /* seasonal */
 .seasonal {
@@ -927,17 +999,17 @@ a { color: inherit; text-decoration: none; }
 .admin-add-message textarea { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; box-sizing: border-box; }
 
 /* scroll reveal */
-.section-head, .hscroll, .quiz-panel, .trust, .seasonal-inner, .faq-list, .calendar-table, .country-grid, .promise-statements, .checkout-steps {
+.section-head, .hscroll, .quiz-panel, .trust, .seasonal-inner, .faq-list, .calendar-table, .country-grid, .promise-statements, .checkout-steps, .trust-grid, .quality-split {
   opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease;
 }
-.section-head.revealed, .hscroll.revealed, .quiz-panel.revealed, .trust.revealed, .seasonal-inner.revealed, .faq-list.revealed, .calendar-table.revealed, .country-grid.revealed, .promise-statements.revealed, .checkout-steps.revealed {
+.section-head.revealed, .hscroll.revealed, .quiz-panel.revealed, .trust.revealed, .seasonal-inner.revealed, .faq-list.revealed, .calendar-table.revealed, .country-grid.revealed, .promise-statements.revealed, .checkout-steps.revealed, .trust-grid.revealed, .quality-split.revealed {
   opacity: 1; transform: translateY(0);
 }
 
-.grid4 > *, .guide-grid > *, .course-grid > *, .moments-hub-grid > *, .rituals-grid > *, .values-grid > *, .stat-grid > * {
+.grid4 > *, .guide-grid > *, .course-grid > *, .moments-hub-grid > *, .rituals-grid > *, .values-grid > *, .stat-grid > *, .signature-grid > * {
   opacity: 0; transform: translateY(18px); transition: opacity .55s ease, transform .55s ease;
 }
-.grid4.revealed > *, .guide-grid.revealed > *, .course-grid.revealed > *, .moments-hub-grid.revealed > *, .rituals-grid.revealed > *, .values-grid.revealed > *, .stat-grid.revealed > * {
+.grid4.revealed > *, .guide-grid.revealed > *, .course-grid.revealed > *, .moments-hub-grid.revealed > *, .rituals-grid.revealed > *, .values-grid.revealed > *, .stat-grid.revealed > *, .signature-grid.revealed > * {
   opacity: 1; transform: translateY(0);
 }
 .grid4.revealed > *:nth-child(1), .guide-grid.revealed > *:nth-child(1), .course-grid.revealed > *:nth-child(1), .moments-hub-grid.revealed > *:nth-child(1), .rituals-grid.revealed > *:nth-child(1), .values-grid.revealed > *:nth-child(1), .stat-grid.revealed > *:nth-child(1) { transition-delay: .04s; }
@@ -950,8 +1022,8 @@ a { color: inherit; text-decoration: none; }
 .grid4.revealed > *:nth-child(8), .guide-grid.revealed > *:nth-child(8), .course-grid.revealed > *:nth-child(8), .moments-hub-grid.revealed > *:nth-child(8), .rituals-grid.revealed > *:nth-child(8), .values-grid.revealed > *:nth-child(8), .stat-grid.revealed > *:nth-child(8) { transition-delay: .46s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .section-head, .hscroll, .quiz-panel, .trust, .seasonal-inner, .faq-list, .calendar-table, .country-grid, .promise-statements, .checkout-steps,
-  .grid4 > *, .guide-grid > *, .course-grid > *, .moments-hub-grid > *, .rituals-grid > *, .values-grid > *, .stat-grid > * {
+  .section-head, .hscroll, .quiz-panel, .trust, .seasonal-inner, .faq-list, .calendar-table, .country-grid, .promise-statements, .checkout-steps, .trust-grid, .quality-split,
+  .grid4 > *, .guide-grid > *, .course-grid > *, .moments-hub-grid > *, .rituals-grid > *, .values-grid > *, .stat-grid > *, .signature-grid > * {
     opacity: 1 !important; transform: none !important; transition: none !important;
   }
 }

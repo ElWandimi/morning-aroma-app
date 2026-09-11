@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from "r
 // only after React mounts and this hook would have fired.
 
 export const REVEAL_SELECTOR =
-  ".section-head, .hscroll, .quiz-panel, .trust, .seasonal-inner, .faq-list, .calendar-table, .country-grid, .promise-statements, .checkout-steps, .grid4, .guide-grid, .course-grid, .moments-hub-grid, .rituals-grid, .values-grid, .stat-grid";
+  ".section-head, .hscroll, .quiz-panel, .trust, .seasonal-inner, .faq-list, .calendar-table, .country-grid, .promise-statements, .checkout-steps, .grid4, .guide-grid, .course-grid, .moments-hub-grid, .rituals-grid, .values-grid, .stat-grid, .trust-grid, .signature-grid, .quality-split";
 
 export function useScrollReveal(dep) {
   useEffect(() => {
