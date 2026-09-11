@@ -16,6 +16,7 @@
 // without both being touched.
 
 const express = require("express");
+const helmet = require("helmet");
 const fs = require("fs");
 const path = require("path");
 const { PAGE_META, SLUG_TO_PAGE, KNOWN_ROUTES, PRODUCTS, MOMENTS, BREW_GUIDES, COUNTRIES, GROWING_FACTORS } = require("./dist-data/routeMeta.cjs");
@@ -165,6 +166,13 @@ function renderIndexWithMeta(urlPath) {
   }
   return html;
 }
+
+// Same reasoning and same deliberate CSP omission as the backend API's own helmet setup
+// (server/src/app.js) -- real, low-risk headers on every response this server sends (every real
+// page a visitor loads goes through this server, not just the API), CSP left for a dedicated
+// follow-up since getting it wrong here specifically risks breaking Google Fonts, Cloudinary/
+// Unsplash images, or Paystack's checkout script loading on the actual pages people see.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // Railway's own health check -- kept ahead of the SPA fallback so it always gets a real response
 // regardless of what routes exist client-side, the same reasoning Railway's own SPA guide gives.

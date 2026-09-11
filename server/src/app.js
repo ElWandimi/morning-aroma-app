@@ -1,4 +1,5 @@
 const express = require("express");
+const helmet = require("helmet");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
@@ -31,6 +32,16 @@ const app = express();
 // entirely (this exact distinction is what express-rate-limit's own ERR_ERL_PERMISSIVE_TRUST_PROXY
 // check exists to catch, if this were ever set too permissively instead of not set at all).
 app.set("trust proxy", 1);
+
+// Real, low-risk security headers (X-Content-Type-Options, X-Frame-Options/frame-ancestors,
+// Referrer-Policy, and a few others helmet sets by default) -- none of these touch auth, payments,
+// or change any response body or user-facing behavior, so unlike a Content-Security-Policy they're
+// safe to turn on without a dedicated review. CSP specifically stays off for now (helmet's default
+// is a strict one that would need every legitimate external resource this app actually loads
+// allow-listed first -- Google Fonts, Cloudinary and Unsplash images, and critically Paystack's
+// checkout script, since getting that wrong could silently break the one flow that must never
+// break) -- flagged as a separate, deliberate follow-up rather than shipped as a guess.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
