@@ -12,9 +12,19 @@ function requireSecret() {
   return secret;
 }
 
-function signAccessToken(user) {
+// csrfToken is embedded as a signed claim inside this same JWT -- not a separate mechanism, but
+// the actual fix for a real, live production bug: the CSRF token previously traveled only as a
+// second cookie (ma_csrf), which silently never reaches the frontend's document.cookie at all
+// when frontend and backend are genuinely separate domains with no shared parent (confirmed
+// directly: morning-aroma.com vs *.up.railway.app here). Embedding it in the session JWT means it
+// travels inside the SAME httpOnly cookie that already reliably makes the cross-origin round trip
+// (that cookie working at all is proof CORS+credentials are correctly configured, since the
+// session itself depends on it) -- server/src/utils/csrf.js's requireCsrfToken decodes this same
+// JWT to read the claim back out, rather than trusting a second, independently-delivered cookie
+// that this bug showed can't be trusted to arrive at all.
+function signAccessToken(user, csrfToken) {
   return jwt.sign(
-    { sub: user.id, email: user.email, role: user.role },
+    { sub: user.id, email: user.email, role: user.role, csrf: csrfToken },
     requireSecret(),
     { expiresIn: "7d" }
   );

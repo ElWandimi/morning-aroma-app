@@ -25,14 +25,39 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", undefined]);
 // came from a page that can read this origin's cookies" is the entire mechanism. A third-party
 // site can plant its own cookies here but can't read this one back off this origin to forge the
 // matching header, which is what actually makes the check meaningful.
+//
+// In production, though, the frontend and backend are genuinely separate domains
+// (morning-aroma.com vs *.up.railway.app) with no shared parent -- a cookie the backend sets can
+// never be scoped to be visible to document.cookie on the frontend's own origin, confirmed
+// directly (a real, valid session with every mutating request 403ing on CSRF, in production).
+// The backend now also returns the same token in the JSON body of every auth response
+// (server/src/routes/auth.js's issueSession) specifically to give the frontend a channel that
+// isn't subject to cross-origin cookie-visibility rules at all -- a fetch response body is exactly
+// as inaccessible to a third-party page as a cookie would be, so this preserves the real security
+// property. Held in memory (a module-level variable, not React state -- this file isn't a
+// component) since it only needs to survive for the lifetime of this page load, the same as the
+// session cookie itself only needs to be attached automatically for that long.
+let inMemoryCsrfToken = null;
+export function setCsrfToken(token) {
+  inMemoryCsrfToken = token;
+}
+
 function readCsrfCookie() {
   const match = document.cookie.match(/(?:^|; )ma_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+// Prefers the cookie when it's actually readable (same-domain deployments, or local dev where
+// frontend and backend can genuinely share a cookie) and falls back to the in-memory value from
+// the most recent auth response otherwise -- covers both cases with one function rather than
+// making every call site decide which source to trust.
+function getCsrfToken() {
+  return readCsrfCookie() || inMemoryCsrfToken;
+}
+
 async function request(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
-  const csrfToken = !SAFE_METHODS.has(method) ? readCsrfCookie() : null;
+  const csrfToken = !SAFE_METHODS.has(method) ? getCsrfToken() : null;
   const res = await fetch(`${API_URL || ""}${path}`, {
     ...options,
     credentials: "include",
@@ -53,6 +78,10 @@ async function request(path, options = {}) {
     error.status = res.status;
     throw error;
   }
+  // Captured generically here (not per-call-site) so every current and future endpoint that goes
+  // through issueSession on the backend keeps the in-memory fallback correctly up to date, without
+  // needing to remember to wire this in wherever a new auth-adjacent call gets added later.
+  if (body.csrfToken) setCsrfToken(body.csrfToken);
   return body;
 }
 

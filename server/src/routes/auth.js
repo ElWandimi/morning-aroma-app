@@ -22,10 +22,33 @@ const router = express.Router();
 // returned in the response body at all -- it lives only in the httpOnly cookie now, so there's
 // nothing left for page JS (or an XSS payload) to read and exfiltrate the way a body field would
 // have allowed.
+//
+// The CSRF token, however, IS returned in the body here (as csrfToken) alongside still being set
+// as a cookie -- a real, live production bug (not a hypothetical) showed why the cookie alone
+// isn't sufficient: frontend and backend are genuinely separate domains here (morning-aroma.com
+// vs *.up.railway.app), which share no parent domain, so a cookie the backend sets can never be
+// scoped to be readable by JS running on the frontend's own origin -- Domain can widen a cookie's
+// reach to *.a-shared-parent.com, but there is no shared parent between two unrelated domains at
+// all. src/utils/api.js's readCsrfCookie() was reading document.cookie on the FRONTEND's origin
+// and never finding it there, correctly, since it was never actually set on that origin -- every
+// mutating authenticated request (logout included) was silently 403ing in production as a result,
+// confirmed directly: a real, valid session existed (GET /auth/me succeeded) while every POST/
+// PATCH/DELETE from that same session failed CSRF. Returning it in the JSON body sidesteps the
+// cross-origin cookie-visibility problem entirely -- a fetch response body is exactly as
+// inaccessible to a third-party attacker page as a cookie would be (same-origin-policy governs
+// both), so this preserves the double-submit pattern's actual security property while fixing the
+// channel it travels over. The cookie is still set too, harmlessly, for any environment where
+// frontend and backend genuinely do share a parent domain.
+//
+// The token itself now also travels embedded inside the session JWT (signAccessToken's own csrf
+// claim) -- see that function's comment for why the second-cookie-alone approach doesn't survive
+// a genuinely cross-domain deployment. Generated once here and threaded into both places so the
+// value in the cookie, the JWT claim, and the response body are always the exact same token.
 function issueSession(res, user, extra = {}) {
-  setSessionCookie(res, signAccessToken(user));
-  setCsrfCookie(res, generateCsrfToken());
-  return res.json({ user: publicUser(user), ...extra });
+  const csrfToken = generateCsrfToken();
+  setSessionCookie(res, signAccessToken(user, csrfToken));
+  setCsrfCookie(res, csrfToken);
+  return res.json({ user: publicUser(user), csrfToken, ...extra });
 }
 
 // Real, not a placeholder -- verifying a Google-issued ID token needs the actual OAuth Client ID
@@ -423,7 +446,21 @@ router.get("/me", requireAuth, async (req, res) => {
   const result = await query("SELECT * FROM users WHERE id = $1", [req.user.sub]);
   const user = result.rows[0];
   if (!user) return res.status(404).json({ error: "Account no longer exists." });
-  res.json({ user: publicUser(user) });
+  // Mints a fresh CSRF token here too, not just at login -- the frontend's in-memory copy
+  // (src/utils/api.js) is genuinely lost on every hard refresh/new tab, and this is the first
+  // request the app makes on load (AuthProvider's own mount effect). Without this, a real,
+  // still-valid session would have no way to prove CSRF-safety for its very next mutating
+  // request until the person logged in again from scratch -- confirmed as a real, live gap, not
+  // a hypothetical: this is exactly why logout kept 403ing even immediately after a fresh page
+  // load in production. Re-signs and re-sets the session cookie itself (not just the CSRF one),
+  // since the token now lives as a claim INSIDE that JWT (signAccessToken) -- returning a new
+  // csrfToken in the body without updating the cookie that actually carries the matching claim
+  // would leave requireCsrfToken checking the new header against the OLD claim from login,
+  // which would never match.
+  const csrfToken = generateCsrfToken();
+  setSessionCookie(res, signAccessToken(user, csrfToken));
+  setCsrfCookie(res, csrfToken);
+  res.json({ user: publicUser(user), csrfToken });
 });
 
 // Previously a no-op -- correct for the old design (a stateless JWT living in localStorage,

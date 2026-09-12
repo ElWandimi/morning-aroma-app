@@ -1,21 +1,22 @@
 const crypto = require("crypto");
-const { SESSION_COOKIE } = require("./tokens");
+const { SESSION_COOKIE, verifyAccessToken } = require("./tokens");
 
-// Real CSRF protection -- a genuinely new requirement introduced by moving the session token into
-// a cookie. The previous localStorage + Authorization-header approach was immune to CSRF by
-// construction (a malicious site can't read another origin's localStorage or forge a custom
-// header on a cross-site request it doesn't control), so nothing existed here before. An httpOnly
-// cookie is sent automatically by the browser on every request to this origin -- including ones a
-// malicious page on a different site triggers without the visitor's knowledge -- so something
-// else has to prove a request genuinely originated from this app's own frontend, not just that a
-// valid session cookie came along for the ride.
-//
-// Double-submit cookie pattern: a second cookie holds a random token, deliberately NOT httpOnly
-// (the frontend must be able to read it with JS to echo it back) and NOT tied to the user's
-// identity on its own -- a third-party site can plant its own cookies for this origin, but per the
-// same-origin policy it cannot read this cookie's value or set the custom header to match it,
-// since only JS running on this app's own origin can do both. Checking header === cookie is what
-// actually proves the request came from a page that could read this origin's cookies.
+// Double-submit pattern: a random token the frontend echoes back in a header, proving a request
+// genuinely came from a page that could obtain this session's own token -- not just that a valid
+// session cookie came along for the ride (which a forged cross-site request gets automatically).
+// Also set as a cookie here (deliberately NOT httpOnly, so frontend JS *could* read it) for any
+// deployment where frontend and backend genuinely share a domain -- but the primary, always-
+// reliable channel is the token returned in the JSON body of every auth response
+// (server/src/routes/auth.js's issueSession and /auth/me), which src/utils/api.js holds in memory
+// and echoes back. This split exists because a real, live bug showed the cookie-only version
+// doesn't work at all when frontend and backend are separate domains with no shared parent
+// (morning-aroma.com vs *.up.railway.app here): a cookie the backend sets can never be scoped to
+// be visible to document.cookie on a genuinely different origin, Domain attribute or not -- every
+// mutating authenticated request 403'd in production as a result, confirmed directly (a valid
+// session per GET /auth/me, yet POST /auth/logout consistently rejected for a missing token the
+// frontend could never actually read). The body-returned token has the same security property as
+// the cookie would: a fetch response body is exactly as inaccessible to a third-party attacker
+// page as a cookie is, both governed by the same-origin policy.
 const CSRF_COOKIE = "ma_csrf";
 const CSRF_HEADER = "x-csrf-token";
 
@@ -76,6 +77,7 @@ function requireCsrfToken(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
   if (CSRF_EXEMPT_PREFIXES.some((prefix) => req.path.startsWith(prefix))) return next();
 
+  const sessionToken = req.cookies && req.cookies[SESSION_COOKIE];
   // If there's no session cookie at all, there's no authenticated session for CSRF to protect --
   // letting the request continue here means requireAuth (mounted on the actual protected routes)
   // is the one that rejects it, with a 401 that correctly explains the real reason ("not signed
@@ -85,11 +87,29 @@ function requireCsrfToken(req, res, next) {
   // showed the real, missing-auth failure to instead read as a CSRF failure on every "reject an
   // unauthenticated request" test in this suite -- 23 failures across otherwise-unrelated areas,
   // all traced back to this one ordering issue.
-  if (!(req.cookies && req.cookies[SESSION_COOKIE])) return next();
+  if (!sessionToken) return next();
 
-  const cookieToken = req.cookies && req.cookies[CSRF_COOKIE];
+  // Decodes the SESSION cookie itself to read its embedded csrf claim (signAccessToken), rather
+  // than trusting a second, independently-delivered ma_csrf cookie -- confirmed as a real, live
+  // bug: that second cookie silently never reaches the browser's cookie jar for the frontend's own
+  // origin at all when frontend and backend are genuinely separate domains with no shared parent,
+  // so req.cookies[CSRF_COOKIE] here was always undefined in that deployment, 403ing every single
+  // mutating request regardless of whether the session was otherwise completely valid. The session
+  // cookie, by contrast, is proven to reliably survive the exact same cross-origin round trip --
+  // it has to, for auth to work at all -- so its embedded claim is the trustworthy source.
+  // requireAuth hasn't run yet at this point in the middleware chain (this is mounted globally,
+  // before any route-level requireAuth), so this decodes independently rather than reading
+  // req.user. An invalid/expired token here just means "not authenticated" -- falls through to
+  // requireAuth for the real 401, same reasoning as the missing-cookie case above.
+  let claimedCsrf;
+  try {
+    claimedCsrf = verifyAccessToken(sessionToken).csrf;
+  } catch {
+    return next();
+  }
+
   const headerToken = req.headers[CSRF_HEADER];
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  if (!claimedCsrf || !headerToken || claimedCsrf !== headerToken) {
     return res.status(403).json({ error: "Invalid or missing CSRF token." });
   }
   next();
