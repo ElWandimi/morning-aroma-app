@@ -12,8 +12,8 @@ const router = express.Router();
 const VALID_KEYS = new Set([
   "tagline", "announcementEnabled", "announcementText", "contactEmail", "whatsappNumber",
   "phoneNumber", "businessName", "businessAddress", "taxId", "taxRatePercent", "invoiceNotes",
-  "instagramHandle", "facebookUrl", "notificationTypes", "academyLifetimePriceCents",
-  "kenyaLiveMessages",
+  "bankDetails", "instagramHandle", "facebookUrl", "notificationTypes",
+  "academyLifetimePriceCents", "kenyaLiveMessages",
 ]);
 
 // Mirrors DEFAULT_SETTINGS in src/data/index.js -- duplicated here (the backend can't import
@@ -26,7 +26,7 @@ const FALLBACK_SETTINGS = {
   tagline: "Where quality meets its scent.",
   announcementEnabled: true,
   announcementText: "Free shipping on orders over $60 — this week only.",
-  contactEmail: "hello@morningaroma.com",
+  contactEmail: "hello@morning-aroma.com",
   whatsappNumber: "+254712345678",
   phoneNumber: "+254 712 345 678",
   businessName: "Morning Aroma Coffee Roasters Ltd.",
@@ -34,6 +34,9 @@ const FALLBACK_SETTINGS = {
   taxId: "",
   taxRatePercent: 0,
   invoiceNotes: "Payment due within 14 days of invoice date. Thank you for your business.",
+  // Empty by default, same as taxId -- printed on an invoice's footer only when an admin has
+  // actually filled in real bank/payment details; never fabricated here or anywhere else.
+  bankDetails: "",
   instagramHandle: "",
   facebookUrl: "",
   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],

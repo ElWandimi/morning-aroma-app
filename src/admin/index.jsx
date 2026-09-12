@@ -4,7 +4,7 @@ import { useAdmin, useAuth, useCurrency, useRoute, useToast } from "../context";
 import { ADMIN_SECTIONS, COUNTRIES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
 import { exportToCSV, fmtPrice, resizeImageFile, storage, activateOnEnterOrSpace } from "../utils/helpers";
 import { useClickOutside, useEscapeKey } from "../hooks";
-import { generateInvoicePDF } from "../utils/pdf";
+import { generateInvoicePDF, generateQuotationPDF } from "../utils/pdf";
 import { api } from "../utils/api";
 
 export function CountUp({ text }) {
@@ -511,7 +511,8 @@ export function AdminInvoices() {
   const [feeDrafts, setFeeDrafts] = useState({});
   const business = {
     name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
-    taxId: settings.taxId, taxRatePercent: settings.taxRatePercent, invoiceNotes: settings.invoiceNotes,
+    phone: settings.phoneNumber, taxId: settings.taxId, taxRatePercent: settings.taxRatePercent,
+    invoiceNotes: settings.invoiceNotes, bankDetails: settings.bankDetails,
   };
   // Shows a local typing draft if one exists, otherwise falls back to whatever fee was already
   // agreed and persisted on the inquiry itself, so it survives switching sections and back
@@ -1376,9 +1377,35 @@ export function AdminInventory() {
 }
 
 export function AdminQuotations() {
-  const { quotations, updateQuotationStatus } = useAdmin();
+  const { quotations, updateQuotationStatus, settings } = useAdmin();
   const { addToast } = useToast();
   const STATUSES = ["New", "Contacted", "Closed"];
+  // A real quoted unit price has no source anywhere yet -- the wholesale request form only ever
+  // captures a free-text variety/quantity, not a price (that's exactly the point of requesting a
+  // quotation rather than buying outright). Kept as local per-row drafts, the same pattern
+  // AdminServiceInquiries' own agreed-fee entry already uses, rather than inventing or guessing
+  // at a number to pre-fill.
+  const [priceDrafts, setPriceDrafts] = useState({});
+
+  const downloadQuotation = (q) => {
+    const priceCents = Math.round(parseFloat(priceDrafts[q.id] || "0") * 100);
+    if (!priceCents || priceCents <= 0) { addToast("Enter a quoted price first"); return; }
+    const business = {
+      name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
+      phone: settings.phoneNumber, taxId: settings.taxId, bankDetails: settings.bankDetails,
+    };
+    const validUntilDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    generateQuotationPDF({
+      quotationNumber: q.id, date: q.date, validUntil: validUntilDate,
+      quotedTo: { name: q.name, email: q.email },
+      lineItems: [{ description: q.variety, qty: 1, unitPriceCents: priceCents, totalCents: priceCents }],
+      totalCents: priceCents,
+      notes: q.message ? `Customer note: "${q.message}"` : undefined,
+      business,
+    });
+    addToast("Quotation downloaded");
+  };
+
   return (
     <div>
       <h3 className="matched-head">Quotation requests ({quotations.length})</h3>
@@ -1397,6 +1424,15 @@ export function AdminQuotations() {
               <p className="hint">{q.email} · {q.date}</p>
               <p>{q.variety}{q.quantity ? ` — ${q.quantity}` : ""}</p>
               {q.message && <p className="journal-note">"{q.message}"</p>}
+              <div className="admin-fee-row" style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+                <label className="filter-label" htmlFor={`quote-price-${q.id}`} style={{ margin: 0 }}>Quoted price (USD)</label>
+                <input
+                  id={`quote-price-${q.id}`} type="number" min="0" step="0.01" style={{ maxWidth: 110 }}
+                  value={priceDrafts[q.id] ?? ""} onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                  placeholder="0.00"
+                />
+                <button className="btn-outline small" onClick={() => downloadQuotation(q)}>Generate Quotation (PDF)</button>
+              </div>
             </div>
           ))}
         </div>
@@ -1442,7 +1478,8 @@ export function AdminGreenOrders() {
   const STATUSES = ["New", "Quoted", "Invoiced", "Shipped", "Fulfilled"];
   const business = {
     name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
-    taxId: settings.taxId, taxRatePercent: settings.taxRatePercent, invoiceNotes: settings.invoiceNotes,
+    phone: settings.phoneNumber, taxId: settings.taxId, taxRatePercent: settings.taxRatePercent,
+    invoiceNotes: settings.invoiceNotes, bankDetails: settings.bankDetails,
   };
   const downloadInvoice = (o) => {
     generateInvoicePDF({
@@ -2431,6 +2468,10 @@ function AdminSettingsForm() {
       <label className="filter-label" htmlFor="set-invoicenotes" style={{ marginTop: 16 }}>Default invoice notes</label>
       <textarea id="set-invoicenotes" value={draft.invoiceNotes} onChange={(e) => setDraft({ ...draft, invoiceNotes: e.target.value })} rows={3} maxLength={400} />
       <p className="hint" style={{ marginTop: 4 }}>Shown at the bottom of an invoice only when that specific order/inquiry has no note of its own.</p>
+
+      <label className="filter-label" htmlFor="set-bankdetails" style={{ marginTop: 16 }}>Bank / payment details (optional)</label>
+      <textarea id="set-bankdetails" value={draft.bankDetails} onChange={(e) => setDraft({ ...draft, bankDetails: e.target.value })} rows={3} maxLength={400} placeholder="Leave blank to omit — e.g. bank name, account name, account number, branch/SWIFT code" />
+      <p className="hint" style={{ marginTop: 4 }}>Shown on every invoice and receipt for customers paying by bank transfer. Never shown on a quotation, since nothing has been ordered or is due yet.</p>
 
       <label className="filter-label" htmlFor="set-lifetimeprice" style={{ marginTop: 16 }}>Academy lifetime access price (USD cents)</label>
       <input id="set-lifetimeprice" type="number" min="0" value={draft.academyLifetimePriceCents} onChange={(e) => setDraft({ ...draft, academyLifetimePriceCents: Math.max(0, Number(e.target.value) || 0) })} style={{ maxWidth: 160 }} />

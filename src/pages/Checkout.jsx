@@ -3,6 +3,7 @@ import { Glass, SignInModal, SignUpModal } from "../components";
 import { useAdmin, useAuth, useCart, useCurrency, useOrders, useRoute, useSubscriptions } from "../context";
 import { CHECKOUT_STEPS, COUNTRY_JOURNEY_PHOTO, COUNTRY_DIAL_CODES } from "../data";
 import { getProductPhotoUrl, loadPaystackScript } from "../utils/helpers";
+import { generateReceiptPDF } from "../utils/pdf";
 import { useClickOutside, useEscapeKey } from "../hooks";
 
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
@@ -130,7 +131,7 @@ export function CheckoutPage() {
   const { go } = useRoute();
   const { createOrder, verifyPayment } = useOrders();
   const { createSubscription } = useSubscriptions();
-  const { getPrice, getAllProducts } = useAdmin();
+  const { getPrice, getAllProducts, settings } = useAdmin();
   const { format, rates, ratesLoading, currency } = useCurrency();
   const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
   // Keyed by product id -- tracks the interval chosen and the real submit state for the
@@ -240,6 +241,36 @@ export function CheckoutPage() {
         setPlaceOrderError(error.message || "Something went wrong with the payment. Please try again.");
         setPayingStatus("idle");
       },
+    });
+  };
+
+  // Builds and downloads a real receipt PDF for the just-confirmed order -- reuses the exact
+  // same product lookup pattern Admin's own invoice download already uses (matching each item's
+  // real, locked-in unitPriceCents against the current catalog just for a human-readable
+  // description; the price itself always comes from what was actually charged, never today's
+  // catalog price). shippingName is what's used for "received from," not user.name -- the two
+  // can genuinely differ (an order shipped to someone else, e.g. a gift), and shippingName is
+  // what the order record itself actually captured for this specific order.
+  const downloadReceipt = () => {
+    if (!confirmedOrder) return;
+    const allProducts = getAllProducts();
+    const lineItems = confirmedOrder.items.map((it) => {
+      const p = allProducts.find((prod) => prod.id === it.id);
+      return {
+        description: p ? `${p.name} — ${p.country}` : it.id,
+        qty: it.qty, unitPriceCents: it.unitPriceCents, totalCents: it.unitPriceCents * it.qty,
+      };
+    });
+    const business = {
+      name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
+      phone: settings.phoneNumber, taxId: settings.taxId, bankDetails: settings.bankDetails,
+    };
+    generateReceiptPDF({
+      receiptNumber: `${confirmedOrder.orderNumber}-R`,
+      date: (confirmedOrder.paidAt || confirmedOrder.createdAt).slice(0, 10),
+      paymentMethod: "Paystack",
+      billTo: { name: shipping.firstName ? `${shipping.firstName} ${shipping.lastName}`.trim() : user?.name, email: user?.email },
+      lineItems, totalCents: confirmedOrder.totalCents, business,
     });
   };
 
@@ -484,6 +515,7 @@ export function CheckoutPage() {
           <p className="eyebrow">order confirmed</p>
           <h2>Thank you — {confirmedOrder.orderNumber} is roasting soon</h2>
           <p className="quiz-copy">A confirmation would normally land in your inbox. For now, find it any time in My Aroma Journey.</p>
+          <button className="btn-outline small" onClick={downloadReceipt} style={{ marginTop: 4 }}>Download Receipt (PDF)</button>
           {confirmedOrder.items && confirmedOrder.items.length > 0 && (
             <div className="checkout-subscribe-offer">
               <p className="eyebrow">subscribe &amp; save the hassle</p>

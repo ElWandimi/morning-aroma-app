@@ -104,6 +104,15 @@ if (!GOOGLE_CLIENT_ID && import.meta.env.PROD) {
 // Loads Google's real Identity Services script on demand -- same pattern as loadPaystackScript in
 // pages/Checkout.jsx: only loaded once (checks whether it's already present first), only when the
 // sign-in modal actually needs it, not on every page load site-wide.
+// Google's own docs are explicit that google.accounts.id.initialize should be called only once
+// per page -- calling it again on every modal open (the previous behavior here, since this whole
+// effect re-ran each time `active` became true) is at minimum wasteful and, per multiple real
+// reports of "blank popup"/broken postMessage handshakes after repeated initialize() calls, can
+// leave Identity Services' internal iframe wiring in a bad state on a later attempt. Module-level
+// state here (not React state) is deliberate -- this really is a one-time-per-page-load action,
+// not something that should reset with this component's own mount/unmount cycle.
+let googleInitialized = false;
+
 function loadGoogleScript() {
   if (window.google?.accounts?.id) return Promise.resolve();
   return new Promise((resolve, reject) => {
@@ -123,6 +132,12 @@ function loadGoogleScript() {
 function GoogleSignInButton({ active, onCredential }) {
   const containerRef = useRef(null);
   const [loadError, setLoadError] = useState("");
+  // initialize()'s callback is fixed at call time and can't be reassigned afterwards, but
+  // onCredential is a fresh inline closure from SignInModal/SignUpModal on every render -- this
+  // ref lets the one-time initialize() call always invoke whatever the LATEST onCredential is,
+  // without needing to call initialize() again to "update" it.
+  const onCredentialRef = useRef(onCredential);
+  onCredentialRef.current = onCredential;
 
   useEffect(() => {
     if (!active || !GOOGLE_CLIENT_ID) return;
@@ -130,10 +145,16 @@ function GoogleSignInButton({ active, onCredential }) {
     loadGoogleScript()
       .then(() => {
         if (cancelled || !containerRef.current) return;
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: (response) => onCredential(response.credential),
-        });
+        if (!googleInitialized) {
+          window.google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: (response) => onCredentialRef.current(response.credential),
+          });
+          googleInitialized = true;
+        }
+        // renderButton, unlike initialize, IS meant to be called again each time -- it's how the
+        // button actually gets (re-)drawn into this specific container on this specific modal
+        // open. Google's docs list no restriction on repeated renderButton calls.
         window.google.accounts.id.renderButton(containerRef.current, {
           theme: "outline", size: "large", width: 320, text: "continue_with",
         });

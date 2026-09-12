@@ -1100,7 +1100,7 @@ export const DEFAULT_SETTINGS = {
   tagline: "Where quality meets its scent.",
   announcementEnabled: true,
   announcementText: "Free shipping on orders over $60 — this week only.",
-  contactEmail: "hello@morningaroma.com",
+  contactEmail: "hello@morning-aroma.com",
   whatsappNumber: "+254712345678",
   phoneNumber: "+254 712 345 678",
   businessName: "Morning Aroma Coffee Roasters Ltd.",
@@ -1108,6 +1108,9 @@ export const DEFAULT_SETTINGS = {
   taxId: "",
   taxRatePercent: 0,
   invoiceNotes: "Payment due within 14 days of invoice date. Thank you for your business.",
+  // Empty by default -- printed on invoice/receipt footers only when an admin has actually
+  // filled in real bank/payment details for manual-payment invoices; never fabricated.
+  bankDetails: "",
   instagramHandle: "",
   facebookUrl: "",
   // Which pending-item types actually generate a bell notification for admin -- all on by
