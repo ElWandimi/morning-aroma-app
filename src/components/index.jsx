@@ -54,17 +54,28 @@ export function ShareButtons({ path, text, label = "Share" }) {
 // loading state).
 export function ImgWithSkeleton({ src, alt, className = "", wrapClassName = "", ...rest }) {
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => { setLoaded(false); }, [src]);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setLoaded(false); setFailed(false); }, [src]);
   return (
     <span className={`img-skeleton-wrap ${wrapClassName}`}>
-      {!loaded && <span className="img-skeleton-shimmer" aria-hidden="true" />}
-      <img
-        src={src}
-        alt={alt}
-        className={`${className} ${loaded ? "img-loaded" : "img-loading"}`}
-        onLoad={() => setLoaded(true)}
-        {...rest}
-      />
+      {/* Previously had no onError handler at all -- a genuinely failed load (a third-party
+          hotlinked image being rate-limited, blocked, or just erroring out, which every caller of
+          this component is exposed to since none serve images from this app's own storage) left
+          the shimmer animating forever over a permanently invisible broken <img>, indistinguishable
+          from a plain blank tile once the shimmer's own motion wasn't obviously "loading" anymore
+          at a glance -- confirmed as a real, reachable state, not just a hypothetical edge case. */}
+      {!loaded && !failed && <span className="img-skeleton-shimmer" aria-hidden="true" />}
+      {failed && <span className="img-load-failed" aria-hidden="true" />}
+      {!failed && (
+        <img
+          src={src}
+          alt={alt}
+          className={`${className} ${loaded ? "img-loaded" : "img-loading"}`}
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          {...rest}
+        />
+      )}
     </span>
   );
 }

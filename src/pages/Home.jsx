@@ -565,9 +565,13 @@ export function HomePage() {
       <MomentsSnapshot />
       {/* 6. Quality/commitment split */}
       <QualitySplit />
-      {/* 7. Reviews — real ratings/notes only, no people photos, no fabricated testimonials */}
+      {/* 7. Reviews — real ratings/notes only, no people photos, no fabricated testimonials.
+          SourceTrust (a plainer repeat of the same Traceable/Fair FOB/Direct trade facts
+          QualitySplit already states above) previously sat here too -- harmless while
+          SocialProof had real content to separate them, but back-to-back once SocialProof
+          correctly renders nothing (no written customer feedback exists yet), so removed rather
+          than show the identical three facts twice in immediate succession. */}
       <SocialProof />
-      <SourceTrust />
       {/* 9. Two-column feature tiles */}
       <FeatureTiles />
       {/* 10. Closing CTA band */}

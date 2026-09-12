@@ -1638,6 +1638,10 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .img-skeleton-shimmer { animation: none; } }
 .img-loading { opacity: 0; }
 .img-loaded { opacity: 1; transition: opacity .35s ease; }
+/* Shown in place of the <img> once it's genuinely failed to load (see onError above) -- a plain,
+   quiet fill in the site's own palette rather than a broken-image icon or empty white box, so a
+   real network failure reads as "no photo here" rather than as a visibly broken page. */
+.img-load-failed { position: absolute; inset: 0; background: var(--steam); border-radius: inherit; }
 
 /* Login form fields — .modal-card's label/input rules stopped applying here once the login modal
    moved to its own .login-card/.login-form-panel wrapper (Search and Feedback still use
