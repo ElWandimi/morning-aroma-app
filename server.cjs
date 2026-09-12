@@ -172,7 +172,19 @@ function renderIndexWithMeta(urlPath) {
 // page a visitor loads goes through this server, not just the API), CSP left for a dedicated
 // follow-up since getting it wrong here specifically risks breaking Google Fonts, Cloudinary/
 // Unsplash images, or Paystack's checkout script loading on the actual pages people see.
-app.use(helmet({ contentSecurityPolicy: false }));
+//
+// crossOriginOpenerPolicy is overridden from helmet's own default ("same-origin") to
+// "same-origin-allow-popups" -- a real, live bug, not a hypothetical: helmet's default value
+// process-isolates this page from anything it opens via window.open(), which severs
+// window.opener on the popup's side. Google's own Sign In With Google button opens exactly such
+// a popup (accounts.google.com, a different origin) and its own script tries to postMessage back
+// through that now-severed opener reference -- confirmed directly as the actual cause of a
+// completely blank popup with "Cannot read properties of null (reading 'postMessage')" in its
+// console, reproduced consistently on the real production site. same-origin-allow-popups keeps
+// the same process-isolation benefit for ordinary cross-origin navigations while specifically
+// preserving the opener relationship for popups this page itself opens, which is exactly the
+// carve-out documented for this exact scenario.
+app.use(helmet({ contentSecurityPolicy: false, crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" } }));
 
 // Railway's own health check -- kept ahead of the SPA fallback so it always gets a real response
 // regardless of what routes exist client-side, the same reasoning Railway's own SPA guide gives.
