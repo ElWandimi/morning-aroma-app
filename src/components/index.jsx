@@ -818,7 +818,6 @@ export function SignUpModal({ open, onClose, onSwitchToSignIn }) {
               <button type="submit" className="btn-primary full" disabled={submitting}>
                 {submitting ? "Please wait…" : "Create account"}
               </button>
-              <p className="hint">First account on a fresh deployment becomes admin automatically — see ROADMAP.md.</p>
             </form>
 
             <div className="divider"><span>or</span></div>
