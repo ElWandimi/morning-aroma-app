@@ -275,15 +275,37 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
-    // No longer just best-effort -- the backend now actually clears both the session and CSRF
-    // cookies server-side (server/src/routes/auth.js), which is the ONLY way they get cleared at
-    // all: an httpOnly cookie can't be removed by this app's own JS the way the old localStorage
-    // token could. Still fire-and-forget from this function's own perspective (don't block
-    // clearing local UI state on the network round-trip), but it's doing real, necessary work now,
-    // not a no-op kept around for API-shape consistency.
-    api.logout().catch(() => {});
+  // Genuinely NOT fire-and-forget anymore -- it used to be, on the reasoning that clearing local
+  // UI state shouldn't wait on a network round-trip. In practice this masked a real bug: if
+  // api.logout() ever failed for any reason (a transient network blip, a CSRF-token timing edge
+  // case, anything), setUser(null) still ran unconditionally, so the UI looked signed out while
+  // the actual httpOnly session cookie was untouched server-side -- exactly reproduced by
+  // reported behavior: sign out looks like it worked, then a hard refresh (which re-asks the
+  // backend via api.me(), not anything cached client-side) shows the same account still signed
+  // in, because the cookie that determines that was never actually cleared. One retry before
+  // giving up, since the one real failure mode worth absorbing here is a single dropped request,
+  // not a persistent backend outage -- and the caller now genuinely learns whether this worked,
+  // rather than the previous version's blanket "assume yes."
+  const logout = async () => {
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await api.logout();
+        setUser(null);
+        return { ok: true };
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    // Even after both attempts failed, still clear the LOCAL UI state -- staying stuck on "still
+    // showing signed in" after someone explicitly asked to sign out is worse than showing signed
+    // out optimistically. What changed is that the caller now finds out this didn't fully
+    // succeed (via the returned { ok: false }), instead of the failure being invisible. The real
+    // session cookie may still be live server-side in this case -- Nav's own logout handler is
+    // what surfaces that to the person, since this function has no rendered UI of its own to show
+    // it in.
     setUser(null);
+    return { ok: false, error: lastError?.message };
   };
 
   const setRole = (email, role) => {

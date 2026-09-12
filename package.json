@@ -1,7 +1,7 @@
 {
   "name": "morning-aroma",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Morning Aroma — an interactive frontend prototype for a specialty coffee brand, including a full storefront, customer dashboard, and admin panel.",
   "type": "module",
   "scripts": {

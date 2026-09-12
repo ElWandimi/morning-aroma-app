@@ -1031,6 +1031,7 @@ export function LanguageSwitcher({ open, onToggle, onClose }) {
 
 export function Nav({ onOpenLogin, onOpenSearch }) {
   const { user, logout, sessionLoading } = useAuth();
+  const { addToast } = useToast();
   const { go } = useRoute();
   const { count, setOpen: setCartOpen } = useCart();
   const { count: wishlistCount, setOpen: setWishlistOpen } = useWishlist();
@@ -1038,6 +1039,16 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
   // Coordinates the currency and language dropdowns so opening one closes the other, rather than
   // each managing an independent open/closed boolean with no awareness of its sibling.
   const [openDropdown, setOpenDropdown] = useState(null); // null | "currency" | "language"
+  // logout() now genuinely reports whether the server-side cookie clear succeeded (see
+  // context/index.jsx's own comment on why this changed from fire-and-forget) -- surfaced here
+  // via toast since AuthProvider itself has no rendered UI to show a failure in once someone's
+  // already past the sign-in modal.
+  const handleSignOut = async () => {
+    const result = await logout();
+    if (!result.ok) {
+      addToast("Signed out here, but couldn't confirm it with the server. If you're on a shared device, please close the browser to be safe.");
+    }
+  };
   // 10 flat top-level links didn't fit on one row between the mobile breakpoint (900px) and
   // roughly 1050px -- "Our Promise" alone wrapped onto its own second line, and even where all
   // 10 did fit, that's a lot of undifferentiated text to scan in one row. Shop, Academy, and Our
@@ -1160,7 +1171,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
                   >
                     My Aroma Journey
                   </a>
-                  <button type="button" role="menuitem" className="nav-dropdown-panel-link profile-signout" onClick={() => { setProfileOpen(false); logout(); }}>
+                  <button type="button" role="menuitem" className="nav-dropdown-panel-link profile-signout" onClick={() => { setProfileOpen(false); handleSignOut(); }}>
                     Sign out
                   </button>
                 </div>
@@ -1181,7 +1192,7 @@ export function Nav({ onOpenLogin, onOpenSearch }) {
           {allLinksForMobile.map((l) => (
             <a key={l.label} href={pathFor(l.page)} onClick={(e) => { e.preventDefault(); go(l.page); setOpen(false); }}>{l.label}</a>
           ))}
-          {user && <button className="link-btn nav-mobile-signout" onClick={() => { logout(); setOpen(false); }}>Sign out</button>}
+          {user && <button className="link-btn nav-mobile-signout" onClick={() => { handleSignOut(); setOpen(false); }}>Sign out</button>}
         </div>
       )}
     </header>
