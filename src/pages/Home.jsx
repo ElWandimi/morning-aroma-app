@@ -148,6 +148,36 @@ export function TrustGrid() {
   );
 }
 
+// A real product-photo collage filling what was previously a large empty gap between the
+// signature grid (now capped to 8 -- see SignatureCollection's own comment on why) and the quiz
+// panel below it. Uses three of the real bundled product photos (public/photos/products/), not
+// stock or invented imagery -- Ethiopia positioned on the left per direct request. Each photo
+// links through to its own real product page, consistent with every other product image already
+// on this page, rather than being purely decorative.
+export function OriginHighlights() {
+  const { go } = useRoute();
+  const items = [
+    { id: "yirgacheffe-ethiopia", name: "Yirgacheffe — Ethiopia", photo: "/photos/products/yirgacheffe-ethiopia.png" },
+    { id: "sl28-kenya", name: "SL28 — Kenya", photo: "/photos/products/sl28-kenya.png" },
+    { id: "geisha-panama", name: "Geisha — Panama", photo: "/photos/products/geisha-panama.png" },
+  ];
+  return (
+    <section className="origin-highlights">
+      {items.map((item) => (
+        <div
+          key={item.id}
+          className="origin-highlight-photo"
+          onClick={() => go("product", { id: item.id })}
+          onKeyDown={activateOnEnterOrSpace(() => go("product", { id: item.id }))}
+          role="link" tabIndex={0} aria-label={`View ${item.name}`}
+        >
+          <img src={item.photo} alt={`${item.name} coffee bag`} loading="lazy" />
+        </div>
+      ))}
+    </section>
+  );
+}
+
 export function SignatureCollection() {
   const { go } = useRoute();
   const { add } = useCart();
@@ -156,10 +186,18 @@ export function SignatureCollection() {
   // Reuses the exact same live catalog PremiumTier and EverydayTier already read further down
   // this page -- this is a denser restyle of the same real products, not a second/duplicate
   // product source. Premium first (mirrors their current page order), then everyday.
-  const products = [
+  //
+  // Capped to 8 (a clean 2 rows of 4, matching this section's own 4-per-row grid) rather than
+  // rendering the full catalog -- the catalog's real size (15+) never divides evenly into any
+  // fixed column count, which is exactly what produced a lone trailing card and a large slab of
+  // empty grid cells underneath it. This section is explicitly a curated highlight ("the full
+  // lineup" heading below still points at Shop, where every product remains genuinely listed),
+  // not meant to be the complete catalog a second time.
+  const allProducts = [
     ...getAllProducts().filter((p) => p.tier === "premium"),
     ...getAllProducts().filter((p) => p.tier === "everyday"),
   ];
+  const products = allProducts.slice(0, 8);
   const [ratings, setRatings] = useState({});
 
   useEffect(() => {
@@ -519,6 +557,7 @@ export function HomePage() {
       <TrustGrid />
       {/* 3. Signature collection grid + 4. "Shop All" CTA bar (combined into one component) */}
       <SignatureCollection />
+      <OriginHighlights />
       <WaveDivider fill="#E8D5B5" />
       {/* 5. Subscription/delivery split */}
       <QuizPanel />

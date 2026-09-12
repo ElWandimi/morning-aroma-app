@@ -345,7 +345,13 @@ a { color: inherit; text-decoration: none; }
 .signature-collection { padding: 70px 24px; background: var(--cream); }
 .signature-collection .section-head { text-align: center; }
 .signature-collection .section-sub { margin-left: auto; margin-right: auto; }
-.signature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 18px; max-width: 1200px; margin: 30px auto 0; }
+.signature-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; max-width: 1200px; margin: 30px auto 0; }
+@media (max-width: 860px) {
+  .signature-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .signature-grid { grid-template-columns: 1fr; }
+}
 .signature-card { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 14px; }
 .signature-photo { width: 100%; aspect-ratio: 1/1; border-radius: 10px; background: linear-gradient(135deg, var(--almond), var(--gold)); background-size: contain; background-repeat: no-repeat; background-position: center; margin-bottom: 10px; }
 .signature-rating { display: flex; align-items: center; gap: 3px; margin-bottom: 6px; }
@@ -353,6 +359,19 @@ a { color: inherit; text-decoration: none; }
 .signature-card h3 { font-size: 0.95rem; margin: 0 0 4px; }
 .signature-tags { font-size: 0.82rem; color: #6b5647; margin: 0 0 10px; }
 .signature-cta-bar { text-align: center; margin-top: 36px; }
+
+/* origin-highlights -- real product-photo strip filling the gap after the signature grid */
+.origin-highlights { display: flex; justify-content: center; align-items: flex-end; gap: 28px; max-width: 1100px; margin: 56px auto 0; padding: 0 24px 48px; }
+.origin-highlight-photo { cursor: pointer; flex: 0 1 220px; transition: transform .25s ease; filter: drop-shadow(0 16px 24px rgba(20,13,9,0.18)); }
+.origin-highlight-photo:hover, .origin-highlight-photo:focus-visible { transform: translateY(-6px); }
+.origin-highlight-photo img { width: 100%; height: auto; display: block; }
+/* Middle photo (SL28 — Kenya) sits slightly larger/forward, echoing a simple collage arrangement
+   rather than three flat, identical rectangles in a row. */
+.origin-highlight-photo:nth-child(2) { flex-basis: 260px; margin-bottom: -20px; }
+@media (max-width: 700px) {
+  .origin-highlights { flex-wrap: wrap; gap: 16px; }
+  .origin-highlight-photo, .origin-highlight-photo:nth-child(2) { flex-basis: 140px; margin-bottom: 0; }
+}
 
 /* quality split */
 .quality-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); align-items: stretch; }
