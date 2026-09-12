@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // Fonts are loaded directly from a <link> tag in index.html (not injected here at runtime) so the
 // browser's preload scanner can start fetching them in parallel with the JS bundle, rather than

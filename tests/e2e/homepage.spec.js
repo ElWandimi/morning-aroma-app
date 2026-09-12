@@ -41,7 +41,7 @@ test.describe("Homepage — reorganized sections", () => {
     // The real bundled SL28 — Kenya product photo, not a placeholder -- confirms the hero
     // actually renders the chosen existing asset (/photos/products/sl28-kenya.png), not a
     // broken image or the old full-bleed-only layout.
-    const productShot = page.getByRole("link", { name: "View SL28 — Kenya" });
+    const productShot = page.getByRole("link", { name: "View SL28 — Kenya (featured coffee)" });
     await expect(productShot).toBeVisible();
     await expect(productShot.locator("img")).toHaveAttribute("src", "/photos/products/sl28-kenya.png");
 
@@ -58,7 +58,7 @@ test.describe("Homepage — reorganized sections", () => {
   test("clicking the hero product photo navigates to the real SL28 — Kenya product page", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
-    await page.getByRole("link", { name: "View SL28 — Kenya" }).click();
+    await page.getByRole("link", { name: "View SL28 — Kenya (featured coffee)" }).click();
     await expect(page).toHaveURL(/\/product\/sl28-kenya/);
     // Real, previously-flaky assertion: while realProducts is still loading, ProductPage renders
     // only "Loading…" (see Shop.jsx's own early return) -- a fixed-name h1 only appears once that

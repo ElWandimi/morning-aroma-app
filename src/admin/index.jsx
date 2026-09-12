@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { SignInModal, SignUpModal, ShareButtons } from "../components";
 import { useAdmin, useAuth, useCurrency, useRoute, useToast } from "../context";
-import { ADMIN_SECTIONS, COUNTRIES, FILTER_DEFS, GREEN_BEANS, MOMENTS, PRODUCTS } from "../data";
+import { ADMIN_SECTIONS, COUNTRIES, FILTER_DEFS, MOMENTS } from "../data";
 import { exportToCSV, fmtPrice, resizeImageFile, storage, activateOnEnterOrSpace } from "../utils/helpers";
 import { useClickOutside, useEscapeKey } from "../hooks";
 import { generateInvoicePDF, generateQuotationPDF } from "../utils/pdf";
@@ -1889,7 +1889,10 @@ export function AdminContent() {
     // overwrite a chapter's real lesson content with an empty string.
     if (chapterContentLoading) { addToast("Still loading this lesson's content -- please wait a moment before saving."); return; }
     const objectives = chapterDraft.objectivesText.split("\n").map((o) => o.trim()).filter(Boolean);
-    const { objectivesText, ...rest } = chapterDraft;
+    // objectivesText deliberately destructured out (not just unused) -- it's chapterDraft's raw
+    // textarea value, already parsed into the real `objectives` array above; excluding it here is
+    // what keeps the raw text field out of the actual update payload sent to the backend.
+    const { objectivesText: _objectivesText, ...rest } = chapterDraft;
     const result = await updateChapterDetails(id, { ...rest, objectives });
     setEditingChapter(null);
     addToast(result.ok ? "Lesson updated" : result.error);

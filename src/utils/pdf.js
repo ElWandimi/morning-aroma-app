@@ -180,13 +180,19 @@ export async function generateInvoicePDF({ invoiceNumber, date, dueDate, billTo,
   // hasn't already supplied a real due date, so an existing order/service invoice caller with no
   // concept of "days from now" still gets an honest header (no due date shown at all) rather than
   // a wrong or guessed one.
-  const drawPage = (isFirstPage) => {
+  //
+  // Called identically for the first page and every later one added during pagination below --
+  // there's currently no visual difference between them (both get the same background fill and
+  // watermark), so this takes no parameter; if a future page needs to look different from the
+  // first, that's a real, deliberate visual decision to make then, not something to leave an
+  // unused flag sitting around for.
+  const drawPage = () => {
     doc.setFillColor(253, 248, 240);
     doc.rect(0, 0, W, H, "F");
     drawWatermark(doc, logoDataUrl, W, H);
   };
 
-  drawPage(true);
+  drawPage();
   let y = drawDocumentHeader(doc, {
     W, margin, logoDataUrl, business, docType: "INVOICE",
     docNumber: invoiceNumber, issueDate: date, dueDate,
@@ -240,7 +246,7 @@ export async function generateInvoicePDF({ invoiceNumber, date, dueDate, billTo,
     if (y + rowHeight > bottomLimit) {
       doc.addPage();
       pageCount += 1;
-      drawPage(false);
+      drawPage();
       y = margin;
     }
     y += 22;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React from "react";
 import { useRoute } from "../context";
 import { GLOBAL_RITUALS } from "../data";
 

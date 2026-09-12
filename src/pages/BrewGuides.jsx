@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React from "react";
 import { useAdmin, useCart, useCurrency, useRoute } from "../context";
 import { BREW_GUIDES, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";

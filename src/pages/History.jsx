@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Glass } from "../components";
 import { useRoute } from "../context";
 import { HISTORY_SECTIONS, LEGENDARY_MOMENTS } from "../data";

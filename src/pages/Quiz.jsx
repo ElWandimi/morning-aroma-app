@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React, { useState } from "react";
 import { Glass } from "../components";
 import { useAdmin, useCart, useRoute } from "../context";
 import { QUIZ_QUESTIONS } from "../data";

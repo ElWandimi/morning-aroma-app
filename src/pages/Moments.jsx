@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React from "react";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
 import { COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
@@ -49,7 +49,7 @@ export function MomentsHubPage() {
 export function MomentPage({ id }) {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getTier, getMomentContent, getAllProducts } = useAdmin();
+  const { getPrice, getMomentContent, getAllProducts } = useAdmin();
   const { format } = useCurrency();
   const rawMoment = MOMENTS.find((m) => m.id === id);
   if (!rawMoment) {

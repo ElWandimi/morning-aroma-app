@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React, { useState, useEffect } from "react";
 import { Glass, PhotoMarquee, WaveDivider } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, pathFor } from "../context";
 import { COUNTRIES, COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
@@ -53,7 +53,7 @@ export function Hero() {
           className="hero-product-shot"
           onClick={() => go("product", { id: "sl28-kenya" })}
           onKeyDown={activateOnEnterOrSpace(() => go("product", { id: "sl28-kenya" }))}
-          role="link" tabIndex={0} aria-label="View SL28 — Kenya"
+          role="link" tabIndex={0} aria-label="View SL28 — Kenya (featured coffee)"
         >
           <img src="/photos/products/sl28-kenya.png" alt="Morning Aroma SL28 — Kenya coffee bag" />
         </div>
@@ -169,7 +169,7 @@ export function OriginHighlights() {
           className="origin-highlight-photo"
           onClick={() => go("product", { id: item.id })}
           onKeyDown={activateOnEnterOrSpace(() => go("product", { id: item.id }))}
-          role="link" tabIndex={0} aria-label={`View ${item.name}`}
+          role="link" tabIndex={0} aria-label={`View ${item.name} in our origin highlights`}
         >
           <img src={item.photo} alt={`${item.name} coffee bag`} loading="lazy" />
         </div>

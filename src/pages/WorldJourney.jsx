@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
+import React from "react";
 import { useAdmin, useCurrency, useRoute } from "../context";
 import { COUNTRIES, COUNTRY_JOURNEY_PHOTO } from "../data";
 import { slugify } from "../utils/helpers";

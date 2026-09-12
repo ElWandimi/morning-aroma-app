@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from "react";
-import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, GREEN_BEANS, KNOWN_ROUTES, PAGE_TO_SLUG, PRODUCTS, SLUG_TO_PAGE } from "../data";
-import { fmtPrice, getStorageConsent, logPageView, slugify, storage } from "../utils/helpers";
+import React, { useState, useEffect, createContext, useContext } from "react";
+import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, KNOWN_ROUTES, PAGE_TO_SLUG, SLUG_TO_PAGE } from "../data";
+import { fmtPrice, getStorageConsent, logPageView, storage } from "../utils/helpers";
 import { api } from "../utils/api";
 
 // Pulls `field` out of a parsed API response body and throws instead of returning `undefined` if
@@ -37,7 +37,6 @@ export function AuthProvider({ children }) {
   const [users, setUsers] = useState([
     { email: DEMO_ADMIN.email, name: DEMO_ADMIN.name, role: DEMO_ADMIN.role, twoFactorEnabled: true, createdAt: "2025-11-02", notificationsEnabled: true },
   ]);
-  const [passwords, setPasswords] = useState({ [DEMO_ADMIN.email]: DEMO_ADMIN.password });
   const [user, setUser] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [error, setError] = useState("");
@@ -320,10 +319,11 @@ export function AuthProvider({ children }) {
     setUser((prev) => (prev && prev.email === email ? { ...prev, permissions } : prev));
   };
 
-  // Passwords live in a completely separate `passwords` state (not on the user objects
-  // themselves), and this export deliberately never touches that state -- restoring accounts is
-  // genuinely useful, but a downloadable file containing plaintext credentials isn't something to
-  // build even in a prototype without a real security boundary.
+  // exportUsers/restoreUsers only ever touch `users` (demo-only staff/role metadata, unrelated to
+  // real authentication -- see the users state's own comment above), never anything password-
+  // related: real accounts' credentials live entirely in the backend's database now, never in
+  // this app's own state at all, so there's no plaintext-credential export risk to guard against
+  // here in the first place.
   const exportUsers = () => users;
   const restoreUsers = (data) => { if (Array.isArray(data)) setUsers(data); };
 
