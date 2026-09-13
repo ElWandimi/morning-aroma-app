@@ -1,5 +1,35 @@
 export const DEMO_ADMIN = { email: "elwandimi@gmail.com", password: "Kenya1234", role: "super_admin", name: "Elwandi" };
 
+// Every product's own priceCents (below) is genuinely the 1kg price -- 1kg was the only size that
+// ever existed, so every existing call site (Home, Moments, BrewGuides, Growing, WorldJourney,
+// checkout totals, admin's price editor, etc.) keeps meaning exactly what it always meant, unchanged.
+// These two smaller sizes are a real, additive purchase option layered on top, only where a person
+// actually picks a size (Shop's product cards, the product detail page) -- not a change to what
+// "the product's price" means everywhere else in the app.
+//
+// This exact list (id, label, multiplier) is deliberately duplicated in
+// server/src/utils/pricing.js, since the backend is a separate Node project that can't import
+// from this file -- the backend never trusts a client-computed size price (same principle this
+// codebase already applies to unitPriceCents in general, see orders.js), so it needs its own
+// copy of this same math to compute the real, authoritative price itself. If you ever change a
+// multiplier or add a size here, update that file too -- there's a matching comment there
+// pointing back here.
+export const PRODUCT_SIZES = [
+  { id: "375g", label: "375g", multiplier: 0.375 },
+  { id: "500g", label: "500g", multiplier: 0.5 },
+  { id: "1kg", label: "1kg", multiplier: 1 },
+];
+export const DEFAULT_PRODUCT_SIZE = "1kg";
+
+// Rounds to the nearest cent -- the same rounding a real till/checkout would do, and the only
+// place this math needs to live on the frontend (getPriceForSize in context/index.jsx calls this
+// rather than re-deriving it, so there's exactly one frontend implementation to keep in sync with
+// the backend's copy, not two).
+export function priceForSize(basePriceCents, sizeId) {
+  const size = PRODUCT_SIZES.find((s) => s.id === sizeId) || PRODUCT_SIZES.find((s) => s.id === DEFAULT_PRODUCT_SIZE);
+  return Math.round(basePriceCents * size.multiplier);
+}
+
 export const MOCK_GOOGLE_ACCOUNTS = [
   { email: DEMO_ADMIN.email, name: DEMO_ADMIN.name },
   { email: "maria.roast@gmail.com", name: "Maria Santos" },

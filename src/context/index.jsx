@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from "react";
-import { COUNTRY_HISTORY, DEFAULT_SETTINGS, DEMO_ADMIN, KNOWN_ROUTES, PAGE_TO_SLUG, SLUG_TO_PAGE } from "../data";
+import { COUNTRY_HISTORY, DEFAULT_PRODUCT_SIZE, DEFAULT_SETTINGS, DEMO_ADMIN, KNOWN_ROUTES, PAGE_TO_SLUG, priceForSize, SLUG_TO_PAGE } from "../data";
 import { fmtPrice, getStorageConsent, logPageView, storage } from "../utils/helpers";
 import { api } from "../utils/api";
 
@@ -400,28 +400,34 @@ export const useRoute = () => useContext(RouteCtx);
 export const CartCtx = createContext(null);
 
 export function CartProvider({ children }) {
-  const [items, setItems] = useState(() => storage.get("ma_cart", [])); // { id, qty }
+  const [items, setItems] = useState(() => storage.get("ma_cart", [])); // { id, size, qty }
   const [open, setOpen] = useState(false);
   useEffect(() => { if (getStorageConsent() === "accepted") storage.set("ma_cart", items); }, [items]);
-  const { getPrice, getStock } = useAdmin();
-  const add = (id, qty = 1) => {
+  const { getPriceForSize, getStock } = useAdmin();
+  // size defaults to DEFAULT_PRODUCT_SIZE ("1kg") so every existing call site that doesn't yet
+  // know about sizes (any add(id) call without a size argument) keeps behaving exactly as it did
+  // before this feature existed -- the same size the product's own single price always meant.
+  const add = (id, qty = 1, size = DEFAULT_PRODUCT_SIZE) => {
     setItems((prev) => {
       const stock = getStock(id);
-      const found = prev.find((i) => i.id === id);
+      // Two different sizes of the same product are genuinely different purchase choices -- a
+      // real line item each, at their own (different) price -- not the same cart row with a
+      // combined quantity, which is why identity here is the (id, size) pair, not id alone.
+      const found = prev.find((i) => i.id === id && i.size === size);
       const current = found ? found.qty : 0;
       const nextQty = stock > 0 ? Math.min(current + qty, stock) : current + qty; // stock 0 handled by UI gating; don't hard-block here in case of stale admin state
-      if (found) return prev.map((i) => (i.id === id ? { ...i, qty: nextQty } : i));
-      return [...prev, { id, qty: nextQty }];
+      if (found) return prev.map((i) => (i.id === id && i.size === size ? { ...i, qty: nextQty } : i));
+      return [...prev, { id, size, qty: nextQty }];
     });
     setOpen(true);
   };
-  const updateQty = (id, qty) => {
-    setItems((prev) => (qty <= 0 ? prev.filter((i) => i.id !== id) : prev.map((i) => (i.id === id ? { ...i, qty } : i))));
+  const updateQty = (id, size, qty) => {
+    setItems((prev) => (qty <= 0 ? prev.filter((i) => !(i.id === id && i.size === size)) : prev.map((i) => (i.id === id && i.size === size ? { ...i, qty } : i))));
   };
-  const remove = (id) => setItems((prev) => prev.filter((i) => i.id !== id));
+  const remove = (id, size) => setItems((prev) => prev.filter((i) => !(i.id === id && i.size === size)));
   const clearCart = () => setItems([]);
   const count = items.reduce((sum, i) => sum + i.qty, 0);
-  const totalCents = items.reduce((sum, i) => sum + getPrice(i.id) * i.qty, 0);
+  const totalCents = items.reduce((sum, i) => sum + getPriceForSize(i.id, i.size) * i.qty, 0);
   return (
     <CartCtx.Provider value={{ items, add, updateQty, remove, clearCart, count, totalCents, open, setOpen }}>
       {children}
@@ -845,6 +851,13 @@ export function AdminDataProvider({ children }) {
     const p = realProducts.find((p) => p.id === id);
     return p ? p.priceCents : 0;
   };
+  // getPrice above stays exactly what it always was (the 1kg price) -- this is a separate,
+  // additive helper for the one real new place a size actually gets chosen (Shop's product
+  // cards, the product detail page), rather than changing what getPrice(id) means everywhere
+  // else in the app (Home, Moments, BrewGuides, Growing, WorldJourney, etc. all keep working
+  // unchanged). See src/data/index.js's own comment on why the multiplier math itself lives
+  // there, and why the backend has its own matching copy.
+  const getPriceForSize = (id, sizeId) => priceForSize(getPrice(id), sizeId);
   const setPrice = async (id, cents) => {
     try {
       await api.updateProduct(id, { priceCents: cents });
@@ -1359,7 +1372,7 @@ export function AdminDataProvider({ children }) {
   return (
     <AdminCtx.Provider
       value={{
-        getPrice, setPrice, updateProductDetails,
+        getPrice, getPriceForSize, setPrice, updateProductDetails,
         getTier, setTier,
         realUsers, realUsersLoading, realUsersError, refetchRealUsers,
         realOrders, realOrdersLoading, realOrdersError, refetchRealOrders, updateOrderStatus, refundOrder,
@@ -1516,8 +1529,45 @@ export function CurrencyProvider({ children }) {
     }
   };
 
+  // A real, pre-existing display quirk this fixes: a cart/checkout total shown as the straight
+  // currency-converted sum of raw USD cents can differ by the smallest display unit (a cent, a
+  // shilling-cent, etc.) from what you get by adding up the SEPARATELY-ROUNDED lines a customer
+  // actually sees above it -- each format() call above rounds its own conversion independently,
+  // and rounding is not additive (round(a) + round(b) doesn't always equal round(a + b)). Genuinely
+  // confirmed live: a 3-item KES cart (873.81 + 1,165.08 + 2,330.17 = 4,369.06) displayed a total
+  // of 4,369.07. Call with the array of each line's own usdCents (not a pre-summed total) so this
+  // can round each one exactly as its own displayed line already does, then sum those rounded
+  // values -- guaranteeing the total a customer sees always exactly matches what the lines above
+  // it add up to, which is the property that actually matters for a receipt to look trustworthy,
+  // even though it means this total can differ by a cent from a pure USD->KES conversion of the
+  // combined amount. Falls back to plain format() summing behavior if usdCentsArray isn't an array
+  // (defensive; every real call site is being updated to pass an array, but this avoids a hard
+  // crash if some caller doesn't).
+  const formatSumOf = (usdCentsArray) => {
+    if (!Array.isArray(usdCentsArray)) return format(usdCentsArray);
+    const effectiveCurrency = rates[currency] ? currency : "USD";
+    const rate = rates[effectiveCurrency] || 1;
+    // Sums in integer display-currency CENTS, not floating-point currency units -- summing
+    // rounded floats (e.g. 152.48 + 203.3 + 406.6) doesn't reliably land on an exact value in
+    // IEEE 754 (genuinely reproduced: it can come out 762.3800000000001, not 762.38), which
+    // Intl.NumberFormat would then render as an extra fractional digit or silently mis-round.
+    // Rounding each line to the nearest integer cent FIRST, then summing those integers, and only
+    // dividing back to currency units once at the very end, is the standard way to avoid
+    // accumulating floating-point error in money math.
+    const roundedSumCents = usdCentsArray.reduce((sum, usdCents) => {
+      const convertedCents = ((usdCents || 0) / 100) * rate * 100;
+      return sum + Math.round(convertedCents);
+    }, 0);
+    const roundedSum = roundedSumCents / 100;
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency: effectiveCurrency }).format(roundedSum);
+    } catch {
+      return `$${roundedSum.toFixed(2)}`;
+    }
+  };
+
   return (
-    <CurrencyCtx.Provider value={{ currency, rates, ratesLoading, chooseCurrency, format }}>
+    <CurrencyCtx.Provider value={{ currency, rates, ratesLoading, chooseCurrency, format, formatSumOf }}>
       {children}
     </CurrencyCtx.Provider>
   );

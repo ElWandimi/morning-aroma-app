@@ -1,18 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { BarRow, ImgWithSkeleton, ShareButtons } from "../components";
 import { useAdmin, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
-import { FILTER_DEFS, COUNTRY_JOURNEY_PHOTO } from "../data";
+import { FILTER_DEFS, COUNTRY_JOURNEY_PHOTO, PRODUCT_SIZES, DEFAULT_PRODUCT_SIZE } from "../data";
 import { getProductPhotoUrl, slugify, activateOnEnterOrSpace } from "../utils/helpers";
 import { useStructuredData } from "../hooks";
 
 export function ShopPage() {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getStock, getAllProducts, realProductsLoading } = useAdmin();
+  const { getPrice, getPriceForSize, getStock, getAllProducts, realProductsLoading } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const [filters, setFilters] = useState({ aroma: [], body: "", acidity: "", roast: "", moment: "", brew: "" });
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // One selected size per product card, keyed by id -- a real, independent per-card choice
+  // (someone might want 375g of one origin and 1kg of another in the same browse session), not
+  // shared state across the whole grid. Any product not yet touched here just reads as
+  // DEFAULT_PRODUCT_SIZE via the ?? below, rather than needing every product pre-seeded into this
+  // object up front.
+  const [cardSizes, setCardSizes] = useState({});
   const allProducts = getAllProducts();
 
   const toggleAroma = (tag) =>
@@ -143,6 +149,7 @@ export function ShopPage() {
                 const stock = getStock(p.id);
                 const soldOut = stock === 0;
                 const reverse = i % 2 === 1;
+                const cardSize = cardSizes[p.id] ?? DEFAULT_PRODUCT_SIZE;
                 return (
                   <div key={p.id} className={`origin-row ${reverse ? "origin-row-reverse" : ""} ${soldOut ? "sold-out-card" : ""}`}>
                     <div className="origin-row-text">
@@ -150,9 +157,23 @@ export function ShopPage() {
                       <h3><span onClick={() => go("product", { id: p.id })} onKeyDown={activateOnEnterOrSpace(() => go("product", { id: p.id }))} role="link" tabIndex={0} style={{ cursor: "pointer" }}>{p.name} — {p.country}</span></h3>
                       <p className="handwritten origin-tasting-note">{p.note}</p>
                       <p className="origin-growing-note">{p.growing}</p>
+                      <div className="size-row size-row-compact" role="radiogroup" aria-label={`Choose a bag size for ${p.name} — ${p.country}`}>
+                        {PRODUCT_SIZES.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={cardSize === s.id}
+                            className={`size-pill size-pill-sm ${cardSize === s.id ? "size-pill-active" : ""}`}
+                            onClick={() => setCardSizes((prev) => ({ ...prev, [p.id]: s.id }))}
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
                       <div className="premium-foot">
-                        <span>{format(getPrice(p.id))}</span>
-                        <button className="btn-cart" onClick={() => add(p.id)} disabled={soldOut}>
+                        <span>{format(getPriceForSize(p.id, cardSize))}</span>
+                        <button className="btn-cart" onClick={() => add(p.id, 1, cardSize)} disabled={soldOut}>
                           {soldOut ? "Sold Out" : (<>🛒 Add to cart</>)}
                         </button>
                       </div>
@@ -184,11 +205,12 @@ export function ShopPage() {
 export function ProductPage({ id }) {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getTier, getStock, getAllProducts, getProductFeedback, realProductsLoading } = useAdmin();
+  const { getPrice, getPriceForSize, getTier, getStock, getAllProducts, getProductFeedback, realProductsLoading } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const { addToast } = useToast();
   const [qty, setQty] = useState(1);
+  const [size, setSize] = useState(DEFAULT_PRODUCT_SIZE);
   const [tab, setTab] = useState("profile");
   const allProducts = getAllProducts();
   const product = allProducts.find((p) => p.id === id);
@@ -304,18 +326,32 @@ export function ProductPage({ id }) {
           <p className="eyebrow">{getTier(product.id) === "premium" ? "premium & rare" : "everyday classic"}</p>
           <h1>{product.name} — {product.country}</h1>
           <p className="handwritten product-note">{product.note}</p>
-          <p className="product-price">{format(getPrice(product.id))} <span>/ 340g bag</span></p>
+          <p className="product-price">{format(getPriceForSize(product.id, size))} <span>/ {size} bag</span></p>
           {soldOut ? (
             <p className="stock-notice out">Currently sold out — check back soon, or explore similar varieties below.</p>
           ) : lowStock ? (
             <p className="stock-notice low">Only {stock} bags left in this batch.</p>
           ) : null}
+          <div className="size-row" role="radiogroup" aria-label="Choose a bag size">
+            {PRODUCT_SIZES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="radio"
+                aria-checked={size === s.id}
+                className={`size-pill ${size === s.id ? "size-pill-active" : ""}`}
+                onClick={() => setSize(s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
           <div className="qty-row" style={soldOut ? { opacity: 0.4, pointerEvents: "none" } : undefined}>
             <button onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
             <span>{qty}</span>
             <button onClick={() => setQty((q) => Math.min(stock || 99, q + 1))}>+</button>
           </div>
-          <button className="btn-primary full" onClick={() => add(product.id, qty)} disabled={soldOut}>
+          <button className="btn-primary full" onClick={() => add(product.id, qty, size)} disabled={soldOut}>
             {soldOut ? "Sold Out" : "Add to cart"}
           </button>
           <div className="match-row">

@@ -443,7 +443,7 @@ export function JourneyPage() {
               <ul className="order-items">
                 {o.items.map((it) => {
                   const p = allProducts.find((p) => p.id === it.id);
-                  return <li key={it.id}>{p ? `${p.name} — ${p.country}` : "Discontinued item"} × {it.qty}</li>;
+                  return <li key={`${it.id}-${it.size || "1kg"}`}>{p ? `${p.name} — ${p.country}` : "Discontinued item"}{it.size ? ` (${it.size})` : ""} × {it.qty}</li>;
                 })}
               </ul>
               <div className="order-card-actions">
@@ -451,7 +451,11 @@ export function JourneyPage() {
                   className="btn-outline small"
                   onClick={() => {
                     const availableItems = o.items.filter((it) => allProducts.some((p) => p.id === it.id));
-                    availableItems.forEach((it) => addToCart(it.id, it.qty));
+                    // Reorders the exact same size the customer actually ordered before -- passing
+                    // it.qty but not it.size here would silently default every reordered item back
+                    // to the default size, genuinely changing what someone gets versus their
+                    // original order (and its price) without any indication that happened.
+                    availableItems.forEach((it) => addToCart(it.id, it.qty, it.size));
                     const skipped = o.items.length - availableItems.length;
                     if (availableItems.length === 0) addToast("Those items are no longer available");
                     else if (skipped > 0) addToast(`Added ${availableItems.length} item${availableItems.length === 1 ? "" : "s"} — ${skipped} no longer available`);

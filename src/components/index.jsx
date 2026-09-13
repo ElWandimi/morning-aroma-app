@@ -1640,10 +1640,10 @@ export function BarRow({ label, value }) {
 }
 
 export function CartDrawer() {
-  const { items, updateQty, remove, totalCents, open, setOpen } = useCart();
+  const { items, updateQty, remove, open, setOpen } = useCart();
   const { go } = useRoute();
-  const { getPrice, getStock, getAllProducts } = useAdmin();
-  const { format } = useCurrency();
+  const { getPriceForSize, getStock, getAllProducts } = useAdmin();
+  const { format, formatSumOf } = useCurrency();
   const cartDrawerRef = useRef(null);
   useEscapeKey(open, () => setOpen(false));
   useFocusTrap(cartDrawerRef, open);
@@ -1665,17 +1665,22 @@ export function CartDrawer() {
                 if (!p) return null;
                 const stock = getStock(p.id);
                 return (
-                  <div key={i.id} className="drawer-item">
+                  // Two different sizes of the same product are two real, distinct line items --
+                  // (id, size) is the actual identity of a cart row now, not id alone, so this is
+                  // both the real React key (id alone would collide if someone has, say, both a
+                  // 375g and a 1kg of the same coffee in their bag) and what updateQty/remove
+                  // need to target the right row specifically.
+                  <div key={`${i.id}-${i.size}`} className="drawer-item">
                     <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }} />
                     <div className="drawer-item-info">
-                      <p className="drawer-item-name">{p.name} — {p.country}</p>
-                      <p className="drawer-item-price">{format(getPrice(p.id))}</p>
+                      <p className="drawer-item-name">{p.name} — {p.country} <span className="drawer-item-size">({i.size})</span></p>
+                      <p className="drawer-item-price">{format(getPriceForSize(p.id, i.size))}</p>
                       {i.qty >= stock && stock > 0 && <p className="hint" style={{ margin: "2px 0" }}>Max available: {stock}</p>}
                       <div className="qty-row small">
-                        <button onClick={() => updateQty(i.id, i.qty - 1)}>−</button>
+                        <button onClick={() => updateQty(i.id, i.size, i.qty - 1)}>−</button>
                         <span>{i.qty}</span>
-                        <button onClick={() => updateQty(i.id, Math.min(stock, i.qty + 1))} disabled={i.qty >= stock}>+</button>
-                        <button className="link-btn" onClick={() => remove(i.id)}>Remove</button>
+                        <button onClick={() => updateQty(i.id, i.size, Math.min(stock, i.qty + 1))} disabled={i.qty >= stock}>+</button>
+                        <button className="link-btn" onClick={() => remove(i.id, i.size)}>Remove</button>
                       </div>
                     </div>
                   </div>
@@ -1684,7 +1689,7 @@ export function CartDrawer() {
             </div>
             <div className="drawer-total">
               <span>Total</span>
-              <span>{format(totalCents)}</span>
+              <span>{formatSumOf(items.map((i) => getPriceForSize(i.id, i.size) * i.qty))}</span>
             </div>
             <button className="btn-primary full" onClick={() => { setOpen(false); go("checkout"); }}>Checkout</button>
           </>

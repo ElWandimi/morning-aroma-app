@@ -7,9 +7,12 @@ CREATE TABLE IF NOT EXISTS orders (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_number        BIGINT NOT NULL DEFAULT nextval('order_number_seq') UNIQUE, -- human-facing, shown as MA-<number>
   user_id             UUID NOT NULL REFERENCES users(id),
-  items               JSONB NOT NULL,   -- [{ id, qty, unitPriceCents }, ...] — see server/README.md for the
-                                         -- known limitation this implies (prices aren't yet verified against
-                                         -- a real product catalog, since products aren't in Postgres yet)
+  items               JSONB NOT NULL,   -- [{ id, qty, size, unitPriceCents }, ...] -- size is one of
+                                         -- "375g"/"500g"/"1kg" (see server/src/utils/pricing.js).
+                                         -- unitPriceCents is always the real, server-computed price
+                                         -- for that size, verified against the live products table
+                                         -- at order-creation time (see routes/orders.js) -- never
+                                         -- trusted from the client, regardless of what a request sent.
   total_cents         INTEGER NOT NULL,
   shipping_name       TEXT NOT NULL,
   shipping_address    TEXT NOT NULL,

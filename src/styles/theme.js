@@ -543,6 +543,17 @@ a { color: inherit; text-decoration: none; }
 .qty-row { display: inline-flex; align-items: center; gap: 14px; border: 1px solid var(--gold); border-radius: 30px; padding: 6px 18px; margin-bottom: 16px; }
 .qty-row.small { border: none; padding: 0; gap: 8px; margin: 0; }
 .qty-row button { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--chestnut); font-weight: 700; }
+
+/* size-row -- a real, distinct purchase choice (see ProductPage), styled as its own row of
+   pills above the quantity stepper rather than folded into it, since picking a size and picking
+   a quantity are two separate decisions a customer makes. */
+.size-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.size-pill { border: 1px solid var(--gold); border-radius: 20px; padding: 6px 16px; background: none; cursor: pointer; font-size: 0.9rem; color: var(--chestnut); font-weight: 600; transition: background .15s ease, color .15s ease; }
+.size-pill:hover { background: var(--steam); }
+.size-pill-active { background: var(--chestnut); border-color: var(--chestnut); color: var(--cream); }
+.size-pill-active:hover { background: var(--chestnut); }
+.size-row-compact { margin-bottom: 10px; }
+.size-pill-sm { padding: 4px 12px; font-size: 0.8rem; }
 .match-row { display: flex; align-items: center; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
 .match-row a { font-weight: 700; color: var(--chestnut); font-size: 0.9rem; }
 
@@ -572,6 +583,7 @@ a { color: inherit; text-decoration: none; }
 .drawer-item-info { flex: 1; min-width: 0; }
 .drawer-thumb { width: 56px; height: 56px; border-radius: 10px; background: linear-gradient(135deg, var(--almond), var(--gold)); background-size: contain; background-repeat: no-repeat; background-position: center; flex-shrink: 0; }
 .drawer-item-name { font-weight: 700; }
+.drawer-item-size { font-weight: 400; color: var(--almond-text); font-size: 0.85em; }
 .drawer-item-price { font-size: 0.85rem; color: var(--almond-text); margin: 2px 0 6px; }
 .drawer-total { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-weight: 700; font-size: 1.1rem; margin: 20px 0 16px; padding-top: 16px; border-top: 1px solid var(--gold); }
 

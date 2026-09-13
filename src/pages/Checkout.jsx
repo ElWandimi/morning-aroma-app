@@ -127,12 +127,12 @@ function validateShippingForm(shipping) {
 
 export function CheckoutPage() {
   const { user } = useAuth();
-  const { items, updateQty, remove, totalCents, clearCart } = useCart();
+  const { items, updateQty, remove, clearCart } = useCart();
   const { go } = useRoute();
   const { createOrder, verifyPayment } = useOrders();
   const { createSubscription } = useSubscriptions();
-  const { getPrice, getAllProducts, settings } = useAdmin();
-  const { format, rates, ratesLoading, currency } = useCurrency();
+  const { getPrice, getPriceForSize, getAllProducts, settings } = useAdmin();
+  const { format, formatSumOf, rates, ratesLoading, currency } = useCurrency();
   const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
   // Keyed by product id -- tracks the interval chosen and the real submit state for the
   // post-purchase subscribe offer (step 4), independently per item, since a multi-item order can
@@ -182,8 +182,12 @@ export function CheckoutPage() {
       setPayingStatus("creating-order");
       // unitPriceCents is captured now, at the moment of ordering -- locking in what was actually
       // charged, rather than the order forever pointing at "whatever this product currently costs".
+      // size is sent alongside it now too -- the backend recomputes and verifies this price itself
+      // from size + the real catalog price (server/src/utils/pricing.js), the same "never trust
+      // the client's number" principle already applied to price alone before sizes existed, just
+      // extended to cover the new size dimension too.
       const result = await createOrder({
-        items: items.map((i) => ({ id: i.id, qty: i.qty, unitPriceCents: getPrice(i.id) })),
+        items: items.map((i) => ({ id: i.id, qty: i.qty, size: i.size, unitPriceCents: getPriceForSize(i.id, i.size) })),
         shippingName: `${shipping.firstName} ${shipping.lastName}`.trim(),
         shippingAddress: shipping.address,
         shippingCity: shipping.city,
@@ -257,7 +261,7 @@ export function CheckoutPage() {
     const lineItems = confirmedOrder.items.map((it) => {
       const p = allProducts.find((prod) => prod.id === it.id);
       return {
-        description: p ? `${p.name} — ${p.country}` : it.id,
+        description: p ? `${p.name} — ${p.country}${it.size ? ` (${it.size})` : ""}` : it.id,
         qty: it.qty, unitPriceCents: it.unitPriceCents, totalCents: it.unitPriceCents * it.qty,
       };
     });
@@ -310,16 +314,19 @@ export function CheckoutPage() {
               const p = getAllProducts().find((p) => p.id === i.id);
               if (!p) return null;
               return (
-                <div key={i.id} className="checkout-item">
+                // Same (id, size) real identity as CartDrawer -- see that component's own
+                // comment on why id alone would collide once two sizes of the same product can
+                // both be in the bag at once.
+                <div key={`${i.id}-${i.size}`} className="checkout-item">
                   <div className="drawer-thumb" style={{ backgroundImage: `url('${getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 200)}')` }} />
                   <div className="drawer-item-info">
-                    <p className="drawer-item-name">{p.name} — {p.country}</p>
-                    <p className="drawer-item-price">{format(getPrice(p.id))}</p>
+                    <p className="drawer-item-name">{p.name} — {p.country} <span className="drawer-item-size">({i.size})</span></p>
+                    <p className="drawer-item-price">{format(getPriceForSize(p.id, i.size))}</p>
                     <div className="qty-row small">
-                      <button onClick={() => updateQty(i.id, i.qty - 1)}>−</button>
+                      <button onClick={() => updateQty(i.id, i.size, i.qty - 1)}>−</button>
                       <span>{i.qty}</span>
-                      <button onClick={() => updateQty(i.id, i.qty + 1)}>+</button>
-                      <button className="link-btn" onClick={() => remove(i.id)}>Remove</button>
+                      <button onClick={() => updateQty(i.id, i.size, i.qty + 1)}>+</button>
+                      <button className="link-btn" onClick={() => remove(i.id, i.size)}>Remove</button>
                     </div>
                   </div>
                 </div>
@@ -327,7 +334,7 @@ export function CheckoutPage() {
             })}
           </div>
           <div className="checkout-summary">
-            <div className="drawer-total"><span>Total</span><span>{format(totalCents)}</span></div>
+            <div className="drawer-total"><span>Total</span><span>{formatSumOf(items.map((i) => getPriceForSize(i.id, i.size) * i.qty))}</span></div>
             <button className="btn-primary full" onClick={() => setStep(user ? 2 : 1)}>Continue</button>
           </div>
         </div>
@@ -492,7 +499,7 @@ export function CheckoutPage() {
         <div className="checkout-form">
           <h3>Payment</h3>
           <p className="hint payment-note">Pay securely with Paystack — card, M-Pesa, and more.</p>
-          <div className="drawer-total"><span>Total due</span><span>{format(totalCents)}</span></div>
+          <div className="drawer-total"><span>Total due</span><span>{formatSumOf(items.map((i) => getPriceForSize(i.id, i.size) * i.qty))}</span></div>
           {placeOrderError && <p className="form-error">{placeOrderError}</p>}
           {ratesLoading ? (
             <p className="hint">Preparing checkout…</p>

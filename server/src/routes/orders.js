@@ -41,6 +41,8 @@ function publicOrder(row) {
   };
 }
 
+const { priceForSize, isValidSize, DEFAULT_PRODUCT_SIZE } = require("../utils/pricing");
+
 function validateOrderInput(body) {
   const { items, shippingName, shippingAddress, shippingCity } = body || {};
 
@@ -49,6 +51,12 @@ function validateOrderInput(body) {
     if (!item || typeof item.id !== "string" || !item.id.trim()) return "Every item needs a valid product id.";
     if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > 99) return "Item quantities must be whole numbers between 1 and 99.";
     if (!Number.isInteger(item.unitPriceCents) || item.unitPriceCents < 0) return "Every item needs a valid price.";
+    // size is optional on the request for backward compatibility with any client that predates
+    // sizes (it defaults below, the same way it always implicitly meant 1kg before this existed)
+    // -- but if it IS present, it must be one of the three real sizes, not an arbitrary string
+    // that would silently fall through to the default price and let someone imply they'd chosen
+    // a cheaper size than what's actually charged.
+    if (item.size !== undefined && !isValidSize(item.size)) return "Every item needs a valid size.";
   }
   if (!shippingName || typeof shippingName !== "string" || !shippingName.trim() || shippingName.length > 200) return "A valid shipping name is required.";
   if (!shippingAddress || typeof shippingAddress !== "string" || !shippingAddress.trim() || shippingAddress.length > 500) return "A valid shipping address is required.";
@@ -80,7 +88,12 @@ router.post("/", requireAuth, async (req, res) => {
     return res.status(400).json({ error: `Some items are no longer available: ${unavailable.join(", ")}` });
   }
 
-  const realItems = items.map((i) => ({ id: i.id, qty: i.qty, unitPriceCents: priceById.get(i.id) }));
+  const realItems = items.map((i) => ({
+    id: i.id,
+    qty: i.qty,
+    size: i.size || DEFAULT_PRODUCT_SIZE,
+    unitPriceCents: priceForSize(priceById.get(i.id), i.size || DEFAULT_PRODUCT_SIZE),
+  }));
   const totalCents = realItems.reduce((sum, item) => sum + item.unitPriceCents * item.qty, 0);
 
   const result = await query(
