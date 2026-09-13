@@ -400,7 +400,19 @@ export const useRoute = () => useContext(RouteCtx);
 export const CartCtx = createContext(null);
 
 export function CartProvider({ children }) {
-  const [items, setItems] = useState(() => storage.get("ma_cart", [])); // { id, size, qty }
+  // Real, confirmed bug this fixes: cart items added to localStorage BEFORE this size feature
+  // existed are genuinely just { id, qty } -- no size field at all, since there was nothing to
+  // store. Reading those back with the new size-aware code (i.size, getPriceForSize(id, i.size))
+  // without normalizing first produces literal `undefined`, which renders as "()" in the UI
+  // (confirmed directly: "Caturra — Colombia ()") and would price the item at the fallback (still
+  // correct, since priceForSize's own fallback is DEFAULT_PRODUCT_SIZE, but silently, with no
+  // indication anything was defaulted). Normalizing once here, at the single point every
+  // consumer's `items` ultimately comes from, means every downstream reader (CartDrawer,
+  // Checkout, order creation) can trust i.size is always a real, valid size string -- rather than
+  // needing the same defensive `i.size || DEFAULT_PRODUCT_SIZE` repeated at every read site.
+  const [items, setItems] = useState(() =>
+    storage.get("ma_cart", []).map((i) => ({ ...i, size: i.size || DEFAULT_PRODUCT_SIZE }))
+  ); // { id, size, qty }
   const [open, setOpen] = useState(false);
   useEffect(() => { if (getStorageConsent() === "accepted") storage.set("ma_cart", items); }, [items]);
   const { getPriceForSize, getStock } = useAdmin();
