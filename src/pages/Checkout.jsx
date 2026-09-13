@@ -131,7 +131,7 @@ export function CheckoutPage() {
   const { go } = useRoute();
   const { createOrder, verifyPayment } = useOrders();
   const { createSubscription } = useSubscriptions();
-  const { getPrice, getPriceForSize, getAllProducts, settings } = useAdmin();
+  const { getPriceForSize, getAllProducts, settings } = useAdmin();
   const { format, formatSumOf, rates, ratesLoading, currency } = useCurrency();
   const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
   // Keyed by product id -- tracks the interval chosen and the real submit state for the

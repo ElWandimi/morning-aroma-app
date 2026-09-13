@@ -8,7 +8,7 @@ import { useStructuredData } from "../hooks";
 export function ShopPage() {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getPriceForSize, getStock, getAllProducts, realProductsLoading } = useAdmin();
+  const { getPriceForSize, getStock, getAllProducts, realProductsLoading } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const [filters, setFilters] = useState({ aroma: [], body: "", acidity: "", roast: "", moment: "", brew: "" });

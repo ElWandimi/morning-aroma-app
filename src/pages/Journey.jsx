@@ -186,6 +186,17 @@ export function JourneyPage() {
     if (!selectedProduct && allProducts.length > 0) setSelectedProduct(allProducts[0].id);
   }, [allProducts, selectedProduct]);
 
+  // Real, previously-broken Rules of Hooks violation: these three used to be called AFTER the
+  // !user and realProductsLoading early returns below, meaning they were skipped entirely on any
+  // render that hit one of those returns -- genuinely reachable on every ordinary page load, not
+  // just a theoretical edge case, since user starts null and populates asynchronously (confirmed
+  // directly: /journey's own first render, before the auth check resolves, hits exactly this
+  // path). Moved up here, unconditionally, matching the same convention ProductPage's own
+  // comments already document elsewhere in this codebase for the identical class of bug.
+  const { myOrders: orders, myOrdersLoading, myOrdersError, refetchMyOrders, cancelOrder } = useOrders();
+  const { mySubscriptions: subscriptions, mySubscriptionsLoading, mySubscriptionsError, refetchMySubscriptions, pauseSubscription, resumeSubscription, cancelSubscription } = useSubscriptions();
+  const { format } = useCurrency();
+
   if (!user) {
     return (
       <div className="journey-locked">
@@ -238,10 +249,6 @@ export function JourneyPage() {
     });
     return best;
   })();
-
-  const { myOrders: orders, myOrdersLoading, myOrdersError, refetchMyOrders, cancelOrder } = useOrders();
-  const { mySubscriptions: subscriptions, mySubscriptionsLoading, mySubscriptionsError, refetchMySubscriptions, pauseSubscription, resumeSubscription, cancelSubscription } = useSubscriptions();
-  const { format } = useCurrency();
 
   const submitEntry = (e) => {
     e.preventDefault();
