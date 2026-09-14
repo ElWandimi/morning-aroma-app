@@ -163,7 +163,17 @@ export function usePrefersReducedMotion() {
   return reduced;
 }
 
-export function useDocumentMeta(title, description) {
+function upsertLink(rel, href) {
+  let tag = document.querySelector(`link[rel="${rel}"]`);
+  if (!tag) {
+    tag = document.createElement("link");
+    tag.setAttribute("rel", rel);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute("href", href);
+}
+
+export function useDocumentMeta(title, description, canonicalPath) {
   useEffect(() => {
     if (title) {
       document.title = title;
@@ -173,7 +183,20 @@ export function useDocumentMeta(title, description) {
       upsertMeta('meta[name="description"]', "name", "description", description);
       upsertMeta('meta[property="og:description"]', "property", "og:description", description);
     }
-  }, [title, description]);
+    // Real, previously-live bug this fixes: index.html shipped exactly one static
+    // <link rel="canonical" href="https://morning-aroma.com/">, which -- since this is a single
+    // HTML shell every route loads into -- applied to literally every page on the site
+    // (products, brew guides, countries, everything). That tells search engines every one of
+    // those pages is a duplicate of the homepage, which can mean they never get indexed
+    // separately at all. Confirmed directly: grepped the whole src/ tree and found no dynamic
+    // canonical logic anywhere, only that one static tag. This upserts (rather than requiring
+    // index.html's tag be removed first) a real, per-page canonical whenever a path is known,
+    // and simply leaves the static one in place as the correct value for "/" itself when no
+    // canonicalPath is given (the home route's own getPageMeta call below doesn't pass one).
+    if (canonicalPath) {
+      upsertLink("canonical", `https://morning-aroma.com${canonicalPath}`);
+    }
+  }, [title, description, canonicalPath]);
 }
 
 // Injects a JSON-LD <script type="application/ld+json"> tag for the given schema.org object,

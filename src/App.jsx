@@ -1,7 +1,7 @@
 import React, { useState, lazy, Suspense } from "react";
 const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
 import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, WishlistDrawer } from "./components";
-import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute } from "./context";
+import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute, pathFor } from "./context";
 import { BREW_GUIDES, COUNTRIES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META } from "./data";
 import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
 import { HomePage } from "./pages/Home";
@@ -59,42 +59,64 @@ const WorldJourneyPage = lazy(() => import("./pages/WorldJourney").then((m) => (
 // never updated by an admin edit at all, only ever by a code change.
 function getPageMeta(route, realProducts, realCourses) {
   const suffix = " | Morning Aroma";
+  // Every branch below returns the real canonical path for its route via pathFor -- the exact
+  // same function real internal links and browser history already use to build URLs, so this can
+  // never drift from what the actual, live path for a page is. Home is the one deliberate
+  // exception: it's left undefined so useDocumentMeta falls back to leaving index.html's own
+  // static canonical tag (already the correct, real value for "/") untouched, rather than this
+  // needlessly re-writing it to the identical value on every single render of the home page.
   switch (route.page) {
     case "product":
     case "growingprofile": {
       const p = realProducts.find((p) => p.id === route.id);
       return p
-        ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note }
-        : PAGE_META[route.page === "product" ? "shop" : "growing"];
+        ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note, canonicalPath: pathFor(route.page, { id: route.id }) }
+        : { ...PAGE_META[route.page === "product" ? "shop" : "growing"], canonicalPath: pathFor(route.page === "product" ? "shop" : "growing") };
     }
     case "moment": {
       const m = MOMENTS.find((m) => m.id === route.id);
-      return m ? { title: `${m.name}${suffix}`, description: m.benefit } : PAGE_META.moments;
+      return m
+        ? { title: `${m.name}${suffix}`, description: m.benefit, canonicalPath: pathFor("moment", { id: route.id }) }
+        : { ...PAGE_META.moments, canonicalPath: pathFor("moments") };
     }
     case "course": {
       const c = realCourses.find((c) => c.id === route.id);
-      return c ? { title: `${c.name}${suffix}`, description: c.blurb } : PAGE_META.academy;
+      return c
+        ? { title: `${c.name}${suffix}`, description: c.blurb, canonicalPath: pathFor("course", { id: route.id }) }
+        : { ...PAGE_META.academy, canonicalPath: pathFor("academy") };
     }
     case "brewguide": {
       const b = BREW_GUIDES.find((b) => slugify(b.name) === route.id);
-      return b ? { title: `${b.name} Brew Guide${suffix}`, description: b.flavor } : PAGE_META.brewguides;
+      return b
+        ? { title: `${b.name} Brew Guide${suffix}`, description: b.flavor, canonicalPath: pathFor("brewguide", { id: route.id }) }
+        : { ...PAGE_META.brewguides, canonicalPath: pathFor("brewguides") };
     }
     case "country": {
       const c = COUNTRIES.find((c) => slugify(c.name) === route.id);
-      return c ? { title: `${c.name}${suffix}`, description: c.climate } : PAGE_META.growing;
+      return c
+        ? { title: `${c.name}${suffix}`, description: c.climate, canonicalPath: pathFor("country", { id: route.id }) }
+        : { ...PAGE_META.growing, canonicalPath: pathFor("growing") };
     }
     case "growingfactor": {
       const f = GROWING_FACTORS.find((f) => slugify(f.name) === route.id);
-      return f ? { title: `${f.name}${suffix}`, description: f.explain } : PAGE_META.growing;
+      return f
+        ? { title: `${f.name}${suffix}`, description: f.explain, canonicalPath: pathFor("growingfactor", { id: route.id }) }
+        : { ...PAGE_META.growing, canonicalPath: pathFor("growing") };
     }
     case "soilexplorer":
-      return PAGE_META.growing;
+      return { ...PAGE_META.growing, canonicalPath: pathFor("soilexplorer") };
     case "searchresults":
+      // Search results are real-time and person-specific (whatever they typed), not a fixed page
+      // worth telling search engines to index as a single canonical destination -- intentionally
+      // no canonicalPath here, same reasoning as checkout/journey/admin already being excluded
+      // from robots.txt entirely.
       return route.id
         ? { title: `Search: ${route.id}${suffix}`, description: `Search results for "${route.id}" on Morning Aroma.` }
         : { title: `Search${suffix}`, description: "Search Morning Aroma's shop, moments, brew guides, and origins." };
     default:
-      return PAGE_META[route.page] || PAGE_META.home;
+      return route.page === "home"
+        ? (PAGE_META[route.page] || PAGE_META.home)
+        : { ...(PAGE_META[route.page] || PAGE_META.home), canonicalPath: pathFor(route.page) };
   }
 }
 
@@ -110,7 +132,7 @@ export function AppShell() {
   const routeKey = route.page + (route.id || "");
   useScrollReveal(routeKey);
   const pageMeta = getPageMeta(route, getAllProducts(), getAllCourses());
-  useDocumentMeta(pageMeta.title, pageMeta.description);
+  useDocumentMeta(pageMeta.title, pageMeta.description, pageMeta.canonicalPath);
   useStructuredData({
     "@context": "https://schema.org",
     "@type": "Organization",
