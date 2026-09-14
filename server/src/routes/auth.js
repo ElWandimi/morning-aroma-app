@@ -507,8 +507,14 @@ router.post("/password-reset/confirm", async (req, res) => {
   if (!user) return res.status(400).json({ error: "That reset link is invalid or has expired." });
 
   const passwordHash = await hashPassword(newPassword);
+  // token_version incremented in this SAME update as the password change itself -- one atomic
+  // write, not two separate queries that could theoretically interleave with a concurrent request
+  // reading a half-updated state. See migrations/022_token_version.sql and signAccessToken's own
+  // comment for the full reasoning: this is what actually makes every session token issued before
+  // this password reset stop working on its very next request, closing the real gap where a
+  // stolen session previously survived a password reset for the rest of its 7-day life.
   await query(
-    "UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_token_expires = NULL WHERE id = $2",
+    "UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_token_expires = NULL, token_version = token_version + 1 WHERE id = $2",
     [passwordHash, user.id]
   );
   res.json({ message: "Password updated. You can sign in with your new password now." });

@@ -139,7 +139,7 @@ async function main() {
   const welcomeEmails = resendMock.getSentEmails();
   check("the welcome email fires on successful verification, not at registration time", welcomeEmails.length === 1 && welcomeEmails[0].subject === "Welcome to Morning Aroma — where quality meets its scent.");
   check("welcome email addresses the user by their actual registered name", welcomeEmails[0] && welcomeEmails[0].text.includes("Hi Test User,"));
-  const token = sessionCookies(verify);
+  let token = sessionCookies(verify);
 
   console.log("\nPOST /auth/verify-email again on an already-verified account, with the same, already-consumed code:");
   const reusedVerify = await post("/auth/verify-email", { pendingToken: reg.body.pendingToken, code: testCode });
@@ -1232,6 +1232,20 @@ async function main() {
 
   const newPwLogin = await post("/auth/login", { email: "test@morningaroma.local", password: "brandnewpassword123" });
   check("new password works after reset", newPwLogin.status === 200);
+
+  console.log("\nThe OLD session (from before this password reset) should now be genuinely dead, not just theoretically stale:");
+  const oldSessionAfterReset = await get("/auth/me", token);
+  check("old session token rejected on its very next request after a password reset (token_version)", oldSessionAfterReset.status === 401);
+
+  // Real, correct consequence of token_version (migrations/022_token_version.sql): the OLD
+  // `token` captured way back when this account first verified its email is now genuinely
+  // invalid -- the password reset just above bumped this account's token_version, so that old
+  // session correctly stops working on its very next request (just proven above). Re-pointing
+  // `token` at this fresh login's own session cookie is what lets every later use of `token` in
+  // this file (there are many, for the rest of the suite) keep working against a session that's
+  // actually still valid, rather than the suite silently relying on a token this same fix is
+  // specifically designed to reject.
+  token = sessionCookies(newPwLogin);
 
   const reuseToken = await post("/auth/password-reset/confirm", { token: resetToken, newPassword: "anotherpassword123" });
   check("reset token can't be reused after it's already been consumed", reuseToken.status === 400);

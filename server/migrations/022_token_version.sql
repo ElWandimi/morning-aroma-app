@@ -1,0 +1,15 @@
+-- Real, previously-missing session invalidation: resetting a password (or, more importantly, an
+-- account owner or admin discovering a session may be compromised) had no way to actually kill
+-- existing session tokens elsewhere -- a stolen session cookie stayed valid for its full 7-day
+-- life even after a successful password reset, since a JWT's validity is checked purely by
+-- signature and expiry, never by re-verifying anything against the database on every request
+-- (that would defeat the point of using a stateless token at all).
+--
+-- token_version is embedded as a claim in every newly-signed session JWT (signAccessToken) and
+-- checked against this column on every authenticated request (requireAuth) -- the same
+-- "re-verify server-side, don't just trust the token" principle this codebase already applies to
+-- role/permissions in requireAdmin and requirePermission, extended to cover session validity
+-- itself. Bumping this column (done by the password-reset route) makes every token signed before
+-- that moment fail verification immediately, on its very next request, without needing a
+-- real server-side session store or token blacklist.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;

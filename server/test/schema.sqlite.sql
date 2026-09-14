@@ -16,6 +16,10 @@ CREATE TABLE users (
   reset_token_hash          TEXT,
   reset_token_expires       TEXT,
   email_verified            INTEGER NOT NULL DEFAULT 0,
+  -- See migrations/022_token_version.sql for the real, full reasoning: bumped on password reset
+  -- so any session token signed before that moment fails its next verification, instead of
+  -- staying valid for its full remaining life regardless of the reset.
+  token_version             INTEGER NOT NULL DEFAULT 0,
   created_at                TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -53,6 +57,12 @@ CREATE TABLE courses (
   instructor            TEXT NOT NULL,
   lessons               INTEGER NOT NULL,
   monthly_price_cents   INTEGER NOT NULL,
+  -- Present in the real Postgres schema (migrations/018, 020) but missing here until now -- a
+  -- real, pre-existing drift between this hand-maintained test schema and the actual migrations,
+  -- caught by PATCH /courses/:id genuinely erroring on instructor_photo_url specifically (not
+  -- something introduced by this session's own work).
+  instructor_photo_url  TEXT,
+  hero_photo_url        TEXT,
   removed               INTEGER NOT NULL DEFAULT 0,
   created_at            TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at            TEXT NOT NULL DEFAULT (datetime('now'))

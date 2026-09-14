@@ -22,9 +22,19 @@ function requireSecret() {
 // session itself depends on it) -- server/src/utils/csrf.js's requireCsrfToken decodes this same
 // JWT to read the claim back out, rather than trusting a second, independently-delivered cookie
 // that this bug showed can't be trusted to arrive at all.
+//
+// tokenVersion is embedded the same way, for a different real gap: a JWT's validity is normally
+// checked purely by signature and expiry, meaning a stolen session token stayed valid for its
+// full 7-day life even after the legitimate owner reset their password -- there was genuinely no
+// way to invalidate an already-issued token short of waiting it out. requireAuth compares this
+// claim against the user's current token_version column on every request (see
+// migrations/022_token_version.sql); the password-reset route bumps that column, which makes
+// every token signed before the reset fail its very next verification. Defaults to 0 via
+// `user.token_version ?? 0` so this works even for a user row read before the migration that adds
+// the column has run in a given environment, rather than embedding `undefined` into the token.
 function signAccessToken(user, csrfToken) {
   return jwt.sign(
-    { sub: user.id, email: user.email, role: user.role, csrf: csrfToken },
+    { sub: user.id, email: user.email, role: user.role, csrf: csrfToken, tokenVersion: user.token_version ?? 0 },
     requireSecret(),
     { expiresIn: "7d" }
   );
