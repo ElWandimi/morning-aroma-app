@@ -32,7 +32,7 @@ setup("authenticate as admin once for the whole suite", async ({ page }) => {
   // though the app itself is correct.
   for (let attempt = 1; attempt <= 3; attempt++) {
     await page.goto("/");
-    const consentBanner = page.getByRole("dialog", { name: "Local storage preferences" });
+    const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
     if (await consentBanner.isVisible().catch(() => false)) {
       await consentBanner.getByRole("button", { name: "Accept" }).click();
     }

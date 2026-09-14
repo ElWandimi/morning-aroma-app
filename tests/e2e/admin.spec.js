@@ -78,7 +78,7 @@ async function signIn(page, email, password) {
     // to localStorage once consent is accepted (src/context/index.jsx:62-65). Without this,
     // sign-in only lives in in-memory React state for the current page load and silently
     // disappears on the next real page.goto() reload -- which this test does more than once.
-    const consentBanner = page.getByRole("dialog", { name: "Local storage preferences" });
+    const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
     if (await consentBanner.isVisible().catch(() => false)) {
       await consentBanner.getByRole("button", { name: "Accept" }).click();
     }
@@ -137,7 +137,7 @@ test.describe("Non-admin access is genuinely blocked, not just hidden from the n
     const testEmail = `e2e-customer-${Date.now()}@example.com`;
 
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     // Sign-in and sign-up are two fully separate modals now, not one modal with an internal tab
     // toggle -- "Create an account" (note "an", the real link text) closes the sign-in dialog and
