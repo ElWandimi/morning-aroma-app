@@ -75,6 +75,47 @@ async function adminVerifyUserEmail(adminRequest, email) {
   }
 }
 
+// Real, confirmed failure mode this guards against: this suite's own total real /register and
+// /login volume across a full run can still exceed the real production rate limit (20 requests
+// per 15 minutes per IP, server/src/routes/auth.js's authLimiter) even with workers: 1 (one test
+// at a time) -- confirmed directly, a real run hit "Too many attempts. Try again in a few
+// minutes." on this exact submission. Blindly retrying immediately (what a bare Playwright retry
+// or a short setTimeout loop would do) makes this WORSE, not better -- each retry is itself
+// another real request counted against the same window. The only real, correct response to a
+// genuine rate limit is to actually wait it out.
+//
+// dialogLocator's submit button is clicked, then races two real outcomes: successLocator reaching
+// successState (the real, intended result -- "visible" for registration's "Check your inbox"
+// heading, "hidden" for a sign-in dialog closing itself), or the rate-limit paragraph appearing.
+// If it's the latter, waits 90s (a real, meaningful fraction of the 15-minute window -- long
+// enough that a few of these across a run still fit inside it, short enough not to blow up total
+// suite time if it only happens once) and submits again, up to maxAttempts times.
+async function submitWithRateLimitBackoff(page, dialogLocator, successLocator, successState = "visible", maxAttempts = 3) {
+  // .first() -- confirmed directly in a real failure this guards against: the rate-limit message
+  // genuinely renders twice in the DOM at once (the password-mode error slot and a second, shared
+  // error area near the Google button both show it), which would otherwise make this a strict-
+  // mode violation the moment its visibility is checked, rather than a clean match.
+  const rateLimitMessage = dialogLocator.getByText("Too many attempts. Try again in a few minutes.").first();
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await dialogLocator.locator('button[type="submit"]').click();
+    const outcome = await Promise.race([
+      successLocator.waitFor({ state: successState, timeout: 25000 }).then(() => "success"),
+      rateLimitMessage.waitFor({ state: "visible", timeout: 25000 }).then(() => "rate-limited"),
+    ]).catch(() => "timeout");
+    if (outcome === "success") return;
+    if (outcome === "rate-limited") {
+      if (attempt === maxAttempts) throw new Error(`submitWithRateLimitBackoff: still rate-limited after ${maxAttempts} attempts (waited 90s between each) -- the real production limit genuinely isn't clearing within this test's own patience budget.`);
+      await page.waitForTimeout(90000);
+      continue;
+    }
+    // Neither outcome appeared within 25s and it wasn't the rate limit -- a real, different
+    // problem (the request genuinely failed some other way, or is unusually slow), not something
+    // this backoff logic exists to paper over. Surfaces as a real, normal Playwright timeout
+    // rather than silently retrying something that isn't actually the rate limit.
+    throw new Error("submitWithRateLimitBackoff: neither success nor the rate-limit message appeared within 25s.");
+  }
+}
+
 test.describe("Aroma Quiz", () => {
   test("answering all 4 questions produces a matched variety", async ({ page }) => {
     await page.goto("/");
@@ -150,11 +191,11 @@ test.describe("Cart and checkout", () => {
       // Scoped and exact -- "Password" alone would also match "Confirm password" as a substring.
       await dialog.getByLabel("Password", { exact: true }).fill("correcthorsebattery123");
       await dialog.getByLabel("Confirm password").fill("correcthorsebattery123");
-      await dialog.locator('button[type="submit"]').click();
-      // 25s, not 15s -- /register now does genuinely more real database work (insert the user,
-      // clear any old code, insert a new one) than it used to, and this was seen timing out at
-      // 15s in real runs.
-      await expect(dialog.getByRole("heading", { name: "Check your inbox" })).toBeVisible({ timeout: 25000 });
+      // 25s per attempt, not 15s -- /register now does genuinely more real database work (insert
+      // the user, clear any old code, insert a new one) than it used to, and this was seen timing
+      // out at 15s in real runs. See submitWithRateLimitBackoff's own comment for why this isn't
+      // a bare click + wait anymore.
+      await submitWithRateLimitBackoff(page, dialog, dialog.getByRole("heading", { name: "Check your inbox" }));
       await adminVerifyUserEmail(adminRequest, testEmail);
       // Cancelling the verify step returns to the sign-up form itself (still pre-filled -- real,
       // intended UX for fixing a mistyped email), not the sign-in modal, so resubmitting it here
@@ -165,8 +206,10 @@ test.describe("Cart and checkout", () => {
       const signInDialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
       await signInDialog.getByLabel("Email").fill(testEmail);
       await signInDialog.getByLabel("Password").fill("correcthorsebattery123");
-      await signInDialog.locator('button[type="submit"]').click();
-      await expect(signInDialog).toBeHidden({ timeout: 25000 });
+      // signInDialog becoming HIDDEN is the real success signal here (no separate heading to wait
+      // for, unlike registration above) -- successState "hidden" tells the helper to wait for
+      // that instead of "visible".
+      await submitWithRateLimitBackoff(page, signInDialog, signInDialog, "hidden");
 
       await page.getByRole("button", { name: "Continue to shipping →" }).click();
       await page.getByLabel("Full name").fill("Test Customer");

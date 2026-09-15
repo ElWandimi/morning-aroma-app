@@ -362,7 +362,15 @@ a { color: inherit; text-decoration: none; }
 
 /* origin-highlights -- real product-photo strip filling the gap after the signature grid */
 .origin-highlights { display: flex; justify-content: center; align-items: flex-end; gap: 28px; max-width: 1100px; margin: 56px auto 0; padding: 0 24px 48px; }
-.origin-highlight-photo { cursor: pointer; flex: 0 1 220px; transition: transform .25s ease; filter: drop-shadow(0 16px 24px rgba(20,13,9,0.18)); }
+/* min-width: 0 -- a real, confirmed mobile bug this fixes: flex items default to min-width: auto,
+   meaning a flex item can never shrink below its CONTENT's intrinsic size, regardless of
+   flex-shrink or the mobile media query's flex-basis: 140px override below -- the real coffee-bag
+   photo inside is naturally wider than that, so without this, the item (and the whole row) still
+   blew out past the real iPhone 13 viewport width even with flex-wrap: wrap set, causing genuine
+   horizontal page scroll. Confirmed directly: tests/e2e/mobile.spec.js's own overflow check failed
+   against the real, live site before this fix. This is a well-documented, common flexbox gotcha
+   (MDN's own flexbox docs cover it), not something specific to this layout. */
+.origin-highlight-photo { cursor: pointer; flex: 0 1 220px; min-width: 0; transition: transform .25s ease; filter: drop-shadow(0 16px 24px rgba(20,13,9,0.18)); }
 .origin-highlight-photo:hover, .origin-highlight-photo:focus-visible { transform: translateY(-6px); }
 .origin-highlight-photo img { width: 100%; height: auto; display: block; }
 /* Middle photo (SL28 — Kenya) sits slightly larger/forward, echoing a simple collage arrangement
