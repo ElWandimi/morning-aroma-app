@@ -232,14 +232,22 @@ test.describe("Admin dashboard", () => {
     // product or a previous, still-lingering test run.
     const productName = `E2E Test Bean ${Date.now()}`;
 
-    // Currency auto-detects from the visitor's real IP (src/context/index.jsx:841-851) and isn't
-    // persisted across reloads -- picking USD via the currency switcher wouldn't hold, since this
-    // test does several real page.goto() reloads, each of which re-runs that detection and
-    // overrides it again. Blocking the lookup instead relies on the app's own intentional
-    // fallback (stay on USD if that fetch fails) for a deterministic "$" match below, regardless
-    // of where this test actually runs from. Also a real, external dependency that could
-    // introduce genuine slowness of its own on a test that navigates this often.
-    await page.route("https://ipapi.co/**", (route) => route.abort());
+    // Currency auto-detects from the visitor's real IP (src/context/index.jsx, the ipwho.is fetch
+    // around line 1512) and isn't persisted across reloads -- picking USD via the currency
+    // switcher wouldn't hold, since this test does several real page.goto() reloads, each of
+    // which re-runs that detection and overrides it again. Blocking the lookup instead relies on
+    // the app's own intentional fallback (stay on USD if that fetch fails) for a deterministic
+    // "$" match below, regardless of where this test actually runs from. Also a real, external
+    // dependency that could introduce genuine slowness of its own on a test that navigates this
+    // often.
+    //
+    // Blocks ipwho.is specifically -- the app migrated to it from ipapi.co (see that same real
+    // comment in context/index.jsx for why: ipapi.co started failing with 429s in production).
+    // This test blocked the old, no-longer-used endpoint for a while after that migration,
+    // meaning the real fetch to ipwho.is went through untouched and this test's USD assumption
+    // silently broke wherever it ran from a non-US IP -- confirmed directly: it failed against
+    // KES, not the expected USD, in a real run.
+    await page.route("https://ipwho.is/**", (route) => route.abort());
 
     await page.goto("/");
     await openAdminDashboard(page);

@@ -110,7 +110,7 @@ test.beforeEach(async ({ page }) => {
   // often than admin.spec.js's single product-CRUD test does, giving it far more chances to
   // introduce real, non-deterministic slowness that has nothing to do with the actual feature
   // being tested.
-  await page.route("https://ipapi.co/**", (route) => route.abort());
+  await page.route("https://ipwho.is/**", (route) => route.abort());
 });
 
 // Retries up to 3 times on failure -- confirmed via real traces (not assumed) that every actual

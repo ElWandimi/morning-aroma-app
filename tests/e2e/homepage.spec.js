@@ -82,7 +82,7 @@ test.describe("Homepage — reorganized sections", () => {
   test("signature collection grid renders real catalog products with working Add-to-cart", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
-    await page.route("https://ipapi.co/**", (route) => route.abort());
+    await page.route("https://ipwho.is/**", (route) => route.abort());
 
     // SignatureCollection returns null entirely (not a loading placeholder) while realProducts
     // is still loading from the real backend -- same real async gap as ProductPage's own

@@ -67,7 +67,7 @@ test.describe("Mobile viewport", () => {
     // Real IP-based currency detection isn't the point of this test -- blocked the same way
     // admin.spec.js already does, for the same reason (a deterministic result regardless of
     // where this actually runs from).
-    await page.route("https://ipapi.co/**", (route) => route.abort());
+    await page.route("https://ipwho.is/**", (route) => route.abort());
 
     // A flexible match, not the exact emoji-prefixed text -- confirmed directly against
     // Shop.jsx that different view modes render slightly different button text ("🛒 Add to
