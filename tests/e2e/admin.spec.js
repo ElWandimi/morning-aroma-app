@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -7,15 +6,31 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const authFile = path.join(__dirname, ".auth", "admin.json");
 const BACKEND_URL = "https://upbeat-rebirth-production.up.railway.app";
 
-// Reads the real admin token directly out of the saved session file the setup project already
-// created (see admin-auth.setup.js) -- avoids yet another real /auth/login request just to get
-// a token for these direct API calls, which would partly undo the whole reason that shared
-// session exists (real rate-limiting, confirmed via Railway's own logs -- see ROADMAP.md).
-function getAdminToken() {
-  const state = JSON.parse(readFileSync(authFile, "utf8"));
-  const origin = state.origins.find((o) => o.localStorage.some((item) => item.name === "ma_auth_token"));
-  const item = origin.localStorage.find((item) => item.name === "ma_auth_token");
-  return JSON.parse(item.value);
+// Real session auth now lives entirely in an httpOnly cookie (ma_session), not localStorage --
+// confirmed directly against the app's own source (grep for ma_auth_token anywhere in src/
+// returns nothing at all), so there was never a token to extract here in the first place.
+//
+// adminVerifyUserEmail is called from a test whose whole point is a real, non-admin CUSTOMER's
+// own registration and sign-in flow -- `page` must stay that customer's genuine identity
+// throughout, not silently become the admin (this test's describe block, unlike the later
+// "Admin dashboard" one below, never applies storageState: authFile to `page` at all). The admin
+// identity is only ever needed for this one background API call to verify the new customer's
+// email. playwright.request.newContext({ storageState: authFile }) creates a real, genuinely
+// isolated APIRequestContext carrying the admin's saved cookies, independent of `page`'s own
+// cookie jar -- the standard, documented way to keep a test's UI identity and its background API
+// identity from bleeding into each other.
+//
+// CSRF still needs a real, fresh token though -- it's held in memory on the real page's own JS
+// (src/utils/api.js's inMemoryCsrfToken), never in a cookie or localStorage, so it genuinely
+// can't be captured by storageState() at all, only re-fetched. /auth/me mints and returns a
+// fresh one on every call (server/src/routes/auth.js) specifically for this reason -- calling it
+// here gets a real, currently-valid token for the mutating request that follows, the same way
+// the real page itself would on load.
+async function getAdminCsrfToken(adminRequest) {
+  const meRes = await adminRequest.get(`${BACKEND_URL}/auth/me`);
+  const meBody = await meRes.json();
+  if (!meBody.csrfToken) throw new Error("getAdminCsrfToken: /auth/me didn't return a csrfToken -- is the saved admin session (tests/e2e/.auth/admin.json) still valid?");
+  return meBody.csrfToken;
 }
 
 // Marks a freshly-registered account's email as verified via a direct, admin-authenticated API
@@ -24,34 +39,39 @@ function getAdminToken() {
 // Retries both real network calls up to 3 times -- a real, transient ECONNRESET has been seen
 // here, the same class of occasional network flakiness already hardened against elsewhere in
 // this suite (see signIn/openAdminDashboard's own history), not a code bug worth chasing further.
-async function adminVerifyUserEmail(page, email) {
-  const adminToken = getAdminToken();
-
-  let newUser;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const usersRes = await page.request.get(`${BACKEND_URL}/users`, { headers: { Authorization: `Bearer ${adminToken}` } });
-      const usersBody = await usersRes.json();
-      newUser = usersBody.users.find((u) => u.email === email);
-      break;
-    } catch (err) {
-      if (attempt === 3) throw err;
-      await new Promise((r) => setTimeout(r, 1000));
+async function adminVerifyUserEmail(playwrightInstance, email) {
+  const adminRequest = await playwrightInstance.request.newContext({ storageState: authFile });
+  try {
+    let newUser;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const usersRes = await adminRequest.get(`${BACKEND_URL}/users`);
+        const usersBody = await usersRes.json();
+        newUser = usersBody.users.find((u) => u.email === email);
+        break;
+      } catch (err) {
+        if (attempt === 3) throw err;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
     }
-  }
-  if (!newUser) throw new Error(`adminVerifyUserEmail: no user found with email ${email} -- did registration actually succeed?`);
+    if (!newUser) throw new Error(`adminVerifyUserEmail: no user found with email ${email} -- did registration actually succeed?`);
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      await page.request.patch(`${BACKEND_URL}/users/${newUser.id}`, {
-        headers: { Authorization: `Bearer ${adminToken}` },
-        data: { emailVerified: true },
-      });
-      return newUser.id;
-    } catch (err) {
-      if (attempt === 3) throw err;
-      await new Promise((r) => setTimeout(r, 1000));
+    const csrfToken = await getAdminCsrfToken(adminRequest);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await adminRequest.patch(`${BACKEND_URL}/users/${newUser.id}`, {
+          headers: { "x-csrf-token": csrfToken },
+          data: { emailVerified: true },
+        });
+        return newUser.id;
+      } catch (err) {
+        if (attempt === 3) throw err;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
     }
+  } finally {
+    // Always disposed, pass or fail -- an APIRequestContext left open doesn't clean itself up.
+    await adminRequest.dispose();
   }
 }
 
@@ -133,7 +153,7 @@ test.describe("Non-admin access is genuinely blocked, not just hidden from the n
   // kill a test mid-retry before hardening logic elsewhere even gets a fair chance.
   test.setTimeout(60000);
 
-  test("a regular customer can't reach the admin dashboard", async ({ page }) => {
+  test("a regular customer can't reach the admin dashboard", async ({ page, playwright }) => {
     const testEmail = `e2e-customer-${Date.now()}@example.com`;
 
     await page.goto("/");
@@ -161,7 +181,7 @@ test.describe("Non-admin access is genuinely blocked, not just hidden from the n
     // does genuinely more real database work than it used to, and this was seen timing out at
     // 15s in real runs.
     await expect(dialog.getByRole("heading", { name: "Check your inbox" })).toBeVisible({ timeout: 25000 });
-    await adminVerifyUserEmail(page, testEmail);
+    await adminVerifyUserEmail(playwright, testEmail);
     // Cancelling the verify step returns to the sign-up form itself (still pre-filled -- real,
     // intended UX for fixing a mistyped email), not the sign-in modal, so resubmitting it here
     // would hit a real "account already exists" conflict rather than signing in. Switches to the

@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -7,18 +6,32 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const authFile = path.join(__dirname, ".auth", "admin.json");
 const BACKEND_URL = "https://upbeat-rebirth-production.up.railway.app";
 
-// Reads the real admin token directly out of the saved session file the setup project already
-// created (see admin-auth.setup.js) -- avoids yet another real /auth/login request just to get
-// a token for these direct API calls, which would partly undo the whole reason that shared
-// session exists (real rate-limiting, confirmed via Railway's own logs -- see ROADMAP.md).
-// Playwright's storageState format nests localStorage under each real origin it captured; the
-// app's own storage.set() JSON.stringifies before writing, so this needs one JSON.parse to
-// unwrap back to the raw token string.
-function getAdminToken() {
-  const state = JSON.parse(readFileSync(authFile, "utf8"));
-  const origin = state.origins.find((o) => o.localStorage.some((item) => item.name === "ma_auth_token"));
-  const item = origin.localStorage.find((item) => item.name === "ma_auth_token");
-  return JSON.parse(item.value);
+// Real session auth now lives entirely in an httpOnly cookie (ma_session), not localStorage --
+// confirmed directly against the app's own source (grep for ma_auth_token anywhere in src/
+// returns nothing at all), so there was never a token to extract here in the first place.
+//
+// adminVerifyUserEmail is called from registerCustomer, itself called from a test that
+// deliberately starts SIGNED OUT (test.use({ storageState: { cookies: [], origins: [] } }) below
+// -- account-switching is the actual point of that test, so `page` must stay a genuinely
+// unauthenticated identity throughout, not silently become the admin). The admin identity is
+// only ever needed for this one background API call to verify the newly-registered customer's
+// email -- a completely separate identity from whichever real account `page` is currently
+// signed in as. playwright.request.newContext({ storageState: authFile }) creates a real,
+// genuinely isolated APIRequestContext carrying the admin's saved cookies, independent of
+// `page`'s own cookie jar -- the standard, documented way to keep a test's UI identity and its
+// background API identity from bleeding into each other.
+//
+// CSRF still needs a real, fresh token though -- it's held in memory on the real page's own JS
+// (src/utils/api.js's inMemoryCsrfToken), never in a cookie or localStorage, so it genuinely
+// can't be captured by storageState() at all, only re-fetched. /auth/me mints and returns a
+// fresh one on every call (server/src/routes/auth.js) specifically for this reason -- calling it
+// here gets a real, currently-valid token for the mutating request that follows, the same way
+// the real page itself would on load.
+async function getAdminCsrfToken(adminRequest) {
+  const meRes = await adminRequest.get(`${BACKEND_URL}/auth/me`);
+  const meBody = await meRes.json();
+  if (!meBody.csrfToken) throw new Error("getAdminCsrfToken: /auth/me didn't return a csrfToken -- is the saved admin session (tests/e2e/.auth/admin.json) still valid?");
+  return meBody.csrfToken;
 }
 
 // Marks a freshly-registered account's email as verified via a direct, admin-authenticated API
@@ -31,34 +44,39 @@ function getAdminToken() {
 // Retries both real network calls up to 3 times -- a real, transient ECONNRESET has been seen
 // here, the same class of occasional network flakiness already hardened against elsewhere in
 // this suite (see signIn/openAdminDashboard's own history), not a code bug worth chasing further.
-async function adminVerifyUserEmail(page, email) {
-  const adminToken = getAdminToken();
-
-  let newUser;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const usersRes = await page.request.get(`${BACKEND_URL}/users`, { headers: { Authorization: `Bearer ${adminToken}` } });
-      const usersBody = await usersRes.json();
-      newUser = usersBody.users.find((u) => u.email === email);
-      break;
-    } catch (err) {
-      if (attempt === 3) throw err;
-      await new Promise((r) => setTimeout(r, 1000));
+async function adminVerifyUserEmail(playwrightInstance, email) {
+  const adminRequest = await playwrightInstance.request.newContext({ storageState: authFile });
+  try {
+    let newUser;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const usersRes = await adminRequest.get(`${BACKEND_URL}/users`);
+        const usersBody = await usersRes.json();
+        newUser = usersBody.users.find((u) => u.email === email);
+        break;
+      } catch (err) {
+        if (attempt === 3) throw err;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
     }
-  }
-  if (!newUser) throw new Error(`adminVerifyUserEmail: no user found with email ${email} -- did registration actually succeed?`);
+    if (!newUser) throw new Error(`adminVerifyUserEmail: no user found with email ${email} -- did registration actually succeed?`);
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      await page.request.patch(`${BACKEND_URL}/users/${newUser.id}`, {
-        headers: { Authorization: `Bearer ${adminToken}` },
-        data: { emailVerified: true },
-      });
-      return newUser.id;
-    } catch (err) {
-      if (attempt === 3) throw err;
-      await new Promise((r) => setTimeout(r, 1000));
+    const csrfToken = await getAdminCsrfToken(adminRequest);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await adminRequest.patch(`${BACKEND_URL}/users/${newUser.id}`, {
+          headers: { "x-csrf-token": csrfToken },
+          data: { emailVerified: true },
+        });
+        return newUser.id;
+      } catch (err) {
+        if (attempt === 3) throw err;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
     }
+  } finally {
+    // Always disposed, pass or fail -- an APIRequestContext left open doesn't clean itself up.
+    await adminRequest.dispose();
   }
 }
 
@@ -148,7 +166,7 @@ async function signInAsAdmin(page) {
 // (see adminVerifyUserEmail above -- Playwright can't read a real code from a real inbox against
 // the live backend), then signs in fresh through the real UI, which now succeeds immediately
 // since the account is verified.
-async function registerCustomer(page, email, password, name) {
+async function registerCustomer(page, playwrightInstance, email, password, name) {
   // Splits a single "name" string into first/last so every existing call site (just one, today)
   // doesn't need updating for the new two-field form -- "E2E Staff Test" becomes "E2E" / "Staff
   // Test", which is fine; nothing in this suite actually asserts on the exact split.
@@ -182,7 +200,7 @@ async function registerCustomer(page, email, password, name) {
   // real database work (insert the user, clear any old code, insert a new one) than it used to,
   // and this was seen timing out at 15s in real runs.
   await expect(dialog.getByRole("heading", { name: "Check your inbox" })).toBeVisible({ timeout: 25000 });
-  await adminVerifyUserEmail(page, email);
+  await adminVerifyUserEmail(playwrightInstance, email);
 
   // The UI has no way to know verification happened elsewhere -- starts over with a fresh sign-in
   // through the real form instead, which now succeeds immediately since the account is verified.
@@ -203,13 +221,13 @@ test.describe("Admin — advanced coverage", () => {
     // the way the other tests below do, since account-switching is the actual point of it.
     test.use({ storageState: { cookies: [], origins: [] } });
 
-    test("staff permissions are genuinely enforced, not just hidden from the sidebar", async ({ page }) => {
+    test("staff permissions are genuinely enforced, not just hidden from the sidebar", async ({ page, playwright }) => {
       // A real, uniquely-named customer this test creates and promotes itself, not an edit to a
       // real existing account -- same isolation principle as the product CRUD test's own uniquely-
       // named test product.
       const staffEmail = `e2e-staff-${Date.now()}@example.com`;
       const staffPassword = "correcthorsebattery123";
-      await registerCustomer(page, staffEmail, staffPassword, "E2E Staff Test");
+      await registerCustomer(page, playwright, staffEmail, staffPassword, "E2E Staff Test");
 
       await signInAsAdmin(page);
     await page.getByRole("button", { name: "Customers", exact: true }).click();
