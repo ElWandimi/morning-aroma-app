@@ -1,4 +1,5 @@
 import { test, expect, devices } from "@playwright/test";
+import { submitWithRateLimitBackoff } from "./rate-limit-helper.js";
 
 // Real admin credentials pattern, same as admin.spec.js and admin-advanced.spec.js -- only the
 // one test here that needs to reach the admin dashboard is gated behind these; every other test
@@ -94,8 +95,7 @@ test.describe("Mobile viewport", () => {
       const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
       await dialog.getByLabel("Email").fill(ADMIN_EMAIL);
       await dialog.getByLabel("Password").fill(ADMIN_PASSWORD);
-      await dialog.locator('button[type="submit"]').click();
-      await expect(dialog).toBeHidden({ timeout: 15000 });
+      await submitWithRateLimitBackoff(page, dialog, dialog, "hidden");
 
       // Documented in theme.js itself (.admin-btn { display: none } below 480px) -- confirming
       // the real, deliberate mobile-only tradeoff actually holds, not just that it's commented.

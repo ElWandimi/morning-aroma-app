@@ -1,6 +1,7 @@
 import { test as setup } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
+import { submitWithRateLimitBackoff } from "./rate-limit-helper.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const authFile = path.join(__dirname, ".auth", "admin.json");
@@ -18,34 +19,29 @@ const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
 // the test suite request auth the same modest number of times a real, single user actually would.
 setup("authenticate as admin once for the whole suite", async ({ page }) => {
   setup.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "Set PLAYWRIGHT_ADMIN_EMAIL and PLAYWRIGHT_ADMIN_PASSWORD to run admin-gated tests.");
-  // The default per-test timeout (30s) was silently capping this below what its own retry logic
-  // actually needs (up to 3 attempts at a 25s sign-in wait each, plus pauses between -- as much
-  // as ~84s worst case). This is the one file that was missed when every other file in this
-  // suite got this same fix -- and because everything else depends on this step succeeding
-  // first, its failure here cascades into every other test never running at all, not just this
-  // one failing on its own.
-  setup.setTimeout(120000);
+  // submitWithRateLimitBackoff's own real worst case is ~255s (3 attempts, 25s timeout each, 90s
+  // waits between) -- 300s gives that a real margin rather than cutting it close. Everything else
+  // depends on this step succeeding first, so its failure cascades into every other test never
+  // running at all, not just this one failing on its own -- worth a genuinely generous budget.
+  setup.setTimeout(300000);
 
-  // Retries up to 3 times, with a real pause between attempts -- same reasoning as the rest of
-  // this suite's hardening: genuine backend latency (or, now directly confirmed, a real rate
-  // limit still cooling down from an earlier run) can make a single sign-in attempt fail even
-  // though the app itself is correct.
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.goto("/");
-    const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
-    if (await consentBanner.isVisible().catch(() => false)) {
-      await consentBanner.getByRole("button", { name: "Accept" }).click();
-    }
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
-    await dialog.getByLabel("Email").fill(ADMIN_EMAIL);
-    await dialog.getByLabel("Password").fill(ADMIN_PASSWORD);
-    await dialog.locator('button[type="submit"]').click();
-    const signedIn = await dialog.waitFor({ state: "hidden", timeout: 25000 }).then(() => true).catch(() => false);
-    if (signedIn) break;
-    if (attempt === 3) throw new Error("admin-auth setup: could not sign in after 3 attempts.");
-    await page.waitForTimeout(3000);
+  // A single attempt, not the previous 3x-with-3s-pause outer loop -- submitWithRateLimitBackoff
+  // (see that file's own comment) already retries internally, up to 3 times with a real 90s wait
+  // between attempts specifically for a genuine rate limit, and its own 25s timeout already covers
+  // ordinary transient backend latency. Wrapping that in another retry loop here would nest two
+  // separate retry strategies (worst case, several real minutes of waiting) and, worse, be
+  // counterproductive: retrying more within an already-active rate-limit window just keeps
+  // counting against it rather than actually waiting it out.
+  await page.goto("/");
+  const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
+  if (await consentBanner.isVisible().catch(() => false)) {
+    await consentBanner.getByRole("button", { name: "Accept" }).click();
   }
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
+  await dialog.getByLabel("Email").fill(ADMIN_EMAIL);
+  await dialog.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await submitWithRateLimitBackoff(page, dialog, dialog, "hidden");
 
   await page.context().storageState({ path: authFile });
 });

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
+import { submitWithRateLimitBackoff } from "./rate-limit-helper.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const authFile = path.join(__dirname, ".auth", "admin.json");
@@ -113,37 +114,33 @@ test.beforeEach(async ({ page }) => {
   await page.route("https://ipwho.is/**", (route) => route.abort());
 });
 
-// Retries up to 3 times on failure -- confirmed via real traces (not assumed) that every actual
-// auth request this suite's tests ever made got a real 200 back; the app and backend are proven
-// correct. What's occasionally flaky is these specific steps themselves, in tests that chain
-// several sign-in/sign-out/registration cycles back to back -- the click on submit intermittently
-// doesn't result in a request completing in time, with no error of its own. Genuine, if
-// occasional, backend latency has shown up across login, registration, and session-restore alike,
-// not just one specific action -- so this uses a longer timeout (25s) and more attempts (3) than
-// the first pass at this, rather than assuming any one specific action was uniquely the problem.
+// A single attempt via submitWithRateLimitBackoff (see rate-limit-helper.js), not the previous
+// 3x retry loop. That loop's own comment claimed every real auth request this suite ever made
+// got a genuine 200 back -- true as far as it went when written, but incomplete: a later real run
+// of this exact suite hit the actual production rate limit on this identical sign-in flow, which
+// blind, immediate retries only make worse (each one is itself another real request against the
+// same window). submitWithRateLimitBackoff's own 25s timeout already covers ordinary transient
+// latency; its internal 90s backoff is what actually handles a genuine rate limit correctly.
 async function signIn(page, email, password) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.goto("/");
-    // Conditional, not unconditional -- this can genuinely run more than once within the same
-    // test, and the consent banner only ever appears once per session. Trying to click it a
-    // second time, when it's already been dismissed and isn't there, would otherwise just hang
-    // waiting for an element that doesn't exist.
-    const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
-    if (await consentBanner.isVisible().catch(() => false)) {
-      await consentBanner.getByRole("button", { name: "Accept" }).click();
-    }
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
-    await dialog.getByLabel("Email").fill(email);
-    await dialog.getByLabel("Password").fill(password);
-    await dialog.locator('button[type="submit"]').click();
-    const signedIn = await dialog.waitFor({ state: "hidden", timeout: 25000 }).then(() => true).catch(() => false);
-    if (signedIn) return;
-    if (attempt === 3) throw new Error(`signIn: the dialog never closed for ${email}, even after 2 retries.`);
+  await page.goto("/");
+  // Conditional, not unconditional -- this can genuinely run more than once within the same
+  // test, and the consent banner only ever appears once per session. Trying to click it a
+  // second time, when it's already been dismissed and isn't there, would otherwise just hang
+  // waiting for an element that doesn't exist.
+  const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
+  if (await consentBanner.isVisible().catch(() => false)) {
+    await consentBanner.getByRole("button", { name: "Accept" }).click();
   }
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
+  await dialog.getByLabel("Email").fill(email);
+  await dialog.getByLabel("Password").fill(password);
+  await submitWithRateLimitBackoff(page, dialog, dialog, "hidden");
 }
 
-// Same reasoning and same 3-attempt/25s pattern as signIn above.
+// Retries up to 3 times with a real page reload between -- a different situation from signIn
+// above (waiting for an element to appear after navigation, not a rate-limited form submission),
+// so submitWithRateLimitBackoff doesn't apply here; this stays its own, simpler retry loop.
 async function openAdminDashboard(page) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const adminButton = page.getByRole("button", { name: "Admin" });
@@ -191,15 +188,14 @@ async function registerCustomer(page, playwrightInstance, email, password, name)
   // Scoped and exact -- "Password" alone would also match "Confirm password" as a substring.
   await dialog.getByLabel("Password", { exact: true }).fill(password);
   await dialog.getByLabel("Confirm password").fill(password);
-  await dialog.locator('button[type="submit"]').click();
 
   // Real email verification now blocks sign-in until confirmed (see ROADMAP.md) -- confirms the
   // real "check your inbox" step genuinely appeared, then admin-verifies the account directly
   // via the API rather than trying to read a real code from a real inbox, which Playwright
-  // can't do against the real, live backend. 25s, not 15s -- /register now does genuinely more
-  // real database work (insert the user, clear any old code, insert a new one) than it used to,
-  // and this was seen timing out at 15s in real runs.
-  await expect(dialog.getByRole("heading", { name: "Check your inbox" })).toBeVisible({ timeout: 25000 });
+  // can't do against the real, live backend. 25s per attempt, not 15s -- /register now does
+  // genuinely more real database work (insert the user, clear any old code, insert a new one)
+  // than it used to, and this was seen timing out at 15s in real runs.
+  await submitWithRateLimitBackoff(page, dialog, dialog.getByRole("heading", { name: "Check your inbox" }));
   await adminVerifyUserEmail(playwrightInstance, email);
 
   // The UI has no way to know verification happened elsewhere -- starts over with a fresh sign-in

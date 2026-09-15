@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
+import { submitWithRateLimitBackoff } from "./rate-limit-helper.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const authFile = path.join(__dirname, ".auth", "admin.json");
@@ -85,38 +86,36 @@ async function adminVerifyUserEmail(playwrightInstance, email) {
 const ADMIN_EMAIL = process.env.PLAYWRIGHT_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
 
-// Retries up to 3 times on failure, with a 25s timeout per attempt rather than Playwright's 5s
-// default -- confirmed via real traces (see admin-advanced.spec.js's own history) that every
-// actual auth request this suite ever made got a real 200 back; the app and backend are proven
-// correct. What's occasionally flaky is this specific step, likely genuine, occasional backend
-// latency -- this same hardening was already proven reliable in admin-advanced.spec.js and is
-// applied here for the same reason, not a new, unverified guess.
+// A single attempt via submitWithRateLimitBackoff (see rate-limit-helper.js), not the previous
+// 3x-with-no-pause retry loop this file had. That loop's own comment claimed every real failure
+// here traced back to ordinary transient backend latency, never a real app bug -- true as far as
+// it went, but incomplete: a real run of this exact suite later hit the genuine production rate
+// limit ("Too many attempts. Try again in a few minutes.") on a sibling file's identical sign-in
+// flow, which a 3x-immediate-retry loop only makes worse (each retry is itself another real
+// request against the same window). submitWithRateLimitBackoff's own 25s timeout already covers
+// ordinary latency; its internal 90s backoff is what actually handles a genuine rate limit
+// correctly.
 async function signIn(page, email, password) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.goto("/");
-    // Accept the local-storage consent banner first -- persistToken() only writes the auth token
-    // to localStorage once consent is accepted (src/context/index.jsx:62-65). Without this,
-    // sign-in only lives in in-memory React state for the current page load and silently
-    // disappears on the next real page.goto() reload -- which this test does more than once.
-    const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
-    if (await consentBanner.isVisible().catch(() => false)) {
-      await consentBanner.getByRole("button", { name: "Accept" }).click();
-    }
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    // Scoped to the dialog specifically -- the modal's own submit button shares the exact text
-    // "Sign in" with the nav button that opens it, which would otherwise match two visible
-    // elements at once and fail Playwright's strict mode.
-    const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
-    await dialog.getByLabel("Email").fill(email);
-    await dialog.getByLabel("Password").fill(password);
-    // Targeted by type="submit" rather than by its text ("Sign in") -- the mode-toggle button
-    // above shows that exact same text simultaneously (sign-in is the default mode), which would
-    // otherwise match two visible elements at once and fail Playwright's strict mode.
-    await dialog.locator('button[type="submit"]').click();
-    const signedIn = await dialog.waitFor({ state: "hidden", timeout: 25000 }).then(() => true).catch(() => false);
-    if (signedIn) return;
-    if (attempt === 3) throw new Error(`signIn: the dialog never closed for ${email}, even after 2 retries.`);
+  await page.goto("/");
+  // Accept the local-storage consent banner first -- persistToken() only writes the auth token
+  // to localStorage once consent is accepted (src/context/index.jsx:62-65). Without this,
+  // sign-in only lives in in-memory React state for the current page load and silently
+  // disappears on the next real page.goto() reload -- which this test does more than once.
+  const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
+  if (await consentBanner.isVisible().catch(() => false)) {
+    await consentBanner.getByRole("button", { name: "Accept" }).click();
   }
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // Scoped to the dialog specifically -- the modal's own submit button shares the exact text
+  // "Sign in" with the nav button that opens it, which would otherwise match two visible
+  // elements at once and fail Playwright's strict mode.
+  const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
+  await dialog.getByLabel("Email").fill(email);
+  await dialog.getByLabel("Password").fill(password);
+  // Targeted by type="submit" rather than by its text ("Sign in") -- the mode-toggle button
+  // above shows that exact same text simultaneously (sign-in is the default mode), which would
+  // otherwise match two visible elements at once and fail Playwright's strict mode.
+  await submitWithRateLimitBackoff(page, dialog, dialog, "hidden");
 }
 
 // Waits for the Admin button and clicks it, retrying via one fresh reload if it doesn't appear in
@@ -171,16 +170,15 @@ test.describe("Non-admin access is genuinely blocked, not just hidden from the n
     // Scoped and exact -- "Password" alone would also match "Confirm password" as a substring.
     await dialog.getByLabel("Password", { exact: true }).fill("correcthorsebattery123");
     await dialog.getByLabel("Confirm password").fill("correcthorsebattery123");
-    await dialog.locator('button[type="submit"]').click();
 
     // Real email verification now blocks sign-in until confirmed (see ROADMAP.md) -- confirms
     // the real "check your inbox" step genuinely appeared, then admin-verifies directly via the
     // API rather than trying to read a real code from a real inbox, which Playwright can't do
     // against the real, live backend. Not the actual point of this test (that's the dashboard
-    // access check below), just the real setup needed to reach it. 25s, not 15s -- /register now
-    // does genuinely more real database work than it used to, and this was seen timing out at
-    // 15s in real runs.
-    await expect(dialog.getByRole("heading", { name: "Check your inbox" })).toBeVisible({ timeout: 25000 });
+    // access check below), just the real setup needed to reach it. 25s per attempt, not 15s --
+    // /register now does genuinely more real database work than it used to, and this was seen
+    // timing out at 15s in real runs.
+    await submitWithRateLimitBackoff(page, dialog, dialog.getByRole("heading", { name: "Check your inbox" }));
     await adminVerifyUserEmail(playwright, testEmail);
     // Cancelling the verify step returns to the sign-up form itself (still pre-filled -- real,
     // intended UX for fixing a mistyped email), not the sign-in modal, so resubmitting it here
@@ -191,8 +189,7 @@ test.describe("Non-admin access is genuinely blocked, not just hidden from the n
     const signInDialog2 = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
     await signInDialog2.getByLabel("Email").fill(testEmail);
     await signInDialog2.getByLabel("Password").fill("correcthorsebattery123");
-    await signInDialog2.locator('button[type="submit"]').click();
-    await expect(signInDialog2).toBeHidden({ timeout: 25000 });
+    await submitWithRateLimitBackoff(page, signInDialog2, signInDialog2, "hidden");
 
     // The nav button itself is conditionally rendered only for super_admin -- confirms that part
     // works, but isn't the real security boundary on its own (a hidden button is still just UI).
