@@ -133,7 +133,7 @@ async function signIn(page, email, password) {
   // test, and the consent banner only ever appears once per session. Trying to click it a
   // second time, when it's already been dismissed and isn't there, would otherwise just hang
   // waiting for an element that doesn't exist.
-  const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
+  const consentBanner = page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" });
   if (await consentBanner.isVisible().catch(() => false)) {
     await consentBanner.getByRole("button", { name: "Accept" }).click();
   }
@@ -177,7 +177,7 @@ async function registerCustomer(page, playwrightInstance, email, password, name)
   const lastName = rest.join(" ") || "Test";
 
   await page.goto("/");
-  const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
+  const consentBanner = page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" });
   if (await consentBanner.isVisible().catch(() => false)) {
     await consentBanner.getByRole("button", { name: "Accept" }).click();
   }
@@ -387,7 +387,7 @@ test.describe("Admin — advanced coverage", () => {
     // Already signed in as admin from the start, via the shared session -- no separate sign-in
     // step needed here anymore.
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByLabel("Name").fill(contactName);
     await page.getByLabel("Email").fill(contactEmail);
     await page.getByLabel("Variety of interest").selectOption({ label: "Not sure yet" });

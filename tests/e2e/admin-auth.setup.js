@@ -33,7 +33,7 @@ setup("authenticate as admin once for the whole suite", async ({ page }) => {
   // counterproductive: retrying more within an already-active rate-limit window just keeps
   // counting against it rather than actually waiting it out.
   await page.goto("/");
-  const consentBanner = page.getByRole("dialog", { name: "Local storage and error monitoring preferences" });
+  const consentBanner = page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" });
   if (await consentBanner.isVisible().catch(() => false)) {
     await consentBanner.getByRole("button", { name: "Accept" }).click();
   }

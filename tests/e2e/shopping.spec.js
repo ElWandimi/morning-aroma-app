@@ -79,7 +79,7 @@ async function adminVerifyUserEmail(adminRequest, email) {
 test.describe("Aroma Quiz", () => {
   test("answering all 4 questions produces a matched variety", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByRole("button", { name: "Take the Aroma Quiz" }).click();
     await expect(page.getByText("question 1 of 4")).toBeVisible();
 
@@ -98,7 +98,7 @@ test.describe("Aroma Quiz", () => {
 test.describe("Cart and checkout", () => {
   test("adding an item opens the cart drawer with the right contents", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByRole("link", { name: "Shop" }).click();
     await expect(page.getByRole("heading", { name: "Shop All Coffee" })).toBeVisible();
 
@@ -132,7 +132,7 @@ test.describe("Cart and checkout", () => {
     const adminRequest = await playwright.request.newContext({ storageState: authFile });
     try {
       await page.goto("/");
-      await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+      await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
       await page.getByRole("link", { name: "Shop" }).click();
       await page.getByRole("button", { name: "Add to cart" }).first().click();
       await page.getByRole("button", { name: "Checkout" }).click();

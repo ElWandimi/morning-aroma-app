@@ -58,16 +58,22 @@ export function PrivacyPolicyPage() {
           can find and fix it — but only after you've explicitly accepted our consent banner (see
           below). It does not receive your IP address, and we strip anything that looks like an
           email address out of error reports before they're sent.</li>
+          <li><strong>Google Analytics</strong> helps us understand how visitors use the site —
+          which pages get visited, roughly where visitors are coming from — but only after you've
+          explicitly accepted our consent banner (see below). We configure it to anonymize IP
+          addresses rather than store them in full, and we do not use it for advertising or
+          cross-site tracking.</li>
         </ul>
 
-        <h3>Local storage and error monitoring</h3>
+        <h3>Local storage, error monitoring, and analytics</h3>
         <p>Your shopping cart and wishlist are saved in your browser's local storage so they
         survive a page refresh — this specific data stays on your device and is not transmitted to
         us or any third party.</p>
-        <p>We do not use Google Analytics, advertising cookies, or any marketing/tracking service.
-        The only optional, consent-gated third party is Sentry, used solely for error monitoring
-        as described above — it never loads before you've explicitly accepted our consent banner,
-        and you can decline it entirely with no effect on how the site functions for you.</p>
+        <p>Error monitoring (Sentry) and analytics (Google Analytics) are both optional and
+        consent-gated together, behind the same "Accept" in our consent banner. Neither loads at
+        all until you've explicitly accepted, and declining has no effect on how the site
+        functions for you.</p>
+        <p>We do not use advertising cookies or any cross-site tracking or retargeting service.</p>
 
         <h3>Data retention and your rights</h3>
         <p>You can request a copy of the data we hold about you, ask us to correct it, or ask us to

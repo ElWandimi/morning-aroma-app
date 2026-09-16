@@ -28,7 +28,7 @@ test.use({ userAgent, viewport, deviceScaleFactor, isMobile, hasTouch });
 test.describe("Mobile viewport", () => {
   test("the hamburger menu opens, and mobile nav links genuinely navigate", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
 
     // The desktop nav links are real DOM elements, just CSS-hidden at this width -- they must
     // NOT be independently clickable/visible right now, confirming the CSS breakpoint itself is
@@ -57,14 +57,14 @@ test.describe("Mobile viewport", () => {
     // scroll sideways -- something a desktop-only test run would never surface, since the bug
     // only exists once the viewport is actually this narrow.
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     const overflowsHorizontally = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     expect(overflowsHorizontally).toBe(false);
   });
 
   test("adding an item to cart and opening the drawer is genuinely usable at mobile width", async ({ page }) => {
     await page.goto("/shop");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     // Real IP-based currency detection isn't the point of this test -- blocked the same way
     // admin.spec.js already does, for the same reason (a deterministic result regardless of
     // where this actually runs from).
@@ -96,7 +96,7 @@ test.describe("Mobile viewport", () => {
       // file that doesn't touch real auth at all.
       test.setTimeout(300000);
       await page.goto("/");
-      await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+      await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Sign in to Morning Aroma" });
       await dialog.getByLabel("Email").fill(ADMIN_EMAIL);

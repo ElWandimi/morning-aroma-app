@@ -5,6 +5,7 @@ import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTra
 import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, storage, activateOnEnterOrSpace } from "../utils/helpers";
 import { api } from "../utils/api";
 import { initSentry, reportError } from "../utils/sentry.js";
+import { initGA, trackPageView } from "../utils/analytics.js";
 
 export function Steam({ className = "" }) {
   return (
@@ -921,16 +922,17 @@ export function ConsentBanner() {
   if (choice) return null;
   const decide = (value) => {
     setStorageConsent(value);
-    if (value === "accepted") initSentry();
+    if (value === "accepted") { initSentry(); initGA(); }
     setChoice(value);
   };
   return (
-    <div className="consent-banner" role="dialog" aria-label="Local storage and error monitoring preferences">
+    <div className="consent-banner" role="dialog" aria-label="Local storage, error monitoring, and analytics preferences">
       <p>
         We use your browser's local storage to remember your cart and wishlist between visits —
         that part stays on your device and isn't sent anywhere. If you accept, we also enable
-        error monitoring (Sentry) to help us catch and fix real bugs; it doesn't collect your IP
-        address or track you for marketing.{" "}
+        error monitoring (Sentry) to help us catch and fix real bugs, and analytics (Google
+        Analytics) to understand how visitors use the site — Sentry never receives your IP
+        address, and Google Analytics receives it only in anonymized form.{" "}
         <a href={pathFor("privacy")} onClick={(e) => { e.preventDefault(); go("privacy"); }}>Read more</a>
       </p>
       <div className="consent-actions">

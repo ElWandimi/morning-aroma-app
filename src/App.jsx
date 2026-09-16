@@ -1,12 +1,13 @@
-import React, { useState, lazy, Suspense } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
 import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, WishlistDrawer } from "./components";
 import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute, pathFor } from "./context";
-import { BREW_GUIDES, COUNTRIES, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META } from "./data";
+import { BREW_GUIDES, COUNTRIES, COUNTRY_JOURNEY_PHOTO, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META } from "./data";
 import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
+import { trackPageView } from "./utils/analytics.js";
 import { HomePage } from "./pages/Home";
 import { CSS } from "./styles/theme";
-import { slugify } from "./utils/helpers";
+import { getProductPhotoUrl, slugify } from "./utils/helpers";
 
 // Every page below except HomePage (imported eagerly above -- it's the landing page most
 // visitors see first, and lazy-loading it would add an unnecessary extra network request for the
@@ -70,7 +71,7 @@ function getPageMeta(route, realProducts, realCourses) {
     case "growingprofile": {
       const p = realProducts.find((p) => p.id === route.id);
       return p
-        ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note, canonicalPath: pathFor(route.page, { id: route.id }) }
+        ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note, canonicalPath: pathFor(route.page, { id: route.id }), image: getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 1200) }
         : { ...PAGE_META[route.page === "product" ? "shop" : "growing"], canonicalPath: pathFor(route.page === "product" ? "shop" : "growing") };
     }
     case "moment": {
@@ -132,7 +133,15 @@ export function AppShell() {
   const routeKey = route.page + (route.id || "");
   useScrollReveal(routeKey);
   const pageMeta = getPageMeta(route, getAllProducts(), getAllCourses());
-  useDocumentMeta(pageMeta.title, pageMeta.description, pageMeta.canonicalPath);
+  useDocumentMeta(pageMeta.title, pageMeta.description, pageMeta.canonicalPath, pageMeta.image);
+  useEffect(() => {
+    // Real page-view tracking for GA4 -- this is a client-side-routed SPA, so GA4's own automatic
+    // pageview detection (tied to real, full page loads) never fires again after the very first
+    // load, regardless of how many real routes someone visits. Fires on the same real route
+    // changes useDocumentMeta above already reacts to (pageMeta.canonicalPath), so this and the
+    // title/meta-tag updates above stay in sync rather than drifting.
+    trackPageView(pageMeta.canonicalPath || "/", pageMeta.title);
+  }, [pageMeta.canonicalPath, pageMeta.title]);
   useStructuredData({
     "@context": "https://schema.org",
     "@type": "Organization",

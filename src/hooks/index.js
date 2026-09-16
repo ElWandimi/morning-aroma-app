@@ -173,7 +173,7 @@ function upsertLink(rel, href) {
   tag.setAttribute("href", href);
 }
 
-export function useDocumentMeta(title, description, canonicalPath) {
+export function useDocumentMeta(title, description, canonicalPath, image) {
   useEffect(() => {
     if (title) {
       document.title = title;
@@ -196,7 +196,15 @@ export function useDocumentMeta(title, description, canonicalPath) {
     if (canonicalPath) {
       upsertLink("canonical", `https://morning-aroma.com${canonicalPath}`);
     }
-  }, [title, description, canonicalPath]);
+    // Real, previously-missing per-page og:image -- every page shared the one static, generic
+    // homepage banner from index.html regardless of what was actually being shared (a specific
+    // coffee bag's own real photo, for instance), which is a real, meaningful loss for anyone
+    // sharing a product link on WhatsApp or Instagram. Resets back to the site's own real default
+    // when `image` isn't provided (most pages), rather than letting a previous page's product
+    // photo incorrectly persist into whatever's navigated to next.
+    upsertMeta('meta[property="og:image"]', "property", "og:image", image || "https://morning-aroma.com/og-image.jpg");
+    upsertMeta('meta[name="twitter:image"]', "name", "twitter:image", image || "https://morning-aroma.com/og-image.jpg");
+  }, [title, description, canonicalPath, image]);
 }
 
 // Injects a JSON-LD <script type="application/ld+json"> tag for the given schema.org object,

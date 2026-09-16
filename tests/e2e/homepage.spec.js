@@ -36,7 +36,7 @@ test.describe("Homepage", () => {
 test.describe("Homepage — reorganized sections", () => {
   test("hero renders as a two-column split: product photo, headline, and both CTAs", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
 
     // The real bundled SL28 — Kenya product photo, not a placeholder -- confirms the hero
     // actually renders the chosen existing asset (/photos/products/sl28-kenya.png), not a
@@ -57,7 +57,7 @@ test.describe("Homepage — reorganized sections", () => {
 
   test("clicking the hero product photo navigates to the real SL28 — Kenya product page", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.getByRole("link", { name: "View SL28 — Kenya (featured coffee)" }).click();
     await expect(page).toHaveURL(/\/product\/sl28-kenya/);
     // Real, previously-flaky assertion: while realProducts is still loading, ProductPage renders
@@ -70,7 +70,7 @@ test.describe("Homepage — reorganized sections", () => {
 
   test("trust icon grid shows the same four real facts as the trust bar, restyled", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     // These four headings are TrustGrid's own titles -- deliberately the same underlying facts
     // TrustBar already stated elsewhere (free shipping, Paystack, small-batch, traceable), not
     // new claims invented for this denser layout.
@@ -81,7 +81,7 @@ test.describe("Homepage — reorganized sections", () => {
 
   test("signature collection grid renders real catalog products with working Add-to-cart", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     await page.route("https://ipwho.is/**", (route) => route.abort());
 
     // SignatureCollection returns null entirely (not a loading placeholder) while realProducts
@@ -103,7 +103,7 @@ test.describe("Homepage — reorganized sections", () => {
 
   test("quality split and feature tiles reuse real existing copy and link to real pages", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
 
     // Same three facts SourceTrust already states elsewhere on this page -- confirms the split
     // section didn't invent new sourcing claims, just repositioned the existing ones. Scoped to
@@ -132,7 +132,7 @@ test.describe("Homepage — reorganized sections", () => {
     // auto-fit/minmax, the same pattern as the site's existing grids -- confirms that pattern
     // held here too and nothing pushes the page wider than the viewport.
     await page.goto("/");
-    await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
+    await page.getByRole("dialog", { name: "Local storage, error monitoring, and analytics preferences" }).getByRole("button", { name: "Accept" }).click();
     const overflowsHorizontally = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     expect(overflowsHorizontally).toBe(false);
   });
