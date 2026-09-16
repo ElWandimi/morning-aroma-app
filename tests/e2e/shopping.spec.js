@@ -178,10 +178,36 @@ test.describe("Cart and checkout", () => {
       await submitWithRateLimitBackoff(page, signInDialog, signInDialog, "hidden");
 
       await page.getByRole("button", { name: "Continue to shipping →" }).click();
-      await page.getByLabel("Full name").fill("Test Customer");
+      // Real, current shipping form fields -- confirmed directly against src/pages/Checkout.jsx.
+      // This used to be a single "Full name" field with a plain text "Country" input; both were
+      // replaced with real, separate controls at some point (genuinely split First/Last name
+      // fields, and Country became a searchable custom dropdown, not a fillable text input) --
+      // this test was never updated to match, so it silently filled nothing real and then sat
+      // stuck on "Continue to payment" forever (confirmed directly: a real run hung here for the
+      // test's full 600s timeout, with the shipping form still empty in the page snapshot).
+      await page.getByLabel("First name").fill("Test");
+      await page.getByLabel("Last name").fill("Customer");
       await page.getByLabel("Address").fill("123 Coffee Street");
       await page.getByLabel("City").fill("Nairobi");
-      await page.getByLabel("Country").fill("Kenya");
+      // Country is a real custom searchable dropdown (SearchableCountrySelect), not a fillable
+      // input -- its own visible trigger has an accessible name of "Select country" (the hidden
+      // native <select> alongside it, kept only for browser autofill, is aria-hidden and not
+      // meant for direct interaction). Typing into its real search box then clicking the one
+      // matching option avoids depending on the exact flag-emoji rendering of the option's own
+      // label text.
+      await page.getByRole("button", { name: "Select country" }).click();
+      await page.getByPlaceholder("Search countries…").fill("Kenya");
+      await page.getByRole("option", { name: /Kenya/ }).click();
+      // Phone is a real, required field (validateShippingForm in Checkout.jsx) -- the old test
+      // never filled it at all, which alone would have silently blocked "Continue to payment"
+      // regardless of the other fields above. The country-code selector defaults to Kenya's own
+      // +254 already (this account's real shipping country, filled just above), so only the
+      // number itself needs filling. exact: true -- "Phone" (no exact match) would otherwise also
+      // match the phone country-code button's own aria-label="Phone country code" as a substring,
+      // a real strict-mode violation confirmed by checking Playwright's own getByLabel docs
+      // (aria-label counts, not just a real <label for> pairing, and matching is substring by
+      // default).
+      await page.getByLabel("Phone", { exact: true }).fill("712345678");
       await page.getByRole("button", { name: "Continue to payment" }).click();
 
       // Real Paystack integration from here (see ROADMAP.md) -- the old fake card-entry form
