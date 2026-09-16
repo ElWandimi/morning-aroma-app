@@ -130,6 +130,25 @@ async function query(text, params = []) {
       "INSERT INTO feedback (id, product_id, rating, aroma, texture, tags, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     );
     values = [id, ...values, createdAt];
+  } else if (/INSERT INTO live_chats/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO live_chats (customer_name, customer_email) VALUES ($1, $2)",
+      "INSERT INTO live_chats (id, customer_name, customer_email, created_at) VALUES (?, ?, ?, ?)"
+    );
+    values = [id, ...values, createdAt];
+  } else if (/INSERT INTO live_chat_messages/i.test(sql)) {
+    // No RETURNING * on this one in the real route -- it's a fire-and-forget insert, the real
+    // response is built by re-querying the chat + its messages afterward, so this genuinely just
+    // needs id/created_at generated and bound, not a result row shaped back into anything.
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO live_chat_messages (chat_id, sender, text) VALUES ($1, $2, $3)",
+      "INSERT INTO live_chat_messages (id, chat_id, sender, text, created_at) VALUES (?, ?, ?, ?, ?)"
+    );
+    values = [id, ...values, createdAt];
   } else {
     // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
     // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are

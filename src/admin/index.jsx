@@ -1530,11 +1530,46 @@ export function AdminGreenOrders() {
 }
 
 export function AdminLiveChat() {
-  const { liveChats, updateChatStatus } = useAdmin();
+  const { liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, updateChatStatus, replyToLiveChat } = useAdmin();
   const { addToast } = useToast();
   const [expanded, setExpanded] = useState(null);
+  const [replyDrafts, setReplyDrafts] = useState({}); // { [chatId]: draft text } -- one real, independent draft per chat, so switching which transcript is expanded doesn't lose what was being typed for another
+  const [sendingReply, setSendingReply] = useState(null); // chat id currently sending, or null -- disables just that one chat's own send button, not every chat's at once
   const STATUSES = ["Open", "Resolved"];
   const fmtTime = (iso) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  // Real, if simple, polling while this admin section is actually open -- the task this was built
+  // for explicitly ruled out real-time push infrastructure, but without SOME real refresh, a
+  // customer's new message (or a brand-new chat) would only ever become visible after a manual
+  // page reload, which reads as "broken" for something meant to feel like a live inbox, not a
+  // reasonable interpretation of "no live typing, just real messages saved and visible." Stops
+  // the moment an admin navigates away from this section (the real, normal unmount), not left
+  // running in the background indefinitely across the whole admin dashboard.
+  useEffect(() => {
+    const interval = setInterval(refetchLiveChats, 8000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (liveChatsLoading) return <p className="hint">Loading live chats…</p>;
+  if (liveChatsError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load live chats: {liveChatsError}</p>
+        <button className="btn-outline" onClick={refetchLiveChats}>Try again</button>
+      </div>
+    );
+  }
+
+  const sendReply = async (chatId) => {
+    const text = (replyDrafts[chatId] || "").trim();
+    if (!text || sendingReply === chatId) return;
+    setSendingReply(chatId);
+    const result = await replyToLiveChat(chatId, text);
+    setSendingReply(null);
+    if (result.ok) setReplyDrafts((prev) => ({ ...prev, [chatId]: "" }));
+    else addToast(`Couldn't send reply: ${result.error}`);
+  };
 
   return (
     <div>
@@ -1550,7 +1585,14 @@ export function AdminLiveChat() {
               <div key={c.id} className="admin-card">
                 <div className="admin-card-head">
                   <strong>{c.customerName}</strong>
-                  <select value={c.status} onChange={(e) => { updateChatStatus(c.id, e.target.value); addToast(`Marked ${e.target.value}`); }}>
+                  <select
+                    value={c.status}
+                    onChange={async (e) => {
+                      const result = await updateChatStatus(c.id, e.target.value);
+                      if (result.ok) addToast(`Marked ${e.target.value}`);
+                      else addToast(`Couldn't update status: ${result.error}`);
+                    }}
+                  >
                     {STATUSES.map((st) => (<option key={st} value={st}>{st}</option>))}
                   </select>
                 </div>
@@ -1560,13 +1602,32 @@ export function AdminLiveChat() {
                   {isOpen ? "Hide transcript" : "View full transcript"}
                 </button>
                 {isOpen && (
-                  <div className="chat-transcript">
-                    {c.messages.map((m, i) => (
-                      <div key={i} className={`chat-transcript-line ${m.sender === "user" ? "from-user" : "from-agent"}`}>
-                        <strong>{m.sender === "user" ? c.customerName : "Agent"}:</strong> {m.text}
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div className="chat-transcript">
+                      {c.messages.map((m) => (
+                        <div key={m.id} className={`chat-transcript-line ${m.sender === "user" ? "from-user" : "from-agent"}`}>
+                          <strong>{m.sender === "user" ? c.customerName : "Agent"}:</strong> {m.text}
+                        </div>
+                      ))}
+                    </div>
+                    <form
+                      className="chat-input-row"
+                      style={{ marginTop: 10 }}
+                      onSubmit={(e) => { e.preventDefault(); sendReply(c.id); }}
+                    >
+                      <input
+                        value={replyDrafts[c.id] || ""}
+                        onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                        placeholder="Reply as Morning Aroma…"
+                        maxLength={2000}
+                        aria-label={`Reply to ${c.customerName}`}
+                        disabled={sendingReply === c.id}
+                      />
+                      <button type="submit" className="btn-primary chat-send-btn" disabled={!(replyDrafts[c.id] || "").trim() || sendingReply === c.id}>
+                        {sendingReply === c.id ? "Sending…" : "Reply"}
+                      </button>
+                    </form>
+                  </>
                 )}
               </div>
             );

@@ -171,6 +171,20 @@ export const api = {
     request("/newsletter", { method: "POST", body: JSON.stringify(subscriber) }),
   getNewsletterSubscribers: () =>
     request("/newsletter"),
+  startLiveChat: (customerName, customerEmail) =>
+    request("/live-chat", { method: "POST", body: JSON.stringify({ customerName, customerEmail }) }),
+  sendLiveChatGreeting: (chatId, text) =>
+    request(`/live-chat/${chatId}/greeting`, { method: "POST", body: JSON.stringify({ text }) }),
+  sendLiveChatMessage: (chatId, text) =>
+    request(`/live-chat/${chatId}/messages`, { method: "POST", body: JSON.stringify({ text }) }),
+  getLiveChat: (chatId) =>
+    request(`/live-chat/${chatId}`),
+  getAllLiveChats: () =>
+    request("/live-chat"),
+  replyToLiveChat: (chatId, text) =>
+    request(`/live-chat/${chatId}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  setLiveChatStatus: (chatId, status) =>
+    request(`/live-chat/${chatId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getCourses: () => request("/courses"),
   createCourse: (course) =>
     request("/courses", { method: "POST", body: JSON.stringify(course) }),

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAdmin, useAuth, useCart, useCurrency, useRoute, useToast, useWishlist, pathFor } from "../context";
-import { CHAT_CANNED_RESPONSES, COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, TRANSLATE_LANGUAGES } from "../data";
+import { COUNTRY_JOURNEY_PHOTO, COUNTRY_TO_LANGUAGE, CURRENCIES, DESCRIPTOR_TAGS, MARQUEE_IMAGES, TRANSLATE_LANGUAGES } from "../data";
 import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTranslate } from "../hooks";
-import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, activateOnEnterOrSpace } from "../utils/helpers";
+import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, storage, activateOnEnterOrSpace } from "../utils/helpers";
 import { api } from "../utils/api";
 import { initSentry, reportError } from "../utils/sentry.js";
 
@@ -1439,60 +1439,101 @@ export function FeedbackBean() {
   );
 }
 
-function matchCannedResponse(text) {
-  const t = text.toLowerCase();
-  const hit = CHAT_CANNED_RESPONSES.find((r) => r.keywords.some((k) => t.includes(k)));
-  return hit
-    ? hit.reply
-    : "Thanks for reaching out — I've noted that, and someone from our team will follow up by email within a few hours. Anything else I can help with right now?";
-}
-
 function LiveChatPanel({ onBack, onClose }) {
   const { user } = useAuth();
-  const { liveChats, startChat, sendChatMessage } = useAdmin();
-  const [chatId, setChatId] = useState(null);
+  const { startChat, sendLiveChatGreeting, sendChatMessage } = useAdmin();
+  const { addToast } = useToast();
+  const [chat, setChat] = useState(null); // the customer's OWN real chat, not the admin-wide list -- a customer has no access to that
+  const [starting, setStarting] = useState(false);
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [draft, setDraft] = useState("");
-  const [agentTyping, setAgentTyping] = useState(false);
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const chat = liveChats.find((c) => c.id === chatId);
+  // Real, non-guessable chat id, persisted in this browser's own localStorage (mirroring
+  // ma_cart/ma_wishlist's own real, established pattern elsewhere in this codebase) -- so
+  // reopening the widget (a page reload, a second visit the same day) reconnects to the SAME
+  // real conversation rather than silently starting a brand-new one every time, and so a real
+  // admin reply sent after the customer closed the tab is still there when they come back.
+  const [chatId, setChatId] = useState(() => storage.get("ma_live_chat_id", null));
+
+  const beginRealChat = async (customerName, customerEmail, greeting) => {
+    setStarting(true);
+    const started = await startChat(customerName, customerEmail);
+    if (!started.ok) { setStarting(false); addToast(`Couldn't start chat: ${started.error}`); return; }
+    const greeted = await sendLiveChatGreeting(started.chat.id, greeting);
+    setStarting(false);
+    if (!greeted.ok) { addToast(`Couldn't start chat: ${greeted.error}`); return; }
+    setChat(greeted.chat);
+    setChatId(greeted.chat.id);
+    if (getStorageConsent() === "accepted") storage.set("ma_live_chat_id", greeted.chat.id);
+  };
 
   useEffect(() => {
-    if (user && !chatId) {
-      const id = startChat(user.name, user.email);
-      setChatId(id);
-      sendChatMessage(id, "agent", `Hi ${user.name.split(" ")[0]}! I'm here — what can I help you with today?`);
-    }
+    if (chatId) return; // already have a real, persisted chat to reconnect to below -- don't start a second one
+    if (user && !starting) beginRealChat(user.name, user.email, `Hi ${user.name.split(" ")[0]}! I'm here — what can I help you with today?`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
+
+  // Reconnects to a real, previously-persisted chat -- fetches its current state once, since a
+  // real admin may have replied since the customer last had this open.
+  useEffect(() => {
+    if (!chatId) return;
+    let cancelled = false;
+    api.getLiveChat(chatId)
+      .then(({ chat }) => { if (!cancelled) setChat(chat); })
+      .catch(() => { if (!cancelled) { setChatId(null); storage.set("ma_live_chat_id", null); } }); // the persisted id is genuinely stale (e.g. a different environment's data) -- start fresh rather than get stuck
+    return () => { cancelled = true; };
+  }, [chatId]);
+
+  // Real, if simple, polling for an admin's reply while the panel is genuinely open -- this
+  // isn't real-time push (no websocket/SSE infrastructure exists for this app), so checking every
+  // few seconds is the honest, working alternative, the same tradeoff the task itself accepted
+  // ("no live agent typing, just real messages saved and visible"). Stops the moment the panel
+  // unmounts (onClose/onBack), not left running in the background indefinitely.
+  useEffect(() => {
+    if (!chat?.id) return;
+    const interval = setInterval(() => {
+      api.getLiveChat(chat.id).then(({ chat: fresh }) => setChat(fresh)).catch(() => {});
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [chat?.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat?.messages?.length, agentTyping]);
+  }, [chat?.messages?.length]);
 
   const beginChat = (e) => {
     e.preventDefault();
-    const id = startChat(name, email);
-    setChatId(id);
-    sendChatMessage(id, "agent", `Hi ${name.split(" ")[0]}! Thanks for reaching out — what can I help you with today?`);
+    beginRealChat(name, email, `Hi ${name.split(" ")[0]}! Thanks for reaching out — what can I help you with today?`);
   };
 
-  const send = () => {
+  const send = async () => {
     const text = draft.trim();
-    if (!text || !chatId) return;
-    sendChatMessage(chatId, "user", text);
+    if (!text || !chat?.id || sending) return;
+    setSending(true);
     setDraft("");
-    setAgentTyping(true);
-    const delay = 900 + Math.random() * 900;
-    setTimeout(() => {
-      sendChatMessage(chatId, "agent", matchCannedResponse(text));
-      setAgentTyping(false);
-    }, delay);
+    const result = await sendChatMessage(chat.id, text);
+    setSending(false);
+    if (result.ok) setChat(result.chat);
+    else addToast(`Couldn't send message: ${result.error}`);
   };
 
-  if (!chatId) {
+  if (!chat) {
+    if (starting) {
+      return (
+        <div className="care-panel chat-panel">
+          <div className="care-panel-head">
+            <div>
+              <p className="eyebrow" style={{ marginBottom: 2 }}>live conversation</p>
+              <h4 style={{ margin: 0, fontFamily: "'Cormorant Garamond', serif", fontSize: "1.3rem", color: "var(--chestnut)" }}>Connecting…</h4>
+            </div>
+            <button className="modal-close" style={{ position: "static" }} onClick={onClose} aria-label="Close">×</button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="care-panel chat-panel">
         <div className="care-panel-head">
@@ -1526,18 +1567,11 @@ function LiveChatPanel({ onBack, onClose }) {
         <button className="modal-close" style={{ position: "static" }} onClick={onClose} aria-label="Close">×</button>
       </div>
       <div className="chat-messages">
-        {(chat?.messages || []).map((m, i) => (
-          <div key={i} className={`chat-bubble ${m.sender === "user" ? "chat-bubble-user" : "chat-bubble-agent"}`}>
+        {(chat?.messages || []).map((m) => (
+          <div key={m.id} className={`chat-bubble ${m.sender === "user" ? "chat-bubble-user" : "chat-bubble-agent"}`}>
             {m.text}
           </div>
         ))}
-        {agentTyping && (
-          <div className="chat-bubble chat-bubble-agent chat-typing" aria-live="polite">
-            <span />
-            <span />
-            <span />
-          </div>
-        )}
         <div ref={messagesEndRef} />
       </div>
       <form
@@ -1550,8 +1584,9 @@ function LiveChatPanel({ onBack, onClose }) {
           placeholder="Type a message…"
           maxLength={500}
           aria-label="Chat message"
+          disabled={sending}
         />
-        <button type="submit" className="btn-primary chat-send-btn" disabled={!draft.trim()}>Send</button>
+        <button type="submit" className="btn-primary chat-send-btn" disabled={!draft.trim() || sending}>Send</button>
       </form>
     </div>
   );

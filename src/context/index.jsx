@@ -827,7 +827,27 @@ export function AdminDataProvider({ children }) {
   const [auditLog, setAuditLog] = useState([]);
   const [quotations, setQuotations] = useState([]);
   const [serviceInquiries, setServiceInquiries] = useState([]);
+  // Real, backend-persisted live chat -- was purely local, in-memory state before this (see
+  // migrations/023_live_chat.sql for the full reasoning). Exposed as liveChats (the same name it
+  // always had) so AdminLiveChat.jsx and every other existing consumer keep working unchanged --
+  // they only ever read this as a plain array (.length, .map, .filter), same shape as before.
   const [liveChats, setLiveChats] = useState([]);
+  const [liveChatsLoading, setLiveChatsLoading] = useState(true);
+  const [liveChatsError, setLiveChatsError] = useState("");
+  const refetchLiveChats = () => {
+    if (!user) { setLiveChatsLoading(false); return; }
+    setLiveChatsLoading(true);
+    setLiveChatsError("");
+    api.getAllLiveChats()
+      .then((body) => setLiveChats(pluck(body, "chats", { array: true })))
+      .catch((e) => { if (e.status !== 403) setLiveChatsError(e.message); })
+      .finally(() => setLiveChatsLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchLiveChats();
+    else setLiveChatsLoading(false);
+  }, [user && user.role]);
+
   const [momentOverrides, setMomentOverrides] = useState({});
   const [courseOverrides, setCourseOverrides] = useState({});
   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
@@ -1258,25 +1278,60 @@ export function AdminDataProvider({ children }) {
     logAction("Consultation fee set", `${id} → ${fmtPrice(agreedFeeCents)}`);
   };
 
-  const startChat = (customerName, customerEmail) => {
-    const id = `CHAT-${1000 + liveChats.length}-${Date.now()}`;
-    setLiveChats((prev) => [
-      { id, customerName, customerEmail, status: "Open", startedAt: new Date().toISOString(), messages: [] },
-      ...prev,
-    ]);
-    return id;
+  // Real, backend-persisted live chat -- previously synchronous (a bare local-state write,
+  // returning a fake id immediately). Every real call now needs to be a genuine network request,
+  // so this is async now, awaited by LiveChatPanel (src/components/index.jsx), rather than the
+  // fire-and-forget pattern the fake version could get away with. Returns { ok, chat } / { ok:
+  // false, error }, same real convention as addFeedback/toggleFeedbackReviewed above.
+  const startChat = async (customerName, customerEmail) => {
+    try {
+      const { chat } = await api.startLiveChat(customerName, customerEmail);
+      return { ok: true, chat };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
-  const sendChatMessage = (chatId, sender, text) => {
-    setLiveChats((prev) =>
-      prev.map((c) =>
-        c.id === chatId
-          ? { ...c, messages: [...c.messages, { sender, text, at: new Date().toISOString() }] }
-          : c
-      )
-    );
+  // The narrow, one-time real greeting endpoint (see server's own route comment for why this
+  // isn't just sendChatMessage(id, "agent", ...) anymore -- an anonymous caller genuinely
+  // shouldn't be able to post as "agent" freely, only this one specific, real first message).
+  const sendLiveChatGreeting = async (chatId, text) => {
+    try {
+      const { chat } = await api.sendLiveChatGreeting(chatId, text);
+      return { ok: true, chat };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
-  const updateChatStatus = (chatId, status) =>
-    setLiveChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, status } : c)));
+  // The customer's own real message -- always lands as sender "user" server-side regardless of
+  // what's sent here (see live-chat.js's own comment), so there's no sender argument anymore.
+  const sendChatMessage = async (chatId, text) => {
+    try {
+      const { chat } = await api.sendLiveChatMessage(chatId, text);
+      return { ok: true, chat };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  // A real admin's own reply -- a genuinely different real action from a customer's own message
+  // above (different route, auth-gated, sender is always "agent" server-side).
+  const replyToLiveChat = async (chatId, text) => {
+    try {
+      const { chat } = await api.replyToLiveChat(chatId, text);
+      setLiveChats((prev) => prev.map((c) => (c.id === chatId ? chat : c)));
+      return { ok: true, chat };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const updateChatStatus = async (chatId, status) => {
+    try {
+      const { chat } = await api.setLiveChatStatus(chatId, status);
+      setLiveChats((prev) => prev.map((c) => (c.id === chatId ? chat : c)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 
   // Public, anonymous submission -- no token needed, matching the real, existing "Leave Your
   // Aroma" UX (never asked for a name or login before this either). Doesn't touch feedbackList
@@ -1406,7 +1461,8 @@ export function AdminDataProvider({ children }) {
         kenyaMessages: settings.kenyaLiveMessages || [], addKenyaMessage, updateKenyaMessage, removeKenyaMessage,
         quotations, addQuotation, updateQuotationStatus,
         serviceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
-        liveChats, startChat, sendChatMessage, updateChatStatus,
+        liveChats, liveChatsLoading, liveChatsError, refetchLiveChats,
+        startChat, sendLiveChatGreeting, sendChatMessage, replyToLiveChat, updateChatStatus,
         feedbackList, addFeedback, toggleFeedbackReviewed,
         newsletterSubscribers, newsletterSubscribersLoading, addNewsletterSubscriber, refetchNewsletterSubscribers,
         getMomentContent, setMomentContent, momentOverrides,

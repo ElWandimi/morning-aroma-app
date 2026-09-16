@@ -17,6 +17,7 @@ const certificatesRoutes = require("./routes/certificates");
 const academyStatsRoutes = require("./routes/academyStats");
 const feedbackRoutes = require("./routes/feedback");
 const newsletterRoutes = require("./routes/newsletter");
+const liveChatRoutes = require("./routes/live-chat");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -93,6 +94,7 @@ app.use("/", certificatesRoutes);
 app.use("/", academyStatsRoutes);
 app.use("/feedback", feedbackRoutes);
 app.use("/newsletter", newsletterRoutes);
+app.use("/live-chat", liveChatRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

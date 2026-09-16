@@ -129,6 +129,27 @@ CREATE TABLE feedback (
 );
 
 CREATE INDEX idx_feedback_product_id ON feedback (product_id);
+
+-- See migrations/023_live_chat.sql for the real, full reasoning -- previously purely in-memory
+-- frontend state, now genuinely persisted.
+CREATE TABLE live_chats (
+  id             TEXT PRIMARY KEY,
+  customer_name  TEXT NOT NULL,
+  customer_email TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'Open',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE live_chat_messages (
+  id             TEXT PRIMARY KEY,
+  chat_id        TEXT NOT NULL REFERENCES live_chats(id),
+  sender         TEXT NOT NULL,
+  text           TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_live_chats_status ON live_chats (status);
+CREATE INDEX idx_live_chat_messages_chat_id ON live_chat_messages (chat_id);
 CREATE INDEX idx_feedback_reviewed ON feedback (reviewed);
 
 CREATE TABLE green_beans (
