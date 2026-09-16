@@ -843,6 +843,25 @@ export function AdminDataProvider({ children }) {
       .catch((e) => { if (e.status !== 403) setLiveChatsError(e.message); })
       .finally(() => setLiveChatsLoading(false));
   };
+  // A real, genuine bug this fixes: AdminLiveChat's own background poll (every 8s, while a real
+  // admin might be mid-reply) was calling refetchLiveChats itself -- which sets liveChatsLoading
+  // true on every single call, not just the first one. Since AdminLiveChat's render gates its
+  // ENTIRE tree (including the reply <input> an admin is actively typing into) behind
+  // `if (liveChatsLoading) return <p>Loading...</p>`, every poll tick was unmounting that input
+  // and wiping whatever text was in it -- confirmed directly, a real admin reported exactly this:
+  // the page "kept refreshing" before they could finish typing a reply. A silent, separate
+  // refresh path fixes this correctly: it still updates the real data (so a new customer message
+  // does appear), but never touches liveChatsLoading/liveChatsError, so it can't unmount anything
+  // an admin is actively using. Errors are swallowed here deliberately -- a poll tick failing
+  // silently and trying again in 8s is the right behavior for a background refresh; surfacing a
+  // real error banner (and blowing away the admin's in-progress work) for a single missed poll
+  // would be a worse real experience than just quietly retrying.
+  const refetchLiveChatsSilently = () => {
+    if (!user) return;
+    api.getAllLiveChats()
+      .then((body) => setLiveChats(pluck(body, "chats", { array: true })))
+      .catch(() => {});
+  };
   useEffect(() => {
     if (user && (user.role === "super_admin" || user.role === "staff")) refetchLiveChats();
     else setLiveChatsLoading(false);
@@ -1461,7 +1480,7 @@ export function AdminDataProvider({ children }) {
         kenyaMessages: settings.kenyaLiveMessages || [], addKenyaMessage, updateKenyaMessage, removeKenyaMessage,
         quotations, addQuotation, updateQuotationStatus,
         serviceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
-        liveChats, liveChatsLoading, liveChatsError, refetchLiveChats,
+        liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, refetchLiveChatsSilently,
         startChat, sendLiveChatGreeting, sendChatMessage, replyToLiveChat, updateChatStatus,
         feedbackList, addFeedback, toggleFeedbackReviewed,
         newsletterSubscribers, newsletterSubscribersLoading, addNewsletterSubscriber, refetchNewsletterSubscribers,

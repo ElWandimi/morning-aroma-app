@@ -1530,7 +1530,7 @@ export function AdminGreenOrders() {
 }
 
 export function AdminLiveChat() {
-  const { liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, updateChatStatus, replyToLiveChat } = useAdmin();
+  const { liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, refetchLiveChatsSilently, updateChatStatus, replyToLiveChat } = useAdmin();
   const { addToast } = useToast();
   const [expanded, setExpanded] = useState(null);
   const [replyDrafts, setReplyDrafts] = useState({}); // { [chatId]: draft text } -- one real, independent draft per chat, so switching which transcript is expanded doesn't lose what was being typed for another
@@ -1545,8 +1545,14 @@ export function AdminLiveChat() {
   // reasonable interpretation of "no live typing, just real messages saved and visible." Stops
   // the moment an admin navigates away from this section (the real, normal unmount), not left
   // running in the background indefinitely across the whole admin dashboard.
+  //
+  // refetchLiveChatsSilently, NOT refetchLiveChats -- a real, confirmed bug: the loud version
+  // sets liveChatsLoading true on every call, and this component's own render gates its entire
+  // tree (including the reply <input> an admin might be actively typing into) behind that flag,
+  // so every poll tick was unmounting whatever was being typed. See refetchLiveChatsSilently's
+  // own comment in context/index.jsx for the full story.
   useEffect(() => {
-    const interval = setInterval(refetchLiveChats, 8000);
+    const interval = setInterval(refetchLiveChatsSilently, 8000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
