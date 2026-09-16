@@ -112,11 +112,17 @@ test.describe("Cart and checkout", () => {
 
   test("guest checkout is gated behind sign-in, reaches the real Paystack payment step", async ({ page, playwright }) => {
     test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "Set PLAYWRIGHT_ADMIN_EMAIL and PLAYWRIGHT_ADMIN_PASSWORD -- completing registration now requires admin-verifying the new account.");
-    // Real, sufficiently long timeout for the whole test, not Playwright's 30s default -- this
-    // is a multi-step flow (registration, then several real page transitions through checkout),
-    // and the same class of occasional backend latency already hardened against elsewhere in
-    // this suite can affect any one of those steps.
-    test.setTimeout(60000);
+    // Real, sufficiently long timeout for the whole test -- this now accounts for
+    // submitWithRateLimitBackoff's own genuine worst case (255s per call, 2 calls in this test:
+    // registration and sign-in), not just ordinary transient latency. 60s was correct before that
+    // helper existed, but genuinely too short once a real rate-limit wait needed to fit inside
+    // it -- confirmed directly: a real run hit this exact 60s ceiling mid-backoff, killing the
+    // helper before it ever got the chance to succeed on its own. 600s (2 x 255s + 90s margin for
+    // the real, ordinary work in between: page navigation, the admin API verification calls,
+    // filling forms) is genuinely honest for the true worst case, not just "big enough to make
+    // the symptom go away" -- see rate-limit-helper.js's own comment for where 255s itself comes
+    // from.
+    test.setTimeout(600000);
 
     // A genuinely separate, isolated request context carrying the saved ADMIN session -- kept
     // completely apart from `page`'s own cookies, which must stay a real, unauthenticated guest

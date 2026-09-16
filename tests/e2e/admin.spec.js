@@ -147,10 +147,13 @@ async function signInAsAdmin(page) {
 // the time this test runs against a real, already-used deployment), so this runs unconditionally
 // regardless of whether PLAYWRIGHT_ADMIN_EMAIL/PASSWORD are set.
 test.describe("Non-admin access is genuinely blocked, not just hidden from the nav", () => {
-  // Real, sufficiently long timeout for the whole test, not Playwright's 30s default -- matches
-  // the same fix already proven necessary in admin-advanced.spec.js: a bare default timeout can
-  // kill a test mid-retry before hardening logic elsewhere even gets a fair chance.
-  test.setTimeout(60000);
+  // Real, sufficiently long timeout for the whole test -- this now accounts for
+  // submitWithRateLimitBackoff's own genuine worst case (255s per call, 2 calls in this test:
+  // registration and sign-in), not just ordinary transient latency. 60s was correct before that
+  // helper existed, but genuinely too short once a real rate-limit wait needed to fit inside it
+  // -- see rate-limit-helper.js's own comment for where 255s itself comes from, and
+  // shopping.spec.js's identical real fix for the same underlying cause.
+  test.setTimeout(600000);
 
   test("a regular customer can't reach the admin dashboard", async ({ page, playwright }) => {
     const testEmail = `e2e-customer-${Date.now()}@example.com`;

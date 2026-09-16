@@ -89,6 +89,12 @@ test.describe("Mobile viewport", () => {
     test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "Set PLAYWRIGHT_ADMIN_EMAIL and PLAYWRIGHT_ADMIN_PASSWORD to run this against the real backend.");
 
     test("the desktop Admin button is hidden, but the dashboard is still reachable via the hamburger menu's own link", async ({ page }) => {
+      // Real, sufficiently long timeout -- this test makes one real call to
+      // submitWithRateLimitBackoff (rate-limit-helper.js), whose own genuine worst case is 255s
+      // if a real rate limit needs actually waiting out, far beyond Playwright's 30s default.
+      // 300s covers that with real margin, without needlessly inflating every other test in this
+      // file that doesn't touch real auth at all.
+      test.setTimeout(300000);
       await page.goto("/");
       await page.getByRole("dialog", { name: "Local storage and error monitoring preferences" }).getByRole("button", { name: "Accept" }).click();
       await page.getByRole("button", { name: "Sign in", exact: true }).click();

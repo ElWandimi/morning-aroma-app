@@ -95,13 +95,19 @@ const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
 // Running them all in parallel workers genuinely risked tripping that same limiter for real,
 // since every worker shares this one machine's real IP -- serial execution is the honest fix,
 // not raising the production limit just to make local test runs faster.
-// The default per-test timeout (30s) was silently capping every test below what the retry logic
-// inside signIn/openAdminDashboard/registerCustomer actually needs (up to 3 attempts at 25s
-// each, a 75s worst case) -- Playwright was force-closing the whole test mid-retry once 30s
-// elapsed, regardless of whether a retry was still genuinely in progress. 120s gives real
-// headroom above that worst case, for every test in this file, not just the ones that happened
-// to hit it first.
-test.describe.configure({ mode: "serial", timeout: 120000 });
+// The default per-test timeout (30s) was silently capping every test below what real auth flows
+// in this file need. Raised once already, to 120s, for signIn/openAdminDashboard/registerCustomer's
+// own then-current retry logic (3 attempts at 25s each, a 75s worst case) -- but that math is
+// stale now that submitWithRateLimitBackoff (rate-limit-helper.js) replaced those inline retries:
+// its own real worst case is 255s per call, since a genuine rate limit needs actually waiting
+// out (90s backoff), not just a quick retry. Confirmed directly: a real run of the staff-
+// permissions test below (which makes 2 real calls to that helper -- registration, then sign-in)
+// hit this exact 120s ceiling mid-backoff, killing the helper before it ever got the chance to
+// succeed on its own. 600s (2 x 255s + 90s margin for the real, ordinary work in between) covers
+// that test's genuine worst case; every other test in this file needs far less, but a higher
+// ceiling here is harmless for them -- a timeout is a maximum, not something they'll actually
+// wait for.
+test.describe.configure({ mode: "serial", timeout: 600000 });
 
 test.beforeEach(async ({ page }) => {
   // Real IP-based currency/geo detection fires on every real page load (src/context/index.jsx's
