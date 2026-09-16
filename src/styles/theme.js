@@ -1,4 +1,18 @@
 export const CSS = `
+/* overflow-x: hidden -- a real, confirmed bug this fixes: .photo-marquee's own track is
+   INTENTIONALLY very wide (many images laid end-to-end for a continuous horizontal scroll
+   animation, genuinely 16,252px), and .photo-marquee itself already has overflow: hidden, which
+   correctly clips it VISUALLY -- no scrollbar or visible overflow ever actually rendered. But
+   overflow: hidden on one element doesn't stop that content's true width from counting toward
+   an ANCESTOR's own intrinsic size if nothing between it and the document root also constrains
+   width -- confirmed directly via real Chrome device emulation (iPhone 16 Pro Max, 440px):
+   document.querySelectorAll('*') found exactly .photo-marquee and .photo-marquee-track sized at
+   16252px each, and document.documentElement.scrollWidth was inflated to match, even though
+   nothing was ever visibly wrong on screen. This is the standard, correct place to guard against
+   that whole class of "an intentionally oversized child leaks page width" bug -- not re-fixing
+   the marquee itself again (it's already doing the right thing at its own level), but ensuring
+   nothing between it and the real page boundary can pass that width further up. */
+html, body { overflow-x: hidden; }
 :root {
   --cream: #FDF8F0;
   --gold: #E8D5B5;
