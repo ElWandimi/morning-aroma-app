@@ -152,6 +152,8 @@ async function main() {
   const welcomeEmails = resendMock.getSentEmails();
   check("the welcome email fires on successful verification, not at registration time", welcomeEmails.length === 1 && welcomeEmails[0].subject === "Welcome to Morning Aroma — where quality meets its scent.");
   check("welcome email addresses the user by their actual registered name", welcomeEmails[0] && welcomeEmails[0].text.includes("Hi Test User,"));
+  check("welcome email genuinely includes real HTML now, not just plain text", welcomeEmails[0] && typeof welcomeEmails[0].html === "string" && welcomeEmails[0].html.includes("<!DOCTYPE html>"));
+  check("welcome email's HTML includes the real site logo", welcomeEmails[0] && welcomeEmails[0].html.includes("logo-full.png"));
   let token = sessionCookies(verify);
 
   console.log("\nPOST /auth/verify-email again on an already-verified account, with the same, already-consumed code:");
@@ -1550,6 +1552,26 @@ async function main() {
   check("still returns 403, even with \"Customers\" granted -- role/permission management stays super_admin-only, since a safe subset genuinely doesn't exist here (granting this would let a staff member change roles, including their own)", staffViewUsers.status === 403);
   const staffChangeRole = await patch(`/users/${staffCustomersCandidate.body.user.id}`, { role: "super_admin" }, staffCustomersToken);
   check("a staff member can't promote themselves either, even with \"Customers\" granted", staffChangeRole.status === 403);
+
+  console.log("\nWelcome email's real featured-products section -- mirrors SignatureCollection's own real selection convention (premium tier, src/pages/Home.jsx), built from real, live product data rather than a static list:");
+  const { sendWelcomeEmail } = require("../src/utils/email");
+  // Set explicitly, not assumed inherited from an earlier part of this file -- confirmed
+  // directly this was genuinely undefined by this point (some earlier section legitimately
+  // deletes it to test the "no provider configured" path and nothing restores it before here),
+  // which silently produced two real test failures: sendEmail's own early-return-when-no-key
+  // path means sendWelcomeEmail completed without throwing but sent nothing at all, not a bug in
+  // the actual feature.
+  process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
+  const premiumProduct = await post("/products", { name: "Welcome Test Premium", country: "Kenya", tier: "premium", priceCents: 2200, stock: 10 }, token);
+  await post("/products", { name: "Welcome Test Everyday", country: "Colombia", tier: "everyday", priceCents: 900, stock: 10 }, token);
+  check("real premium test product genuinely created", premiumProduct.status === 201 && !!premiumProduct.body.product?.id);
+  resendMock.resetSentEmails();
+  await sendWelcomeEmail({ name: "Featured Products Test", email: "featured-products@morningaroma.local" });
+  const featuredEmails = resendMock.getSentEmails();
+  const featuredHtml = featuredEmails[0]?.html || "";
+  check("welcome email's real HTML includes a genuinely premium-tier product", featuredHtml.includes("Welcome Test Premium"));
+  check("welcome email's real HTML excludes an everyday-tier product -- premium only, same as the real homepage", !featuredHtml.includes("Welcome Test Everyday"));
+  check("welcome email's real HTML shows the product's actual real price", featuredHtml.includes("$22.00"));
 
   console.log("\nReal cart sync + abandoned-cart detection -- PUT /cart persists a customer's real cart server-side (it used to live only in localStorage, never touching the backend at all), and the scheduled job (utils/abandonedCartJob.js) emails a customer whose real, synced cart has sat untouched for 1hr+:");
   const { checkForAbandonedCarts } = require("../src/utils/abandonedCartJob");
