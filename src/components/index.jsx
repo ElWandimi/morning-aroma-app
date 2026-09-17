@@ -5,7 +5,7 @@ import { useClickOutside, useEscapeKey, useFocusTrap, useGeoLocale, useGoogleTra
 import { getProductPhotoUrl, getStorageConsent, lerpColor, searchSite, setStorageConsent, storage, activateOnEnterOrSpace } from "../utils/helpers";
 import { api } from "../utils/api";
 import { initSentry, reportError } from "../utils/sentry.js";
-import { initGA, trackPageView } from "../utils/analytics.js";
+import { enableGA, trackPageView } from "../utils/analytics.js";
 
 export function Steam({ className = "" }) {
   return (
@@ -922,7 +922,7 @@ export function ConsentBanner() {
   if (choice) return null;
   const decide = (value) => {
     setStorageConsent(value);
-    if (value === "accepted") { initSentry(); initGA(); }
+    if (value === "accepted") { initSentry(); enableGA(); }
     setChoice(value);
   };
   return (
