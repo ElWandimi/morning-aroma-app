@@ -150,4 +150,28 @@ The Morning Aroma Academy team`;
   await sendEmail("Course completion email", user.email, subject, body);
 }
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendEmailVerificationCode, sendRefundNeededEmail, sendCourseCompletionEmail };
+// Sent by the abandoned-cart scheduled job (see abandonedCartJob.js) -- items is the real,
+// resolved list this job already looked up (name, size, qty, unitPriceCents), not raw cart data,
+// since this function shouldn't need its own database access to build an email.
+async function sendAbandonedCartEmail(user, items, totalCents) {
+  const subject = items.length === 1
+    ? `Your ${items[0].name} is still in your bag`
+    : "You left some coffee behind";
+  const lines = items.map((i) => `- ${i.name} (${i.size}) x${i.qty} — $${(i.unitPriceCents * i.qty / 100).toFixed(2)}`).join("\n");
+  const body = `Hi ${user.name},
+
+Your bag's still holding onto this:
+
+${lines}
+
+Total: $${(totalCents / 100).toFixed(2)}
+
+No rush -- it'll be here whenever you're ready. Pick up right where you left off:
+${SITE_URL}/shop
+
+Warmly,
+The Morning Aroma team`;
+  await sendEmail("Abandoned cart email", user.email, subject, body);
+}
+
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendLoginCodeEmail, sendEmailVerificationCode, sendRefundNeededEmail, sendCourseCompletionEmail, sendAbandonedCartEmail };

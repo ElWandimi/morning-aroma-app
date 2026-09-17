@@ -149,6 +149,55 @@ async function query(text, params = []) {
       "INSERT INTO live_chat_messages (id, chat_id, sender, text, created_at) VALUES (?, ?, ?, ?, ?)"
     );
     values = [id, ...values, createdAt];
+  } else if (/INSERT INTO cart_snapshots/i.test(sql)) {
+    // Real, genuine upsert -- unlike every other INSERT this file handles, this one can run
+    // MANY times for the same real user (every periodic cart sync), not just once. now() is
+    // replaced with a JS-generated timestamp for BOTH the initial insert values and the
+    // ON CONFLICT UPDATE's own now() call, since SQLite genuinely has no now() function at all
+    // (confirmed directly: `SELECT now()` throws "no such function: now" against this bundled
+    // version) -- the real ON CONFLICT (col) DO UPDATE SET syntax itself needs no translation,
+    // SQLite supports that natively, same as Postgres.
+    const now = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO cart_snapshots (user_id, items, updated_at, abandoned_email_sent_at)\n     VALUES ($1, $2, now(), $3)\n     ON CONFLICT (user_id) DO UPDATE SET items = $2, updated_at = now(), abandoned_email_sent_at = $3",
+      "INSERT INTO cart_snapshots (user_id, items, updated_at, abandoned_email_sent_at)\n     VALUES (?, ?, ?, ?)\n     ON CONFLICT (user_id) DO UPDATE SET items = ?, updated_at = ?, abandoned_email_sent_at = ?"
+    );
+    // Real values order: [user_id, items, abandoned_email_sent_at] from the route's own call
+    // becomes [user_id, items, now, abandoned_email_sent_at, items, now, abandoned_email_sent_at]
+    // -- SQLite's ? placeholders are strictly positional and don't support a repeated $2/$3 the
+    // way Postgres references do, so the real, repeated values need to be bound twice, once for
+    // the INSERT branch and once for the UPDATE branch, in the exact order they now appear.
+    const [userId, items, abandonedEmailSentAt] = values;
+    values = [userId, items, now, abandonedEmailSentAt, items, now, abandonedEmailSentAt];
+  } else if (/SELECT cs\.user_id, cs\.items, u\.name, u\.email/i.test(sql)) {
+    // The abandoned-cart job's own real query -- two genuinely Postgres-only pieces need
+    // translating: interval '1 hour' arithmetic (SQLite has no INTERVAL type at all) and
+    // jsonb_array_length (SQLite's JSON support uses json_array_length instead, and items is
+    // stored as a plain TEXT column here, not a real jsonb type -- see schema.sqlite.sql's own
+    // comment).
+    //
+    // datetime(cs.updated_at) -- a real, genuine bug this fixes: SQLite's own datetime('now')
+    // produces a space-separated, no-timezone string ("2026-08-26 05:13:01"), but updated_at is
+    // actually written as a real JS toISOString() value (T-separated, milliseconds, Z suffix) --
+    // both by this app's own cart-sync route AND by this project's own tests when they backdate
+    // a row directly. Comparing those two different string SHAPES with a plain < is a real,
+    // silent bug: SQLite does a lexicographic string comparison here (updated_at is a TEXT
+    // column, not a real datetime type), and 'T' (ASCII 84) sorts AFTER a space (ASCII 32),
+    // making a genuinely two-hours-old row compare as "not yet 1 hour old" every time --
+    // confirmed directly: this exact bug caused checkForAbandonedCarts() to find zero real
+    // candidates in a direct functional test, even for a row backdated by 2 real hours.
+    // Wrapping the STORED value in datetime(...) too normalizes it to the same real, comparable
+    // shape SQLite's own now() modifier already produces, so both sides of the < are genuinely
+    // comparable regardless of which of the two real formats the column happened to be written
+    // in.
+    sql = sql.replace(
+      "cs.updated_at < now() - interval '1 hour'",
+      "datetime(cs.updated_at) < datetime('now', '-1 hour')"
+    );
+    sql = sql.replace(
+      "jsonb_array_length(cs.items) > 0",
+      "json_array_length(cs.items) > 0"
+    );
   } else {
     // Postgres numbered parameters ($1, $2...) are references and can legitimately repeat within
     // a single query (e.g. "stock - $1 < 0 THEN 0 ELSE stock - $1"); SQLite's ? placeholders are

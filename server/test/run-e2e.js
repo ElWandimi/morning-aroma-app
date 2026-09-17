@@ -68,6 +68,19 @@ async function main() {
       },
       body: JSON.stringify(body),
     }).then(async (r) => ({ status: r.status, body: await r.json(), headers: r.headers }));
+  // PUT /cart (routes/cart.js) is this codebase's first real route to return a bare 204 with no
+  // body at all -- post/patch above both unconditionally call r.json(), which would throw a real
+  // parse error against an empty body. This checks status first and only parses JSON when the
+  // real response actually has content, rather than assuming every endpoint always sends a body.
+  const put = (path, body, token) =>
+    fetch(base + path, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Cookie: token, ...csrfHeaderFrom(token) } : {}),
+      },
+      body: JSON.stringify(body),
+    }).then(async (r) => ({ status: r.status, body: r.status === 204 ? null : await r.json(), headers: r.headers }));
   // A real response's Set-Cookie header(s) -> a ready-to-send Cookie header string for the next
   // request, the same job a browser's own cookie jar does automatically and fetch() does not.
   // Node's fetch exposes multiple Set-Cookie values via getSetCookie() (each is its own header on
@@ -1537,6 +1550,65 @@ async function main() {
   check("still returns 403, even with \"Customers\" granted -- role/permission management stays super_admin-only, since a safe subset genuinely doesn't exist here (granting this would let a staff member change roles, including their own)", staffViewUsers.status === 403);
   const staffChangeRole = await patch(`/users/${staffCustomersCandidate.body.user.id}`, { role: "super_admin" }, staffCustomersToken);
   check("a staff member can't promote themselves either, even with \"Customers\" granted", staffChangeRole.status === 403);
+
+  console.log("\nReal cart sync + abandoned-cart detection -- PUT /cart persists a customer's real cart server-side (it used to live only in localStorage, never touching the backend at all), and the scheduled job (utils/abandonedCartJob.js) emails a customer whose real, synced cart has sat untouched for 1hr+:");
+  const { checkForAbandonedCarts } = require("../src/utils/abandonedCartJob");
+  // Set explicitly, not assumed inherited from an earlier part of this file -- registerAndVerify
+  // (used throughout this new section) saves/restores this key around its own narrow window, so
+  // relying on some other earlier line's assignment still being in effect this far into the file
+  // would be genuinely fragile.
+  process.env.RESEND_API_KEY = "re_test_fake_key_for_testing_only";
+  const cartCandidate = await registerAndVerify("abandoned-cart@morningaroma.local", "correcthorsebattery1", "Cart Test");
+  const cartToken = sessionCookies(cartCandidate);
+  const cartUserId = cartCandidate.body.user.id;
+
+  const cartSync = await put("/cart", { items: [{ id: "sl28-kenya", size: "1kg", qty: 2 }] }, cartToken);
+  check("PUT /cart returns 204 with no body", cartSync.status === 204 && cartSync.body === null);
+
+  // Backdating updated_at directly in the DB, same real pattern this suite already uses for the
+  // email-verification-code-expiry and order-cancellation-window tests above -- there's no real,
+  // honest way to wait a genuine hour inside a test.
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  await query("UPDATE cart_snapshots SET updated_at = $1 WHERE user_id = $2", [twoHoursAgo, cartUserId]);
+
+  resendMock.resetSentEmails();
+  await checkForAbandonedCarts();
+  const cartEmails = resendMock.getSentEmails();
+  const abandonedEmail = cartEmails.find((e) => e.to === "abandoned-cart@morningaroma.local");
+  check("a real abandoned-cart email genuinely sent", !!abandonedEmail);
+  check("the email's own real total matches sl28-kenya's real seeded price x2 ($15.00 x 2 = $30.00)", abandonedEmail && abandonedEmail.text.includes("$30.00"));
+
+  const afterFirstRun = await query("SELECT abandoned_email_sent_at FROM cart_snapshots WHERE user_id = $1", [cartUserId]);
+  check("abandoned_email_sent_at genuinely set after the job runs", !!afterFirstRun.rows[0].abandoned_email_sent_at);
+
+  resendMock.resetSentEmails();
+  await checkForAbandonedCarts();
+  check("running the job again doesn't re-send for the same, unchanged cart state", resendMock.getSentEmails().filter((e) => e.to === "abandoned-cart@morningaroma.local").length === 0);
+
+  console.log("\nSyncing a genuinely DIFFERENT cart resets eligibility -- a real, new abandonment later should still get emailed:");
+  await put("/cart", { items: [{ id: "sl28-kenya", size: "1kg", qty: 5 }] }, cartToken);
+  const afterChange = await query("SELECT abandoned_email_sent_at FROM cart_snapshots WHERE user_id = $1", [cartUserId]);
+  check("abandoned_email_sent_at reset to null once the cart's real contents genuinely changed", afterChange.rows[0].abandoned_email_sent_at === null);
+
+  console.log("\nRe-syncing the SAME, unchanged cart contents should NOT reset an already-sent marker:");
+  await query("UPDATE cart_snapshots SET abandoned_email_sent_at = $1 WHERE user_id = $2", [new Date(), cartUserId]);
+  await put("/cart", { items: [{ id: "sl28-kenya", size: "1kg", qty: 5 }] }, cartToken);
+  const afterNoChange = await query("SELECT abandoned_email_sent_at FROM cart_snapshots WHERE user_id = $1", [cartUserId]);
+  check("abandoned_email_sent_at stays set -- re-syncing identical contents isn't a real, new abandonment", !!afterNoChange.rows[0].abandoned_email_sent_at);
+
+  console.log("\nTwo real exclusion cases the job must not email for:");
+  const recentCandidate = await registerAndVerify("recent-cart@morningaroma.local", "correcthorsebattery1", "Recent Cart");
+  await put("/cart", { items: [{ id: "sl28-kenya", size: "1kg", qty: 1 }] }, sessionCookies(recentCandidate));
+  resendMock.resetSentEmails();
+  await checkForAbandonedCarts();
+  check("a cart synced moments ago (not yet 1hr old) doesn't get emailed", resendMock.getSentEmails().filter((e) => e.to === "recent-cart@morningaroma.local").length === 0);
+
+  const emptyCandidate = await registerAndVerify("empty-cart@morningaroma.local", "correcthorsebattery1", "Empty Cart");
+  await put("/cart", { items: [] }, sessionCookies(emptyCandidate));
+  await query("UPDATE cart_snapshots SET updated_at = $1 WHERE user_id = $2", [twoHoursAgo, emptyCandidate.body.user.id]);
+  resendMock.resetSentEmails();
+  await checkForAbandonedCarts();
+  check("an old but genuinely EMPTY cart doesn't get emailed -- nothing to abandon", resendMock.getSentEmails().filter((e) => e.to === "empty-cart@morningaroma.local").length === 0);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();

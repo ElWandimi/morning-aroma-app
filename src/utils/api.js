@@ -239,4 +239,6 @@ export const api = {
   getSettings: () => request("/settings"),
   updateSettings: (patch) =>
     request("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+  syncCart: (items) =>
+    request("/cart", { method: "PUT", body: JSON.stringify({ items }) }),
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from "react";
+import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 import { COUNTRY_HISTORY, DEFAULT_PRODUCT_SIZE, DEFAULT_SETTINGS, DEMO_ADMIN, KNOWN_ROUTES, PAGE_TO_SLUG, priceForSize, SLUG_TO_PAGE } from "../data";
 import { fmtPrice, getStorageConsent, logPageView, storage } from "../utils/helpers";
 import { api } from "../utils/api";
@@ -415,6 +415,53 @@ export function CartProvider({ children }) {
   ); // { id, size, qty }
   const [open, setOpen] = useState(false);
   useEffect(() => { if (getStorageConsent() === "accepted") storage.set("ma_cart", items); }, [items]);
+  const { user } = useAuth();
+  // Real, periodic sync of the actual cart to the backend -- see routes/cart.js's own comment
+  // for the full reasoning (this table only exists so the abandoned-cart email job has real,
+  // server-side data to check; the cart displayed here and read by every other part of this app
+  // still comes entirely from `items`/localStorage above, unchanged). Only for a real,
+  // signed-in user -- there's no real email to send an anonymous guest's cart reminder to, so
+  // syncing one would just be wasted real backend work.
+  //
+  // itemsRef mirrors `items` without being a real dependency of the interval effect below -- a
+  // genuinely important, real distinction: if the effect depended on `items` directly, it would
+  // tear down and recreate its setInterval on every single cart edit (add/remove/qty change),
+  // which defeats the whole point of a 2-minute throttle (confirmed by tracing through: an
+  // earlier version of this code did exactly that, and would have synced on nearly every cart
+  // edit instead of genuinely every 2 minutes). The ref lets the interval's own callback always
+  // read the CURRENT real cart contents when it fires, without the interval itself restarting
+  // every time those contents change.
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+
+  const lastSyncedRef = useRef(null);
+  useEffect(() => {
+    if (!user) { lastSyncedRef.current = null; return; }
+    const syncIfChanged = () => {
+      const current = itemsRef.current;
+      const snapshot = JSON.stringify(current);
+      // A genuinely empty cart still needs syncing WHEN it represents a real change (the
+      // customer just cleared it, or checked out) -- skipping it outright would leave a stale,
+      // non-empty snapshot on the backend forever, and the abandoned-cart job would incorrectly
+      // email someone about coffee they no longer have in their real cart. Only skipped when
+      // it's ALREADY empty on both sides (lastSyncedRef holds "[]" from a previous real sync, or
+      // is still null and current is also empty) -- that's genuinely nothing worth a real
+      // network call for.
+      if (snapshot === lastSyncedRef.current) return;
+      if (current.length === 0 && lastSyncedRef.current === null) return;
+      api.syncCart(current).then(() => { lastSyncedRef.current = snapshot; }).catch(() => {
+        // A real, transient sync failure isn't worth surfacing to the customer at all -- this
+        // is invisible, best-effort backend bookkeeping for a later email reminder, not
+        // something that should ever interrupt or alarm someone who's just trying to shop.
+        // lastSyncedRef intentionally NOT updated on failure, so the next interval tick
+        // genuinely retries this same real state rather than silently giving up on it.
+      });
+    };
+    syncIfChanged(); // Real, immediate sync on sign-in/mount too, not just the first interval tick 2 minutes later -- someone who was already shopping as a guest and then signs in shouldn't have to wait a real 2 minutes before their existing cart is even known to the backend at all.
+    const interval = setInterval(syncIfChanged, 2 * 60 * 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user && user.email]);
   const { getPriceForSize, getStock } = useAdmin();
   // size defaults to DEFAULT_PRODUCT_SIZE ("1kg") so every existing call site that doesn't yet
   // know about sizes (any add(id) call without a size argument) keeps behaving exactly as it did

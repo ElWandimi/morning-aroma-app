@@ -213,3 +213,11 @@ CREATE TABLE email_verification_codes (
 );
 
 CREATE INDEX email_verification_codes_user_id_idx ON email_verification_codes (user_id);
+
+-- See migrations/024_cart_snapshots.sql for the real, full reasoning.
+CREATE TABLE cart_snapshots (
+  user_id                  TEXT PRIMARY KEY,
+  items                    TEXT NOT NULL DEFAULT '[]',
+  updated_at               TEXT NOT NULL DEFAULT (datetime('now')),
+  abandoned_email_sent_at  TEXT
+);
