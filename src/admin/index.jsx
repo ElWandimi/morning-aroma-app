@@ -1529,6 +1529,62 @@ export function AdminGreenOrders() {
   );
 }
 
+export function AdminCareerApplications() {
+  const { careerApplications, careerApplicationsLoading, careerApplicationsError, refetchCareerApplications, setCareerApplicationStatus } = useAdmin();
+  const { addToast } = useToast();
+  const STATUSES = ["New", "Reviewed", "Archived"];
+  const fmtTime = (iso) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  if (careerApplicationsLoading) return <p className="hint">Loading applications…</p>;
+  if (careerApplicationsError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load applications: {careerApplicationsError}</p>
+        <button className="btn-outline" onClick={refetchCareerApplications}>Try again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="matched-head">Career applications ({careerApplications.length})</h3>
+      {careerApplications.length === 0 ? (
+        <p className="hint">No applications yet — they'll appear here when someone applies from the Careers page.</p>
+      ) : (
+        <div className="admin-card-list">
+          {careerApplications.map((a) => (
+            <div key={a.id} className="admin-card">
+              <div className="admin-card-head">
+                <strong>{a.name}</strong>
+                <select
+                  value={a.status}
+                  onChange={async (e) => {
+                    const result = await setCareerApplicationStatus(a.id, e.target.value);
+                    if (result.ok) addToast(`Marked ${e.target.value}`);
+                    else addToast(`Couldn't update status: ${result.error}`);
+                  }}
+                >
+                  {STATUSES.map((st) => (<option key={st} value={st}>{st}</option>))}
+                </select>
+              </div>
+              <p className="hint">
+                <a href={`mailto:${a.email}`}>{a.email}</a>
+                {a.location && ` · ${a.location}`}
+                {a.roleInterest && ` · interested in: ${a.roleInterest}`}
+                {" · "}{fmtTime(a.createdAt)}
+              </p>
+              <p className="journal-note">{a.message}</p>
+              {a.resumeUrl && (
+                <a href={a.resumeUrl} target="_blank" rel="noopener noreferrer" className="link-btn">View résumé / portfolio ↗</a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminLiveChat() {
   const { liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, refetchLiveChatsSilently, updateChatStatus, replyToLiveChat } = useAdmin();
   const { addToast } = useToast();
@@ -2558,7 +2614,7 @@ function AdminSettingsForm() {
       <h4 className="admin-subhead">Notifications</h4>
       <p className="hint" style={{ marginTop: -4 }}>Which pending-item types show up in the notification bell (top right of any admin page). A section's sidebar badge is unaffected by this — muting a type here only controls the bell.</p>
       <div className="admin-tag-checks">
-        {["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"].map((type) => (
+        {["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat", "Career Applications"].map((type) => (
           <label key={type} className={`chip ${draft.notificationTypes.includes(type) ? "chip-active" : ""}`}>
             <input
               type="checkbox"
@@ -2640,7 +2696,7 @@ function NotificationBell({ pendingCount, visibleSections, notificationTypes, on
 export function AdminDashboard() {
   const { user } = useAuth();
   const { go } = useRoute();
-  const { quotations, serviceInquiries, greenOrders, feedbackList, liveChats, settings, realOrders } = useAdmin();
+  const { quotations, serviceInquiries, greenOrders, feedbackList, liveChats, careerApplications, settings, realOrders } = useAdmin();
   const [section, setSection] = useState("Overview");
   const [authView, setAuthView] = useState(null); // null | "signin" | "signup"
 
@@ -2655,6 +2711,7 @@ export function AdminDashboard() {
       case "Green Orders": return greenOrders.filter((o) => o.status === "New").length;
       case "Feedback": return feedbackList.filter((f) => !f.reviewed).length;
       case "Live Chat": return liveChats.filter((c) => c.status === "Open").length;
+      case "Career Applications": return careerApplications.filter((a) => a.status === "New").length;
       default: return 0;
     }
   };
@@ -2729,6 +2786,7 @@ export function AdminDashboard() {
         {section === "Service Inquiries" && <AdminServiceInquiries />}
         {section === "Green Orders" && <AdminGreenOrders />}
         {section === "Live Chat" && <AdminLiveChat />}
+        {section === "Career Applications" && <AdminCareerApplications />}
         {section === "Feedback" && <AdminFeedback />}
         {section === "Newsletter" && <AdminNewsletter />}
         {section === "Live Messages" && <AdminLiveMessages />}

@@ -1573,6 +1573,30 @@ async function main() {
   check("welcome email's real HTML excludes an everyday-tier product -- premium only, same as the real homepage", !featuredHtml.includes("Welcome Test Everyday"));
   check("welcome email's real HTML shows the product's actual real price", featuredHtml.includes("$22.00"));
 
+  console.log("\nReal career applications -- previously nothing existed at all (no careers page, no route). Anonymous, no account required, matching this app's own established real pattern for public submissions:");
+  const careerApply = await post("/career-applications", { name: "Jane Applicant", email: "jane-applicant@morningaroma.local", location: "Remote", roleInterest: "Roasting", message: "I'd genuinely love to work with you.", resumeUrl: "https://linkedin.com/in/jane-applicant" });
+  check("returns 201", careerApply.status === 201);
+  check("anonymous submission needs no auth", careerApply.body.application && careerApply.body.application.status === "New");
+
+  const careerNoAuthList = await get("/career-applications");
+  check("anonymous caller can't list applications -- this is a real, admin-only inbox, not something a visitor can browse", careerNoAuthList.status === 401);
+
+  const careerMissingMessage = await post("/career-applications", { name: "Test", email: "test@morningaroma.local" });
+  check("a real, required field (message) is genuinely enforced", careerMissingMessage.status === 400);
+
+  const careerBadResume = await post("/career-applications", { name: "Test", email: "test@morningaroma.local", message: "hi", resumeUrl: "not-a-real-url" });
+  check("a malformed resumeUrl is genuinely rejected, not silently accepted", careerBadResume.status === 400);
+
+  const careerList = await get("/career-applications", token);
+  check("a real admin can list applications", careerList.status === 200 && careerList.body.applications.some((a) => a.name === "Jane Applicant"));
+
+  const careerAppId = careerList.body.applications.find((a) => a.name === "Jane Applicant").id;
+  const careerStatusUpdate = await patch(`/career-applications/${careerAppId}/status`, { status: "Reviewed" }, token);
+  check("a real admin can genuinely mark an application Reviewed", careerStatusUpdate.status === 200 && careerStatusUpdate.body.application.status === "Reviewed");
+
+  const careerBadStatus = await patch(`/career-applications/${careerAppId}/status`, { status: "NotARealStatus" }, token);
+  check("an invalid status value is genuinely rejected", careerBadStatus.status === 400);
+
   console.log("\nReal cart sync + abandoned-cart detection -- PUT /cart persists a customer's real cart server-side (it used to live only in localStorage, never touching the backend at all), and the scheduled job (utils/abandonedCartJob.js) emails a customer whose real, synced cart has sat untouched for 1hr+:");
   const { checkForAbandonedCarts } = require("../src/utils/abandonedCartJob");
   // Set explicitly, not assumed inherited from an earlier part of this file -- registerAndVerify

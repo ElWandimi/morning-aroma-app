@@ -39,7 +39,7 @@ const FALLBACK_SETTINGS = {
   bankDetails: "",
   instagramHandle: "",
   facebookUrl: "",
-  notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat"],
+  notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat", "Career Applications"],
   // A real, reasonable starting value -- roughly what a year of two or three individual courses
   // would cost combined, making lifetime access a genuine value proposition rather than an
   // arbitrary placeholder. Admin-editable from here on, same as every other setting.

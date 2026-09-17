@@ -185,6 +185,12 @@ export const api = {
     request(`/live-chat/${chatId}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
   setLiveChatStatus: (chatId, status) =>
     request(`/live-chat/${chatId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  submitCareerApplication: (application) =>
+    request("/career-applications", { method: "POST", body: JSON.stringify(application) }),
+  getCareerApplications: () =>
+    request("/career-applications"),
+  setCareerApplicationStatus: (id, status) =>
+    request(`/career-applications/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getCourses: () => request("/courses"),
   createCourse: (course) =>
     request("/courses", { method: "POST", body: JSON.stringify(course) }),

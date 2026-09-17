@@ -33,6 +33,7 @@ const HistoryPage = lazy(() => import("./pages/History").then((m) => ({ default:
 const JourneyPage = lazy(() => import("./pages/Journey").then((m) => ({ default: m.JourneyPage })));
 const ContactPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.ContactPage })));
 const FaqPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.FaqPage })));
+const CareersPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.CareersPage })));
 const PrivacyPolicyPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.PrivacyPolicyPage })));
 const SourceLibraryPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.SourceLibraryPage })));
 const TermsOfServicePage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.TermsOfServicePage })));
@@ -190,6 +191,7 @@ export function AppShell() {
             {route.page === "searchresults" && <SearchResultsPage id={route.id} />}
             {route.page === "faq" && <FaqPage />}
             {route.page === "contact" && <ContactPage />}
+            {route.page === "careers" && <CareersPage />}
             {route.page === "sourcelibrary" && <SourceLibraryPage />}
             {route.page === "privacy" && <PrivacyPolicyPage />}
             {route.page === "terms" && <TermsOfServicePage />}

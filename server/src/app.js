@@ -19,6 +19,7 @@ const feedbackRoutes = require("./routes/feedback");
 const newsletterRoutes = require("./routes/newsletter");
 const liveChatRoutes = require("./routes/live-chat");
 const cartRoutes = require("./routes/cart");
+const careerApplicationsRoutes = require("./routes/careerApplications");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -97,6 +98,7 @@ app.use("/feedback", feedbackRoutes);
 app.use("/newsletter", newsletterRoutes);
 app.use("/live-chat", liveChatRoutes);
 app.use("/cart", cartRoutes);
+app.use("/career-applications", careerApplicationsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

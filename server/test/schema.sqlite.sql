@@ -221,3 +221,18 @@ CREATE TABLE cart_snapshots (
   updated_at               TEXT NOT NULL DEFAULT (datetime('now')),
   abandoned_email_sent_at  TEXT
 );
+
+-- See migrations/025_career_applications.sql for the real, full reasoning.
+CREATE TABLE career_applications (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  email          TEXT NOT NULL,
+  location       TEXT,
+  role_interest  TEXT,
+  message        TEXT NOT NULL,
+  resume_url     TEXT,
+  status         TEXT NOT NULL DEFAULT 'New',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_career_applications_status ON career_applications (status);

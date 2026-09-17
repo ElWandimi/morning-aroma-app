@@ -231,6 +231,76 @@ export function ContactPage() {
   );
 }
 
+export function CareersPage() {
+  const { user } = useAuth();
+  const { submitCareerApplication } = useAdmin();
+  const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [name, setName] = useState(user?.name || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [location, setLocation] = useState("");
+  const [roleInterest, setRoleInterest] = useState("");
+  const [message, setMessage] = useState("");
+  const [resumeUrl, setResumeUrl] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError("");
+    const result = await submitCareerApplication({ name, email, location, roleInterest, message, resumeUrl });
+    setSubmitting(false);
+    if (result.ok) setSent(true);
+    else setError(result.error || "Something went wrong -- please try again.");
+  };
+
+  return (
+    <div className="shop-page">
+      <div className="shop-head">
+        <p className="eyebrow">join us</p>
+        <h1>Careers</h1>
+        <p className="shop-sub">
+          We're a small, real team working on coffee — roasting, sourcing, brewing education, and
+          the actual work of getting a fair-priced bag to your door. We're genuinely global: our
+          coffee moves through farms, ports, and roasteries on several continents, and we're open
+          to real people wherever they actually are.
+        </p>
+      </div>
+
+      <div className="checkout-form" style={{ maxWidth: 560 }}>
+        <p style={{ marginBottom: 24, color: "var(--espresso)", lineHeight: 1.6 }}>
+          We don't have any open roles posted right now -- we're honest about that rather than
+          listing positions that don't exist. But if you think you'd genuinely add something real
+          to what we're building, we'd like to hear from you. Tell us who you are, what you're
+          interested in, and why -- we read every real message that comes through here, the same
+          as our general contact form.
+        </p>
+
+        {sent ? (
+          <p className="form-success">Thanks -- your message has reached us. There's no open role to reply about right now, but we'll genuinely keep it on file and reach out if something real opens up that fits.</p>
+        ) : (
+          <form onSubmit={submit}>
+            <label htmlFor="careers-name">Name</label>
+            <input id="careers-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={120} required />
+            <label htmlFor="careers-email">Email</label>
+            <input id="careers-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" maxLength={254} required />
+            <label htmlFor="careers-location">Where are you based? (optional)</label>
+            <input id="careers-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, country, or 'remote' -- wherever's real for you" maxLength={200} />
+            <label htmlFor="careers-role">What kind of work interests you? (optional)</label>
+            <input id="careers-role" value={roleInterest} onChange={(e) => setRoleInterest(e.target.value)} placeholder="Roasting, sourcing, customer care, marketing, anything else" maxLength={200} />
+            <label htmlFor="careers-message">Tell us about yourself</label>
+            <textarea id="careers-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={6} required maxLength={4000} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--gold)", fontFamily: "inherit", boxSizing: "border-box" }} />
+            <label htmlFor="careers-resume">Link to your résumé, portfolio, or LinkedIn (optional)</label>
+            <input id="careers-resume" value={resumeUrl} onChange={(e) => setResumeUrl(e.target.value)} type="url" placeholder="https://" maxLength={500} />
+            {error && <p className="form-error" style={{ marginTop: 10 }}>{error}</p>}
+            <button className="btn-primary full" type="submit" disabled={submitting} style={{ marginTop: 14 }}>{submitting ? "Sending…" : "Send"}</button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SourceLibraryPage() {
   const { go } = useRoute();
   // getPrice was never actually imported here at all -- a real, pre-existing bug that would

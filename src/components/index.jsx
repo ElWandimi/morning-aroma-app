@@ -1250,6 +1250,7 @@ export function Footer() {
           <a href={pathFor("rituals")} onClick={(e) => { e.preventDefault(); go("rituals"); }}>Global Rituals</a>
           <a href={pathFor("promise")} onClick={(e) => { e.preventDefault(); go("promise"); }}>Our Promise</a>
           <a href={pathFor("faq")} onClick={(e) => { e.preventDefault(); go("faq"); }}>FAQ</a>
+          <a href={pathFor("careers")} onClick={(e) => { e.preventDefault(); go("careers"); }}>Careers</a>
         </div>
         <div className="footer-form">
           <h4>Get in Touch</h4>

@@ -914,6 +914,47 @@ export function AdminDataProvider({ children }) {
     else setLiveChatsLoading(false);
   }, [user && user.role]);
 
+  // Real, backend-persisted career applications -- see migrations/025_career_applications.sql
+  // for the full reasoning. Public submission needs no auth (submitCareerApplication below);
+  // only the admin-facing list/status-update needs it, same real split as live chat.
+  const [careerApplications, setCareerApplications] = useState([]);
+  const [careerApplicationsLoading, setCareerApplicationsLoading] = useState(true);
+  const [careerApplicationsError, setCareerApplicationsError] = useState("");
+  const refetchCareerApplications = () => {
+    if (!user) { setCareerApplicationsLoading(false); return; }
+    setCareerApplicationsLoading(true);
+    setCareerApplicationsError("");
+    api.getCareerApplications()
+      .then((body) => setCareerApplications(pluck(body, "applications", { array: true })))
+      .catch((e) => { if (e.status !== 403) setCareerApplicationsError(e.message); })
+      .finally(() => setCareerApplicationsLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchCareerApplications();
+    else setCareerApplicationsLoading(false);
+  }, [user && user.role]);
+  // A real, honest, returned {ok, error} shape -- same convention as every other real submit
+  // function in this file (addFeedback, startChat, etc.) -- lets the real careers page show its
+  // own genuine success/error state without this function needing to know anything about how
+  // it's displayed.
+  const submitCareerApplication = async (application) => {
+    try {
+      const { application: created } = await api.submitCareerApplication(application);
+      return { ok: true, application: created };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const setCareerApplicationStatus = async (id, status) => {
+    try {
+      const { application } = await api.setCareerApplicationStatus(id, status);
+      setCareerApplications((prev) => prev.map((a) => (a.id === id ? application : a)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   const [momentOverrides, setMomentOverrides] = useState({});
   const [courseOverrides, setCourseOverrides] = useState({});
   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
@@ -1528,6 +1569,7 @@ export function AdminDataProvider({ children }) {
         quotations, addQuotation, updateQuotationStatus,
         serviceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
         liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, refetchLiveChatsSilently,
+        careerApplications, careerApplicationsLoading, careerApplicationsError, refetchCareerApplications, submitCareerApplication, setCareerApplicationStatus,
         startChat, sendLiveChatGreeting, sendChatMessage, replyToLiveChat, updateChatStatus,
         feedbackList, addFeedback, toggleFeedbackReviewed,
         newsletterSubscribers, newsletterSubscribersLoading, addNewsletterSubscriber, refetchNewsletterSubscribers,
