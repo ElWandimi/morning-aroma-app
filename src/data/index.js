@@ -1144,8 +1144,9 @@ export const DEFAULT_SETTINGS = {
   // Empty by default -- printed on invoice/receipt footers only when an admin has actually
   // filled in real bank/payment details for manual-payment invoices; never fabricated.
   bankDetails: "",
-  instagramHandle: "",
+  instagramHandle: "morningaromarosters",
   facebookUrl: "",
+  twitterUrl: "https://x.com/MorningAromaR",
   // Which pending-item types actually generate a bell notification for admin -- all on by
   // default, but an admin who doesn't want to be interrupted by, say, live chat pings can turn
   // just that one off without losing the others.

@@ -2960,12 +2960,15 @@ function AdminSettingsForm() {
       <p className="hint" style={{ marginTop: 4 }}>One-time payment for permanent access to every Academy course, including ones added later. Individual course monthly/annual prices are set per-course under Content → Courses.</p>
 
       <h4 className="admin-subhead">Social links</h4>
-      <label className="filter-label" htmlFor="set-instagram">Instagram handle (optional)</label>
+      <label className="filter-label" htmlFor="set-twitter">X (Twitter) URL (optional)</label>
+      <input id="set-twitter" type="url" value={draft.twitterUrl} onChange={(e) => setDraft({ ...draft, twitterUrl: e.target.value })} maxLength={200} placeholder="https://x.com/…" />
+
+      <label className="filter-label" htmlFor="set-instagram" style={{ marginTop: 16 }}>Instagram handle (optional)</label>
       <input id="set-instagram" value={draft.instagramHandle} onChange={(e) => setDraft({ ...draft, instagramHandle: e.target.value.replace(/^@/, "") })} maxLength={60} placeholder="morningaroma (without the @)" />
 
       <label className="filter-label" htmlFor="set-facebook" style={{ marginTop: 16 }}>Facebook page URL (optional)</label>
       <input id="set-facebook" type="url" value={draft.facebookUrl} onChange={(e) => setDraft({ ...draft, facebookUrl: e.target.value })} maxLength={200} placeholder="https://facebook.com/…" />
-      <p className="hint" style={{ marginTop: 4 }}>Leave either blank to hide that icon from the footer.</p>
+      <p className="hint" style={{ marginTop: 4 }}>Leave any of these blank to hide that icon from the footer.</p>
 
       <h4 className="admin-subhead">Notifications</h4>
       <p className="hint" style={{ marginTop: -4 }}>Which pending-item types show up in the notification bell (top right of any admin page). A section's sidebar badge is unaffected by this — muting a type here only controls the bell.</p>

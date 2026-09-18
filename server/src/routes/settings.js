@@ -12,7 +12,7 @@ const router = express.Router();
 const VALID_KEYS = new Set([
   "tagline", "announcementEnabled", "announcementText", "contactEmail", "whatsappNumber",
   "phoneNumber", "businessName", "businessAddress", "taxId", "taxRatePercent", "invoiceNotes",
-  "bankDetails", "instagramHandle", "facebookUrl", "notificationTypes",
+  "bankDetails", "instagramHandle", "facebookUrl", "twitterUrl", "notificationTypes",
   "academyLifetimePriceCents", "kenyaLiveMessages",
 ]);
 
@@ -37,8 +37,13 @@ const FALLBACK_SETTINGS = {
   // Empty by default, same as taxId -- printed on an invoice's footer only when an admin has
   // actually filled in real bank/payment details; never fabricated here or anywhere else.
   bankDetails: "",
-  instagramHandle: "",
+  instagramHandle: "morningaromarosters",
   facebookUrl: "",
+  // Full URL, same real convention as facebookUrl (not a bare handle like instagramHandle) --
+  // this app has no separate "x.com" vs "twitter.com" handling to worry about, so a full URL is
+  // the simplest, most honest real choice: it just works, unchanged, however X's own domain
+  // conventions shift in the future.
+  twitterUrl: "https://x.com/MorningAromaR",
   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat", "Career Applications"],
   // A real, reasonable starting value -- roughly what a year of two or three individual courses
   // would cost combined, making lifetime access a genuine value proposition rather than an

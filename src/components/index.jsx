@@ -1219,8 +1219,11 @@ export function Footer() {
               (confirmed: this dev instance has neither set, and the column visibly had ~350px of
               nothing below the tagline before the legal row). Explore/Shop below now fill that
               space with real, useful links regardless of whether social links exist. */}
-          {(settings.instagramHandle || settings.facebookUrl) && (
+          {(settings.instagramHandle || settings.facebookUrl || settings.twitterUrl) && (
             <div className="footer-social">
+              {settings.twitterUrl && (
+                <a href={settings.twitterUrl} target="_blank" rel="noopener noreferrer">X</a>
+              )}
               {settings.instagramHandle && (
                 <a href={`https://instagram.com/${settings.instagramHandle}`} target="_blank" rel="noopener noreferrer">Instagram</a>
               )}
