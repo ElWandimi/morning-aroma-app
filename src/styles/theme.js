@@ -303,11 +303,19 @@ a { color: inherit; text-decoration: none; }
 .everyday-photo { height: 100px; border-radius: 10px; background: linear-gradient(135deg, var(--almond), var(--gold)); background-size: contain; background-repeat: no-repeat; background-position: center; margin-bottom: 10px; position: relative; }
 .everyday-card p { font-size: 0.9rem; color: #6b5647; margin: 6px 0 12px; }
 
-/* Real blog card/post styles -- BlogIndexPage / BlogPostPage (src/pages/Blog.jsx). */
-.blog-card-photo-wrap { display: block; width: 100%; aspect-ratio: 16/10; border-radius: 10px; overflow: hidden; margin-bottom: 4px; }
-.blog-card-photo { width: 100%; height: 100%; object-fit: cover; }
-.blog-post-cover-wrap { display: block; width: 100%; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; margin: 20px 0 32px; }
-.blog-post-cover { width: 100%; height: 100%; object-fit: cover; }
+/* Real blog card/post styles -- BlogIndexPage / BlogPostPage (src/pages/Blog.jsx).
+   aspect-ratio: 3/2 (not a wider 16/9 or 16/10) -- confirmed directly against this app's own real
+   Unsplash images (COUNTRY_JOURNEY_PHOTO, MARQUEE_IMAGES): every one comes back from Unsplash's
+   own crop parameter at a real, fixed 3:2 (1.5:1) ratio. A wider target box would trim real,
+   meaningful height off any of them regardless of which one's chosen, which is exactly what
+   produced a real, genuinely over-cropped, "stretched-feeling" look on the very first published
+   post -- not a CSS bug (object-fit: cover was working correctly), a real mismatch between the
+   target ratio and what these source images actually are. Matching the real, native ratio means
+   object-fit: cover does no cropping at all for any image from this same real library. */
+.blog-card-photo-wrap { display: block; width: 100%; aspect-ratio: 3/2; border-radius: 10px; overflow: hidden; margin-bottom: 4px; }
+.blog-card-photo { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.blog-post-cover-wrap { display: block; width: 100%; aspect-ratio: 3/2; border-radius: 14px; overflow: hidden; margin: 20px 0 32px; }
+.blog-post-cover { width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .blog-post-page { max-width: 760px; margin: 0 auto; }
 /* Mirrors blog-editor-body's own real typography (src/admin/index.jsx's BlogEditor) so what an
    admin sees while writing genuinely matches what a visitor reads -- same font, same sizing, same
