@@ -335,7 +335,8 @@ a { color: inherit; text-decoration: none; }
 .moments-inner { max-width: 1200px; margin: 0 auto; }
 .moment-card { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 24px; text-align: center; transition: transform .15s ease, box-shadow .15s ease; }
 .moment-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(62,44,35,0.1); }
-.moment-icon { font-size: 2rem; }
+.moment-icon { font-size: 2rem; display: inline-flex; color: var(--terracotta-btn); }
+.moment-icon svg { display: block; }
 .moment-card h3 { font-size: 1rem; margin: 10px 0 6px; }
 .moment-card a { font-weight: 700; color: var(--chestnut); }
 
@@ -372,13 +373,19 @@ a { color: inherit; text-decoration: none; }
    no background of its own beyond the plain cream page) so it reads as a quiet confirmation line,
    not a second content section competing with the hero above it. */
 .trust-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; padding: 16px 24px; max-width: 1100px; margin: 0 auto; }
-.trust-bar-item { font-size: 0.82rem; font-weight: 600; color: var(--almond-text); white-space: nowrap; }
+.trust-bar-item { display: inline-flex; align-items: center; gap: 7px; font-size: 0.82rem; font-weight: 600; color: var(--almond-text); white-space: nowrap; }
+.trust-bar-item svg { flex-shrink: 0; color: var(--terracotta-btn); }
 
 /* trust grid (denser icon-tile restyle of trust-bar's same 4 items) */
 .trust-grid-section { padding: 50px 24px; background: var(--cream); }
 .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 20px; max-width: 1100px; margin: 0 auto; text-align: center; }
 .trust-grid-tile { padding: 24px 16px; }
-.trust-grid-icon { font-size: 2rem; display: block; margin-bottom: 10px; }
+.trust-grid-icon {
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 14px;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--steam); color: var(--terracotta-btn);
+}
+.trust-grid-icon svg { width: 22px; height: 22px; }
 .trust-grid-tile h3 { font-size: 1rem; color: var(--chestnut); margin: 0 0 4px; }
 .trust-grid-tile p { font-size: 0.85rem; color: #6b5647; margin: 0; }
 

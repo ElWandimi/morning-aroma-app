@@ -5,6 +5,46 @@ import { COUNTRIES, COUNTRY_JOURNEY_PHOTO, MOMENTS } from "../data";
 import { slugify, activateOnEnterOrSpace, getProductPhotoUrl } from "../utils/helpers";
 import { usePrefersReducedMotion } from "../hooks";
 
+// Small, single-weight line icons matching the site's own hairline aesthetic (same stroke
+// treatment as the footer's X/Instagram/Facebook marks already on the page) -- replacing the
+// raw platform emoji these two sections used to render, which varies in style, weight and color
+// across operating systems and reads as an unfinished placeholder rather than a designed detail.
+function IconTruck() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 7h11v9H2z" />
+      <path d="M13 10h4l4 3v3h-8z" />
+      <circle cx="6.5" cy="18" r="1.8" />
+      <circle cx="17" cy="18" r="1.8" />
+    </svg>
+  );
+}
+function IconLock() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+      <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
+    </svg>
+  );
+}
+function IconCup() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" />
+      <path d="M17 9.5h1.5a2.5 2.5 0 0 1 0 5H17" />
+      <path d="M8 4.2c-.7.6-.7 1.2 0 1.8M11.5 4.2c-.7.6-.7 1.2 0 1.8" />
+    </svg>
+  );
+}
+function IconGlobe() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.4 3.6 5.2 3.6 8.5s-1.2 6.1-3.6 8.5c-2.4-2.4-3.6-5.2-3.6-8.5S9.6 5.9 12 3.5z" />
+    </svg>
+  );
+}
+
 export function TrustBar() {
   // Every item here is a real, already-substantiated fact elsewhere in the app -- not invented
   // marketing copy. $60 matches the live announcement bar's free-shipping threshold; Paystack is
@@ -15,16 +55,16 @@ export function TrustBar() {
   // shorter teaser of the same claim SourceTrust makes further down the page) fills that slot
   // honestly instead.
   const items = [
-    { icon: "🚚", text: "Free shipping over $60" },
-    { icon: "🔒", text: "Secure checkout via Paystack" },
-    { icon: "☕", text: "Small-batch roasted, shipped within 2 weeks" },
-    { icon: "🌍", text: "Traceable to origin" },
+    { Icon: IconTruck, text: "Free shipping over $60" },
+    { Icon: IconLock, text: "Secure checkout via Paystack" },
+    { Icon: IconCup, text: "Small-batch roasted, shipped within 2 weeks" },
+    { Icon: IconGlobe, text: "Traceable to origin" },
   ];
   return (
     <div className="trust-bar">
       {items.map((item) => (
         <span key={item.text} className="trust-bar-item">
-          <span aria-hidden="true">{item.icon}</span> {item.text}
+          <item.Icon /> {item.text}
         </span>
       ))}
     </div>
@@ -128,17 +168,17 @@ export function TrustGrid() {
   // icon-tile layout. No new claims, no new items; this and TrustBar intentionally share one
   // source of truth so a future correction to either only has to happen once.
   const items = [
-    { icon: "🚚", title: "Free Shipping", text: "On orders over $60" },
-    { icon: "🔒", title: "Secure Checkout", text: "Paystack-protected payments" },
-    { icon: "☕", title: "Small-Batch Roasted", text: "Shipped within 2 weeks" },
-    { icon: "🌍", title: "Traceable Origin", text: "Every bag names its farm" },
+    { Icon: IconTruck, title: "Free Shipping", text: "On orders over $60" },
+    { Icon: IconLock, title: "Secure Checkout", text: "Paystack-protected payments" },
+    { Icon: IconCup, title: "Small-Batch Roasted", text: "Shipped within 2 weeks" },
+    { Icon: IconGlobe, title: "Traceable Origin", text: "Every bag names its farm" },
   ];
   return (
     <section className="trust-grid-section">
       <div className="trust-grid">
         {items.map((item) => (
           <div key={item.title} className="trust-grid-tile">
-            <span className="trust-grid-icon" aria-hidden="true">{item.icon}</span>
+            <span className="trust-grid-icon" aria-hidden="true"><item.Icon /></span>
             <h3>{item.title}</h3>
             <p>{item.text}</p>
           </div>
@@ -373,6 +413,38 @@ export function EverydayTier() {
   );
 }
 
+// Line-icon stand-ins for MOMENTS' own emoji field (kept as-is in src/data/index.js -- other
+// pages such as Moments.jsx and BrewGuides.jsx render that emoji at a size/context where it
+// still reads fine, so it isn't touched there). Keyed by the same real moment ids, with the
+// platform-emoji look swapped for the homepage's hairline-icon set only.
+const MOMENT_ICONS = {
+  "first-light": () => (
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v4M4.2 11h1.6M18.2 11h1.6M6 6.5l1.2 1.2M18 6.5l-1.2 1.2" />
+      <path d="M5 16a7 7 0 0 1 14 0" />
+      <path d="M2.5 20h19" />
+    </svg>
+  ),
+  "the-hustle": () => (
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M13 2 4.5 13.5H11L10.5 22 19.5 10H13z" />
+    </svg>
+  ),
+  "the-reset": () => (
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 21c-4.5-1-7-4.7-7-9.2C5 8 7.6 4.7 12 3c4.4 1.7 7 5 7 8.8 0 4.5-2.5 8.2-7 9.2z" />
+      <path d="M12 21V9" />
+    </svg>
+  ),
+  comfort: () => (
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 21h6M12 21V9" />
+      <path d="M8.5 9a3.5 3.5 0 0 1 7 0c0 1.9-1.6 3.4-3.5 5-1.9-1.6-3.5-3.1-3.5-5z" />
+      <path d="M12 2v2" />
+    </svg>
+  ),
+};
+
 export function MomentsSnapshot() {
   const { go } = useRoute();
   return (
@@ -383,13 +455,16 @@ export function MomentsSnapshot() {
           <p className="section-sub">Every hour of the day has its own cup. Find the one that matches yours.</p>
         </div>
         <div className="grid4">
-          {MOMENTS.map((m) => (
-            <div key={m.id} className="moment-card" onClick={() => go("moment", { id: m.id })} style={{ cursor: "pointer" }}>
-              <span className="moment-icon">{m.icon}</span>
-              <h3>{m.name}</h3>
-              <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }} aria-label={`Explore ${m.name}`}>Explore →</a>
-            </div>
-          ))}
+          {MOMENTS.map((m) => {
+            const MomentIcon = MOMENT_ICONS[m.id];
+            return (
+              <div key={m.id} className="moment-card" onClick={() => go("moment", { id: m.id })} style={{ cursor: "pointer" }}>
+                <span className="moment-icon">{MomentIcon ? <MomentIcon /> : m.icon}</span>
+                <h3>{m.name}</h3>
+                <a href={pathFor("moment", { id: m.id })} onClick={(e) => { e.preventDefault(); go("moment", { id: m.id }); }} aria-label={`Explore ${m.name}`}>Explore →</a>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>
