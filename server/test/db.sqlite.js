@@ -15,6 +15,11 @@ db.exec(fs.readFileSync(path.join(__dirname, "schema.sqlite.sql"), "utf8"));
 // test assertions reading a formatted "MA-<number>" look the same shape as they would in
 // production, not because the actual number matters for anything.
 let nextOrderNumber = 1000;
+// Same real reasoning, for the three real sequences migrations/027 added on the Postgres side.
+let nextQuotationId = 1000;
+let nextServiceInquiryId = 1000;
+let nextGreenOrderId = 1000;
+let nextContactMessageId = 1000;
 
 // The handful of real Postgres/SQLite dialect differences this test setup needs to bridge:
 // - $1, $2, ... placeholders -> SQLite's ?
@@ -154,6 +159,38 @@ async function query(text, params = []) {
       "INSERT INTO blog_posts (id, slug, title, excerpt, cover_image_url, content_html, author_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
     );
     values = [id, ...values, now, now];
+  } else if (/INSERT INTO quotations/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = `Q-${nextQuotationId++}`;
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO quotations (name, email, variety, quantity, message) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      "INSERT INTO quotations (id, name, email, variety, quantity, message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
+    );
+    values = [id, ...values, createdAt];
+  } else if (/INSERT INTO service_inquiries/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = `SVC-${nextServiceInquiryId++}`;
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO service_inquiries (name, email, company, interest, message) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      "INSERT INTO service_inquiries (id, name, email, company, interest, message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
+    );
+    values = [id, ...values, createdAt];
+  } else if (/INSERT INTO green_orders/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = `GB-${nextGreenOrderId++}`;
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO green_orders (name, email, company, message, bean_id, bean_name, quantity_kg, price_per_kg_cents_at_order, total_cents) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+      "INSERT INTO green_orders (id, name, email, company, message, bean_id, bean_name, quantity_kg, price_per_kg_cents_at_order, total_cents, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+    );
+    values = [id, ...values, createdAt];
+  } else if (/INSERT INTO contact_messages/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = `MSG-${nextContactMessageId++}`;
+    const createdAt = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO contact_messages (name, email, message) VALUES ($1, $2, $3) RETURNING *",
+      "INSERT INTO contact_messages (id, name, email, message, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *"
+    );
+    values = [id, ...values, createdAt];
   } else if (/INSERT INTO live_chat_messages/i.test(sql)) {
     // No RETURNING * on this one in the real route -- it's a fire-and-forget insert, the real
     // response is built by re-querying the chat + its messages afterward, so this genuinely just

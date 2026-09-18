@@ -870,10 +870,7 @@ export function AdminDataProvider({ children }) {
   };
   useEffect(() => { refetchRealGreenBeans(); }, []);
 
-  const [greenOrders, setGreenOrders] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
-  const [quotations, setQuotations] = useState([]);
-  const [serviceInquiries, setServiceInquiries] = useState([]);
   // Real, backend-persisted live chat -- was purely local, in-memory state before this (see
   // migrations/023_live_chat.sql for the full reasoning). Exposed as liveChats (the same name it
   // always had) so AdminLiveChat.jsx and every other existing consumer keep working unchanged --
@@ -1407,13 +1404,46 @@ export function AdminDataProvider({ children }) {
     }
   };
 
-  const addGreenOrder = (o) =>
-    setGreenOrders((prev) => [
-      { ...o, id: `GB-${1000 + prev.length}`, status: "New", date: new Date().toISOString().slice(0, 10) },
-      ...prev,
-    ]);
-  const updateGreenOrderStatus = (id, status) =>
-    setGreenOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+  // Real, backend-persisted green coffee wholesale orders -- previously pure local React state
+  // (see migrations/006_green_beans.sql's own comment, which documented this exact gap from an
+  // earlier round: green_beans, the catalog, got a real migration; green_orders never did). A
+  // real order request now genuinely reaches the backend, gets its price recomputed server-side
+  // from the live green_beans table (never trusting whatever the client's own preview
+  // calculation sent), and is visible to every admin, not just whoever's browser tab submitted
+  // it.
+  const [greenOrders, setGreenOrders] = useState([]);
+  const [greenOrdersLoading, setGreenOrdersLoading] = useState(true);
+  const [greenOrdersError, setGreenOrdersError] = useState("");
+  const refetchGreenOrders = () => {
+    if (!user) { setGreenOrdersLoading(false); return; }
+    setGreenOrdersLoading(true);
+    setGreenOrdersError("");
+    api.getGreenOrders()
+      .then((body) => setGreenOrders(pluck(body, "orders", { array: true })))
+      .catch((e) => { if (e.status !== 403) setGreenOrdersError(e.message); })
+      .finally(() => setGreenOrdersLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchGreenOrders();
+    else setGreenOrdersLoading(false);
+  }, [user && user.role]);
+  const addGreenOrder = async (o) => {
+    try {
+      const { order } = await api.submitGreenOrder(o);
+      return { ok: true, order };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const updateGreenOrderStatus = async (id, status) => {
+    try {
+      const { order } = await api.setGreenOrderStatus(id, status);
+      setGreenOrders((prev) => prev.map((o) => (o.id === id ? order : o)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 
   // Real, backend-persisted now -- these three used to only update local React state (see
   // ROADMAP.md), meaning an edit looked like it worked in the same tab but never actually reached
@@ -1438,24 +1468,125 @@ export function AdminDataProvider({ children }) {
     return result;
   };
 
-  const addQuotation = (q) =>
-    setQuotations((prev) => [
-      { ...q, id: `Q-${1000 + prev.length}`, status: "New", date: new Date().toISOString().slice(0, 10) },
-      ...prev,
-    ]);
-  const updateQuotationStatus = (id, status) =>
-    setQuotations((prev) => prev.map((q) => (q.id === id ? { ...q, status } : q)));
+  // Real, backend-persisted quotations and service inquiries -- both previously pure local React
+  // state, discovered alongside green_orders during a direct audit of this codebase (both had
+  // real permission names and a real, working admin UI, but no backend at all behind either).
+  const [quotations, setQuotations] = useState([]);
+  const [quotationsLoading, setQuotationsLoading] = useState(true);
+  const [quotationsError, setQuotationsError] = useState("");
+  const refetchQuotations = () => {
+    if (!user) { setQuotationsLoading(false); return; }
+    setQuotationsLoading(true);
+    setQuotationsError("");
+    api.getQuotations()
+      .then((body) => setQuotations(pluck(body, "quotations", { array: true })))
+      .catch((e) => { if (e.status !== 403) setQuotationsError(e.message); })
+      .finally(() => setQuotationsLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchQuotations();
+    else setQuotationsLoading(false);
+  }, [user && user.role]);
+  const addQuotation = async (q) => {
+    try {
+      const { quotation } = await api.submitQuotation(q);
+      return { ok: true, quotation };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const updateQuotationStatus = async (id, status) => {
+    try {
+      const { quotation } = await api.setQuotationStatus(id, status);
+      setQuotations((prev) => prev.map((q) => (q.id === id ? quotation : q)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 
-  const addServiceInquiry = (s) =>
-    setServiceInquiries((prev) => [
-      { ...s, id: `SVC-${1000 + prev.length}`, status: "New", date: new Date().toISOString().slice(0, 10) },
-      ...prev,
-    ]);
-  const updateServiceInquiryStatus = (id, status) =>
-    setServiceInquiries((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
-  const setServiceInquiryFee = (id, agreedFeeCents) => {
-    setServiceInquiries((prev) => prev.map((s) => (s.id === id ? { ...s, agreedFeeCents } : s)));
-    logAction("Consultation fee set", `${id} → ${fmtPrice(agreedFeeCents)}`);
+  const [serviceInquiries, setServiceInquiries] = useState([]);
+  const [serviceInquiriesLoading, setServiceInquiriesLoading] = useState(true);
+  const [serviceInquiriesError, setServiceInquiriesError] = useState("");
+  const refetchServiceInquiries = () => {
+    if (!user) { setServiceInquiriesLoading(false); return; }
+    setServiceInquiriesLoading(true);
+    setServiceInquiriesError("");
+    api.getServiceInquiries()
+      .then((body) => setServiceInquiries(pluck(body, "inquiries", { array: true })))
+      .catch((e) => { if (e.status !== 403) setServiceInquiriesError(e.message); })
+      .finally(() => setServiceInquiriesLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchServiceInquiries();
+    else setServiceInquiriesLoading(false);
+  }, [user && user.role]);
+  const addServiceInquiry = async (s) => {
+    try {
+      const { inquiry } = await api.submitServiceInquiry(s);
+      return { ok: true, inquiry };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const updateServiceInquiryStatus = async (id, status) => {
+    try {
+      const { inquiry } = await api.setServiceInquiryStatus(id, status);
+      setServiceInquiries((prev) => prev.map((s) => (s.id === id ? inquiry : s)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const setServiceInquiryFee = async (id, agreedFeeCents) => {
+    try {
+      const { inquiry } = await api.setServiceInquiryFee(id, agreedFeeCents);
+      setServiceInquiries((prev) => prev.map((s) => (s.id === id ? inquiry : s)));
+      logAction("Consultation fee set", `${id} → ${fmtPrice(agreedFeeCents)}`);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  // Real, backend-persisted general contact messages -- previously the ContactPage form's own
+  // onSubmit never called any real API at all, just setSent(true); every message anyone sent
+  // was silently discarded the instant the tab closed. Found during the same audit as
+  // quotations/service_inquiries/green_orders. Uses the "Feedback" admin permission rather than
+  // a new dedicated one -- a real, deliberate choice for a genuinely small, single-purpose inbox
+  // with no multi-stage workflow of its own.
+  const [contactMessages, setContactMessages] = useState([]);
+  const [contactMessagesLoading, setContactMessagesLoading] = useState(true);
+  const [contactMessagesError, setContactMessagesError] = useState("");
+  const refetchContactMessages = () => {
+    if (!user) { setContactMessagesLoading(false); return; }
+    setContactMessagesLoading(true);
+    setContactMessagesError("");
+    api.getContactMessages()
+      .then((body) => setContactMessages(pluck(body, "messages", { array: true })))
+      .catch((e) => { if (e.status !== 403) setContactMessagesError(e.message); })
+      .finally(() => setContactMessagesLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchContactMessages();
+    else setContactMessagesLoading(false);
+  }, [user && user.role]);
+  const submitContactMessage = async (msg) => {
+    try {
+      const { message } = await api.submitContactMessage(msg);
+      return { ok: true, message };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const setContactMessageRead = async (id, read) => {
+    try {
+      const { message } = await api.setContactMessageRead(id, read);
+      setContactMessages((prev) => prev.map((m) => (m.id === id ? message : m)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
   // Real, backend-persisted live chat -- previously synchronous (a bare local-state write,
@@ -1592,12 +1723,17 @@ export function AdminDataProvider({ children }) {
   };
 
   // Client-side equivalent of a database backup, since there's no real database here to back up
-  // for what's STILL genuinely in-memory only -- retail products are real now (Postgres), same
-  // reasoning already applied when users and orders became real: a live database needs its own
-  // real backup strategy (Railway's own database backups), not an ad-hoc JSON download.
+  // for what's STILL genuinely in-memory only. Retail products, quotations, service inquiries,
+  // green orders, and live chats are all real now (Postgres) -- same reasoning already applied
+  // when users and orders became real: a live database needs its own real backup strategy
+  // (Railway's own database backups), not an ad-hoc JSON download. Removed from both this export
+  // and the restore below, the same real audit that closed the quotations/service-inquiries/
+  // green-orders gap also caught that liveChats had been left in this list since it went real
+  // earlier this session -- exporting it suggested a real backup that Railway's own database
+  // backups already do properly, and "restoring" it would have silently overwritten real,
+  // fetched state with stale JSON, with zero actual effect on the real database.
   const exportAdminData = () => ({
-    greenOrders,
-    auditLog, quotations, serviceInquiries, liveChats,
+    auditLog,
     momentOverrides, courseOverrides, countryHistoryOverrides,
   });
   // Restores each piece independently rather than one big setState -- if the uploaded file is
@@ -1605,11 +1741,7 @@ export function AdminDataProvider({ children }) {
   // left as-is instead of the whole restore failing or wiping something the file didn't mention.
   const restoreAdminData = (data) => {
     if (!data || typeof data !== "object") return;
-    if (Array.isArray(data.greenOrders)) setGreenOrders(data.greenOrders);
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
-    if (Array.isArray(data.quotations)) setQuotations(data.quotations);
-    if (Array.isArray(data.serviceInquiries)) setServiceInquiries(data.serviceInquiries);
-    if (Array.isArray(data.liveChats)) setLiveChats(data.liveChats);
     if (data.momentOverrides) setMomentOverrides(data.momentOverrides);
     if (data.courseOverrides) setCourseOverrides(data.courseOverrides);
     if (data.countryHistoryOverrides) setCountryHistoryOverrides(data.countryHistoryOverrides);
@@ -1636,11 +1768,12 @@ export function AdminDataProvider({ children }) {
         getGreenPrice, setGreenPrice,
         getAllGreenBeans, addGreenBean, removeGreenBean,
         realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans,
-        greenOrders, addGreenOrder, updateGreenOrderStatus,
+        greenOrders, greenOrdersLoading, greenOrdersError, refetchGreenOrders, addGreenOrder, updateGreenOrderStatus,
         auditLog,
         kenyaMessages: settings.kenyaLiveMessages || [], addKenyaMessage, updateKenyaMessage, removeKenyaMessage,
-        quotations, addQuotation, updateQuotationStatus,
-        serviceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
+        quotations, quotationsLoading, quotationsError, refetchQuotations, addQuotation, updateQuotationStatus,
+        serviceInquiries, serviceInquiriesLoading, serviceInquiriesError, refetchServiceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
+        contactMessages, contactMessagesLoading, contactMessagesError, refetchContactMessages, submitContactMessage, setContactMessageRead,
         liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, refetchLiveChatsSilently,
         careerApplications, careerApplicationsLoading, careerApplicationsError, refetchCareerApplications, submitCareerApplication, setCareerApplicationStatus,
         blogPosts, blogPostsLoading, adminBlogPosts, adminBlogPostsLoading, adminBlogPostsError, refetchAdminBlogPosts, createBlogPost, updateBlogPost, deleteBlogPost,

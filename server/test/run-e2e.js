@@ -1637,6 +1637,76 @@ async function main() {
   const blogDelete = await fetch(base + `/blog/${blogSecondSlug.body.post.id}`, { method: "DELETE", headers: { Cookie: token, ...csrfHeaderFrom(token) } });
   check("admin can delete a post", blogDelete.status === 204);
 
+  console.log("\nReal quotations, service inquiries, and green coffee wholesale orders -- all three previously lived only in client-side React state (found during a direct audit; green_orders was already a known, documented gap from an earlier migration's own comment). Public submission, admin-only read/status-update, and -- for green orders specifically -- real, server-side price recomputation that never trusts whatever the client sends:");
+
+  const quoteSubmit = await post("/quotations", { name: "Roaster Co", email: "buyer@roaster.co", variety: "Premium", quantity: "40kg/month", message: "Interested in Kenyan lots" });
+  check("quotation submission returns 201", quoteSubmit.status === 201);
+  check("real, formatted id assigned (Q-<n>)", /^Q-\d+$/.test(quoteSubmit.body.quotation.id));
+  const quoteNoAuthList = await get("/quotations");
+  check("anonymous caller can't list quotations", quoteNoAuthList.status === 401);
+  const quoteBadVariety = await post("/quotations", { name: "Test", email: "test@test.com", variety: "Not A Real Variety" });
+  check("an invalid variety is genuinely rejected", quoteBadVariety.status === 400);
+
+  const svcSubmit = await post("/service-inquiries", { name: "Cafe Owner", email: "owner@cafe.com", company: "Cafe Co", interest: "Remote Consulting", message: "Need help with our espresso program" });
+  check("service inquiry submission returns 201", svcSubmit.status === 201);
+  check("real, formatted id assigned (SVC-<n>)", /^SVC-\d+$/.test(svcSubmit.body.inquiry.id));
+  const svcNoAuthList = await get("/service-inquiries");
+  check("anonymous caller can't list service inquiries", svcNoAuthList.status === 401);
+
+  // A real green bean genuinely needs to exist first -- price_per_kg_cents=950, min_order_kg=5,
+  // stock_kg=240, matching the real, published green-kenya lot from migrations/006_green_beans.sql
+  // (not otherwise seeded anywhere in this test suite, so inserted directly here).
+  await query(
+    "INSERT INTO green_beans (id, name, country, price_per_kg_cents, stock_kg, min_order_kg, removed, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, false, now(), now())",
+    ["green-kenya", "Green Kenya — Nyeri", "Kenya", 950, 240, 5]
+  );
+  const greenOrderSubmit = await post("/green-orders", { name: "Roaster Co", email: "buyer@roaster.co", beanId: "green-kenya", quantityKg: 20 });
+  check("green order submission returns 201", greenOrderSubmit.status === 201);
+  check("real, formatted id assigned (GB-<n>)", /^GB-\d+$/.test(greenOrderSubmit.body.order.id));
+  check("real, server-computed total matches the actual seeded price (950 x 20 = 19000)", greenOrderSubmit.body.order.totalCents === 19000);
+
+  console.log("\nReal, important security check -- a client sending a fake price for a green order is completely ignored, not merely validated:");
+  const greenOrderFakePrice = await post("/green-orders", { name: "Sneaky Buyer", email: "sneaky@test.com", beanId: "green-kenya", quantityKg: 10, pricePerKgCentsAtOrder: 1, totalCents: 1 });
+  check("the real, server-recomputed total (950 x 10 = 9500) is used, not the client's fake value of 1", greenOrderFakePrice.body.order.totalCents === 9500);
+
+  const greenOrderBelowMin = await post("/green-orders", { name: "Too Small", email: "small@test.com", beanId: "green-kenya", quantityKg: 1 });
+  check("a real, server-side minimum-order check is enforced (min is 5kg for this lot)", greenOrderBelowMin.status === 400);
+  const greenOrderBadBean = await post("/green-orders", { name: "Test", email: "test@test.com", beanId: "not-a-real-bean-id", quantityKg: 10 });
+  check("ordering a genuinely nonexistent green bean is rejected", greenOrderBadBean.status === 400);
+
+  console.log("\nAdmin flows for all three:");
+  const quoteList = await get("/quotations", token);
+  check("admin can list quotations", quoteList.status === 200 && quoteList.body.quotations.some((q) => q.id === quoteSubmit.body.quotation.id));
+  const quoteStatusUpdate = await patch(`/quotations/${quoteSubmit.body.quotation.id}/status`, { status: "Contacted" }, token);
+  check("admin can update quotation status", quoteStatusUpdate.status === 200 && quoteStatusUpdate.body.quotation.status === "Contacted");
+
+  const svcList = await get("/service-inquiries", token);
+  check("admin can list service inquiries", svcList.status === 200 && svcList.body.inquiries.some((s) => s.id === svcSubmit.body.inquiry.id));
+  const svcFeeSet = await patch(`/service-inquiries/${svcSubmit.body.inquiry.id}/fee`, { agreedFeeCents: 50000 }, token);
+  check("admin can set a real agreed consulting fee", svcFeeSet.status === 200 && svcFeeSet.body.inquiry.agreedFeeCents === 50000);
+  const svcBadFee = await patch(`/service-inquiries/${svcSubmit.body.inquiry.id}/fee`, { agreedFeeCents: -100 }, token);
+  check("a real, negative fee is rejected", svcBadFee.status === 400);
+
+  const greenOrderList = await get("/green-orders", token);
+  check("admin can list green orders", greenOrderList.status === 200 && greenOrderList.body.orders.some((o) => o.id === greenOrderSubmit.body.order.id));
+  const greenOrderStatusUpdate = await patch(`/green-orders/${greenOrderSubmit.body.order.id}/status`, { status: "Quoted" }, token);
+  check("admin can update green order status", greenOrderStatusUpdate.status === 200 && greenOrderStatusUpdate.body.order.status === "Quoted");
+
+  console.log("\nReal general contact messages -- ContactPage's own onSubmit previously never called any real API at all, just setSent(true); every message was silently discarded:");
+  const contactSubmit = await post("/contact-messages", { name: "Curious Visitor", email: "visitor@test.com", message: "Do you ship internationally?" });
+  check("contact message submission returns 201", contactSubmit.status === 201);
+  check("real, formatted id assigned (MSG-<n>)", /^MSG-\d+$/.test(contactSubmit.body.message.id));
+  check("starts unread", contactSubmit.body.message.read === false);
+  const contactNoAuthList = await get("/contact-messages");
+  check("anonymous caller can't list contact messages", contactNoAuthList.status === 401);
+  const contactMissingMessage = await post("/contact-messages", { name: "Test", email: "test@test.com" });
+  check("a real, required field (message) is genuinely enforced", contactMissingMessage.status === 400);
+
+  const contactList = await get("/contact-messages", token);
+  check("admin can list contact messages (uses the real \"Feedback\" permission, not a new dedicated one)", contactList.status === 200 && contactList.body.messages.some((m) => m.id === contactSubmit.body.message.id));
+  const contactMarkRead = await patch(`/contact-messages/${contactSubmit.body.message.id}/read`, { read: true }, token);
+  check("admin can mark a message read", contactMarkRead.status === 200 && contactMarkRead.body.message.read === true);
+
   console.log("\nReal career applications -- previously nothing existed at all (no careers page, no route). Anonymous, no account required, matching this app's own established real pattern for public submissions:");
   const careerApply = await post("/career-applications", { name: "Jane Applicant", email: "jane-applicant@morningaroma.local", location: "Remote", roleInterest: "Roasting", message: "I'd genuinely love to work with you.", resumeUrl: "https://linkedin.com/in/jane-applicant" });
   check("returns 201", careerApply.status === 201);

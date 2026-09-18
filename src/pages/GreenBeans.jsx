@@ -27,6 +27,8 @@ export function GreenBeansPage() {
   const [company, setCompany] = useState("");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [qtyError, setQtyError] = useState("");
 
   const pricePerKg = selected ? getGreenPrice(selected.id) : 0;
@@ -40,7 +42,7 @@ export function GreenBeansPage() {
     setQtyError("");
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (!selected) return;
     if (quantityKg < selected.minOrderKg) {
@@ -51,13 +53,25 @@ export function GreenBeansPage() {
       setQtyError(`Only ${selected.stockKg}kg currently in stock for this lot.`);
       return;
     }
-    addGreenOrder({
+    setSubmitting(true);
+    setSubmitError("");
+    // pricePerKgCentsAtOrder/totalCents intentionally NOT sent here -- routes/greenOrders.js
+    // only ever reads name/email/company/message/beanId/quantityKg from this real request body,
+    // and looks up the bean's actual, current price directly from the live green_beans table
+    // itself. This page's own pricePerKg/subtotalCents (used just above for the on-page preview)
+    // are real-time estimates for the customer's benefit, never the source of truth for what
+    // actually gets charged or recorded.
+    const result = await addGreenOrder({
       name, email, company, message,
-      beanId: selected.id, beanName: selected.name, quantityKg,
-      pricePerKgCentsAtOrder: pricePerKg, totalCents: subtotalCents,
+      beanId: selected.id, quantityKg,
     });
-    setSent(true);
-    addToast("Wholesale order request sent");
+    setSubmitting(false);
+    if (result.ok) {
+      setSent(true);
+      addToast("Wholesale order request sent");
+    } else {
+      setSubmitError(result.error || "Something went wrong -- please try again.");
+    }
   };
 
   if (realGreenBeansLoading) return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;

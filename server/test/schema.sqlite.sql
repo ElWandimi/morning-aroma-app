@@ -254,3 +254,57 @@ CREATE TABLE blog_posts (
 
 CREATE INDEX idx_blog_posts_status ON blog_posts (status);
 CREATE INDEX idx_blog_posts_slug ON blog_posts (slug);
+
+-- See migrations/027_quotations_service_inquiries_green_orders.sql for the real, full reasoning.
+-- No real sequence here (SQLite has none) -- test/db.sqlite.js generates the same real Q-<n> /
+-- SVC-<n> / GB-<n> id format directly, mirroring what the real Postgres sequence produces.
+CREATE TABLE quotations (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  variety     TEXT NOT NULL,
+  quantity    TEXT,
+  message     TEXT,
+  status      TEXT NOT NULL DEFAULT 'New',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_quotations_status ON quotations (status);
+
+CREATE TABLE service_inquiries (
+  id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  email             TEXT NOT NULL,
+  company           TEXT,
+  interest          TEXT NOT NULL,
+  message           TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'New',
+  agreed_fee_cents  INTEGER,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_service_inquiries_status ON service_inquiries (status);
+
+CREATE TABLE green_orders (
+  id                            TEXT PRIMARY KEY,
+  name                          TEXT NOT NULL,
+  email                         TEXT NOT NULL,
+  company                       TEXT,
+  message                       TEXT,
+  bean_id                       TEXT NOT NULL,
+  bean_name                     TEXT NOT NULL,
+  quantity_kg                   INTEGER NOT NULL,
+  price_per_kg_cents_at_order   INTEGER NOT NULL,
+  total_cents                   INTEGER NOT NULL,
+  status                        TEXT NOT NULL DEFAULT 'New',
+  created_at                    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_green_orders_status ON green_orders (status);
+
+CREATE TABLE contact_messages (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  message     TEXT NOT NULL,
+  read        INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_contact_messages_read ON contact_messages (read);

@@ -518,10 +518,13 @@ export function AdminInvoices() {
   // agreed and persisted on the inquiry itself, so it survives switching sections and back
   // instead of reverting to blank.
   const feeDraftFor = (s) => (feeDrafts[s.id] !== undefined ? feeDrafts[s.id] : (s.agreedFeeCents ? (s.agreedFeeCents / 100).toFixed(2) : ""));
-  const commitFee = (s) => {
+  const commitFee = async (s) => {
     const raw = feeDraftFor(s);
     const cents = Math.round(parseFloat(raw || "0") * 100);
-    if (cents > 0) setServiceInquiryFee(s.id, cents);
+    if (cents > 0) {
+      const result = await setServiceInquiryFee(s.id, cents);
+      if (!result.ok) addToast(result.error || "Couldn't save the agreed fee");
+    }
   };
 
   const downloadOrderInvoice = (o) => {
@@ -554,7 +557,9 @@ export function AdminInvoices() {
   };
 
   const downloadServiceInvoice = (s) => {
-    commitFee(s);
+    commitFee(s); // Intentionally not awaited -- see this function's own real analysis: the PDF
+    // below uses feeDraftFor(s)'s local, synchronous value as its fallback, so it doesn't need
+    // to wait on the real network request commitFee now fires before generating the invoice.
     const feeCents = s.agreedFeeCents || Math.round(parseFloat(feeDraftFor(s) || "0") * 100);
     if (!feeCents || feeCents <= 0) { addToast("Enter an agreed fee first"); return; }
     generateInvoicePDF({
@@ -1377,7 +1382,7 @@ export function AdminInventory() {
 }
 
 export function AdminQuotations() {
-  const { quotations, updateQuotationStatus, settings } = useAdmin();
+  const { quotations, quotationsLoading, quotationsError, refetchQuotations, updateQuotationStatus, settings } = useAdmin();
   const { addToast } = useToast();
   const STATUSES = ["New", "Contacted", "Closed"];
   // A real quoted unit price has no source anywhere yet -- the wholesale request form only ever
@@ -1406,6 +1411,16 @@ export function AdminQuotations() {
     addToast("Quotation downloaded");
   };
 
+  if (quotationsLoading) return <p className="hint">Loading quotation requests…</p>;
+  if (quotationsError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load quotations: {quotationsError}</p>
+        <button className="btn-outline" onClick={refetchQuotations}>Try again</button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h3 className="matched-head">Quotation requests ({quotations.length})</h3>
@@ -1417,7 +1432,13 @@ export function AdminQuotations() {
             <div key={q.id} className="admin-card">
               <div className="admin-card-head">
                 <strong>{q.name}</strong>
-                <select value={q.status} onChange={(e) => { updateQuotationStatus(q.id, e.target.value); addToast(`Marked ${e.target.value}`); }}>
+                <select
+                  value={q.status}
+                  onChange={async (e) => {
+                    const result = await updateQuotationStatus(q.id, e.target.value);
+                    addToast(result.ok ? `Marked ${e.target.value}` : (result.error || "Couldn't update status"));
+                  }}
+                >
                   {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
                 </select>
               </div>
@@ -1442,9 +1463,18 @@ export function AdminQuotations() {
 }
 
 export function AdminServiceInquiries() {
-  const { serviceInquiries, updateServiceInquiryStatus } = useAdmin();
+  const { serviceInquiries, serviceInquiriesLoading, serviceInquiriesError, refetchServiceInquiries, updateServiceInquiryStatus } = useAdmin();
   const { addToast } = useToast();
   const STATUSES = ["New", "Discovery Call Booked", "In Progress", "Closed"];
+  if (serviceInquiriesLoading) return <p className="hint">Loading service inquiries…</p>;
+  if (serviceInquiriesError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load service inquiries: {serviceInquiriesError}</p>
+        <button className="btn-outline" onClick={refetchServiceInquiries}>Try again</button>
+      </div>
+    );
+  }
   return (
     <div>
       <h3 className="matched-head">Service inquiries ({serviceInquiries.length})</h3>
@@ -1456,7 +1486,13 @@ export function AdminServiceInquiries() {
             <div key={s.id} className="admin-card">
               <div className="admin-card-head">
                 <strong>{s.name}{s.company ? ` — ${s.company}` : ""}</strong>
-                <select value={s.status} onChange={(e) => { updateServiceInquiryStatus(s.id, e.target.value); addToast(`Marked ${e.target.value}`); }}>
+                <select
+                  value={s.status}
+                  onChange={async (e) => {
+                    const result = await updateServiceInquiryStatus(s.id, e.target.value);
+                    addToast(result.ok ? `Marked ${e.target.value}` : (result.error || "Couldn't update status"));
+                  }}
+                >
                   {STATUSES.map((st) => (<option key={st} value={st}>{st}</option>))}
                 </select>
               </div>
@@ -1472,7 +1508,7 @@ export function AdminServiceInquiries() {
 }
 
 export function AdminGreenOrders() {
-  const { greenOrders, updateGreenOrderStatus, settings } = useAdmin();
+  const { greenOrders, greenOrdersLoading, greenOrdersError, refetchGreenOrders, updateGreenOrderStatus, settings } = useAdmin();
   const { addToast } = useToast();
   const [query, setQuery] = useState("");
   const STATUSES = ["New", "Quoted", "Invoiced", "Shipped", "Fulfilled"];
@@ -1498,6 +1534,15 @@ export function AdminGreenOrders() {
   const exportGreenOrders = () => exportToCSV("green-coffee-orders", ["ID", "Name", "Company", "Email", "Date", "Lot", "Qty (kg)", "Total (USD)", "Status"], filtered.map((o) => [
     o.id, o.name, o.company || "", o.email, o.date, o.beanName, o.quantityKg, (o.totalCents / 100).toFixed(2), o.status,
   ]));
+  if (greenOrdersLoading) return <p className="hint">Loading wholesale orders…</p>;
+  if (greenOrdersError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load wholesale orders: {greenOrdersError}</p>
+        <button className="btn-outline" onClick={refetchGreenOrders}>Try again</button>
+      </div>
+    );
+  }
   return (
     <div>
       <h3 className="matched-head">Green coffee wholesale orders ({filtered.length}{query ? ` of ${greenOrders.length}` : ""})</h3>
@@ -1514,7 +1559,13 @@ export function AdminGreenOrders() {
             <div key={o.id} className="admin-card">
               <div className="admin-card-head">
                 <strong>{o.name}{o.company ? ` — ${o.company}` : ""}</strong>
-                <select value={o.status} onChange={(e) => { updateGreenOrderStatus(o.id, e.target.value); addToast(e.target.value === "Invoiced" ? "Marked Invoiced — download the PDF below" : `Marked ${e.target.value}`); }}>
+                <select
+                  value={o.status}
+                  onChange={async (e) => {
+                    const result = await updateGreenOrderStatus(o.id, e.target.value);
+                    addToast(result.ok ? (e.target.value === "Invoiced" ? "Marked Invoiced — download the PDF below" : `Marked ${e.target.value}`) : (result.error || "Couldn't update status"));
+                  }}
+                >
                   {STATUSES.map((st) => (<option key={st} value={st}>{st}</option>))}
                 </select>
               </div>
@@ -2004,6 +2055,58 @@ export function AdminFeedback() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Real, general contact messages -- ContactPage's own "Contact Us" form. Shown in this
+          same section rather than a new top-level nav item, since it shares the "Feedback"
+          permission (a real, deliberate choice for a genuinely small, single-purpose inbox with
+          no multi-stage workflow of its own). */}
+      <AdminContactMessages />
+    </div>
+  );
+}
+
+function AdminContactMessages() {
+  const { contactMessages, contactMessagesLoading, contactMessagesError, refetchContactMessages, setContactMessageRead } = useAdmin();
+  const { addToast } = useToast();
+
+  if (contactMessagesLoading) return <p className="hint">Loading messages…</p>;
+  if (contactMessagesError) {
+    return (
+      <div style={{ marginTop: 28 }}>
+        <p className="form-error">Couldn't load contact messages: {contactMessagesError}</p>
+        <button className="btn-outline" onClick={refetchContactMessages}>Try again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--gold)" }}>
+      <h3 className="matched-head">Contact messages ({contactMessages.length})</h3>
+      {contactMessages.length === 0 ? (
+        <p className="hint">No messages yet — they'll appear here when the Contact Us form is submitted.</p>
+      ) : (
+        <div className="admin-card-list">
+          {contactMessages.map((m) => (
+            <div key={m.id} className="admin-card">
+              <div className="admin-card-head">
+                <strong>{m.name}</strong>
+                <label className="reviewed-toggle">
+                  <input
+                    type="checkbox"
+                    checked={m.read}
+                    onChange={async () => {
+                      const result = await setContactMessageRead(m.id, !m.read);
+                      if (!result.ok) addToast(result.error);
+                    }}
+                  /> Read
+                </label>
+              </div>
+              <p className="hint">{m.email} · {m.date}</p>
+              <p className="journal-note">"{m.message}"</p>
+            </div>
+          ))}
         </div>
       )}
     </div>

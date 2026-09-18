@@ -201,10 +201,22 @@ export function FaqPage() {
 
 export function ContactPage() {
   const { user } = useAuth();
+  const { submitContactMessage } = useAdmin();
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [message, setMessage] = useState("");
+  const submit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError("");
+    const result = await submitContactMessage({ name, email, message });
+    setSubmitting(false);
+    if (result.ok) setSent(true);
+    else setError(result.error || "Something went wrong -- please try again.");
+  };
   return (
     <div className="shop-page">
       <div className="shop-head">
@@ -216,14 +228,15 @@ export function ContactPage() {
         {sent ? (
           <p className="form-success">Thanks — your message has reached us. We'll reply within two business days.</p>
         ) : (
-          <form onSubmit={(e) => { e.preventDefault(); setSent(true); }}>
+          <form onSubmit={submit}>
             <label htmlFor="contact-name">Name</label>
             <input id="contact-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={120} required />
             <label htmlFor="contact-email">Email</label>
             <input id="contact-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" maxLength={254} required />
             <label htmlFor="contact-message">Message</label>
             <textarea id="contact-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={5} required maxLength={2000} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--gold)", fontFamily: "inherit", boxSizing: "border-box" }} />
-            <button className="btn-primary full" type="submit" style={{ marginTop: 14 }}>Send message</button>
+            {error && <p className="form-error" style={{ marginTop: 10 }}>{error}</p>}
+            <button className="btn-primary full" type="submit" disabled={submitting} style={{ marginTop: 14 }}>{submitting ? "Sending…" : "Send message"}</button>
           </form>
         )}
       </div>

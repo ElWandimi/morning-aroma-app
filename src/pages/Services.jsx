@@ -9,6 +9,8 @@ export function OurServicesPage() {
   const { addServiceInquiry, addQuotation } = useAdmin();
   const { addToast } = useToast();
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [company, setCompany] = useState("");
@@ -21,6 +23,8 @@ export function OurServicesPage() {
   // not roasting consulting or auction representation), so it gets its own state and its own
   // addQuotation call rather than folding into the interest dropdown above.
   const [quoteSent, setQuoteSent] = useState(false);
+  const [quoteSubmitting, setQuoteSubmitting] = useState(false);
+  const [quoteSubmitError, setQuoteSubmitError] = useState("");
   const [quoteName, setQuoteName] = useState(user?.name || "");
   const [quoteEmail, setQuoteEmail] = useState(user?.email || "");
   const [variety, setVariety] = useState("");
@@ -133,11 +137,18 @@ export function OurServicesPage() {
               <p className="form-success">Thank you — your request has reached our services team. We'll be in touch within two business days.</p>
             ) : (
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  addServiceInquiry({ name, email, company, interest, message });
-                  setSent(true);
-                  addToast("Service inquiry sent");
+                  setSubmitting(true);
+                  setSubmitError("");
+                  const result = await addServiceInquiry({ name, email, company, interest, message });
+                  setSubmitting(false);
+                  if (result.ok) {
+                    setSent(true);
+                    addToast("Service inquiry sent");
+                  } else {
+                    setSubmitError(result.error || "Something went wrong -- please try again.");
+                  }
                 }}
               >
                 <label htmlFor="svc-name">Name</label>
@@ -154,7 +165,8 @@ export function OurServicesPage() {
                 </select>
                 <label htmlFor="svc-message">Tell us more</label>
                 <textarea id="svc-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={4} maxLength={1000} placeholder="What are you hoping to get out of this?" required />
-                <button className="btn-primary full" type="submit" style={{ marginTop: 14 }}>Send request</button>
+                {submitError && <p className="form-error" style={{ marginTop: 10 }}>{submitError}</p>}
+                <button className="btn-primary full" type="submit" disabled={submitting} style={{ marginTop: 14 }}>{submitting ? "Sending…" : "Send request"}</button>
               </form>
             )}
           </div>
@@ -175,11 +187,18 @@ export function OurServicesPage() {
               <p className="form-success">Thank you — your note has reached us. We'll reply within two business days.</p>
             ) : (
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  addQuotation({ name: quoteName, email: quoteEmail, variety, quantity, message: quoteMessage });
-                  setQuoteSent(true);
-                  addToast("Quotation request sent");
+                  setQuoteSubmitting(true);
+                  setQuoteSubmitError("");
+                  const result = await addQuotation({ name: quoteName, email: quoteEmail, variety, quantity, message: quoteMessage });
+                  setQuoteSubmitting(false);
+                  if (result.ok) {
+                    setQuoteSent(true);
+                    addToast("Quotation request sent");
+                  } else {
+                    setQuoteSubmitError(result.error || "Something went wrong -- please try again.");
+                  }
                 }}
               >
                 <label htmlFor="quote-name">Name</label>
@@ -197,7 +216,8 @@ export function OurServicesPage() {
                 <input id="quote-quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 40kg/month" maxLength={60} />
                 <label htmlFor="quote-message">Tell us what you're looking for</label>
                 <textarea id="quote-message" value={quoteMessage} onChange={(e) => setQuoteMessage(e.target.value)} rows={4} maxLength={1000} />
-                <button className="btn-primary full" type="submit" style={{ marginTop: 14 }}>Send request</button>
+                {quoteSubmitError && <p className="form-error" style={{ marginTop: 10 }}>{quoteSubmitError}</p>}
+                <button className="btn-primary full" type="submit" disabled={quoteSubmitting} style={{ marginTop: 14 }}>{quoteSubmitting ? "Sending…" : "Send request"}</button>
                 <p className="hint" style={{ marginTop: 10 }}>
                   {user ? "Signed in — we'll route this straight to our trade team." : "Already work with us as a roaster? Sign in and this goes straight to your account rep."}
                 </p>

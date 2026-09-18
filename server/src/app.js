@@ -22,6 +22,10 @@ const liveChatRoutes = require("./routes/live-chat");
 const cartRoutes = require("./routes/cart");
 const careerApplicationsRoutes = require("./routes/careerApplications");
 const blogRoutes = require("./routes/blog");
+const quotationsRoutes = require("./routes/quotations");
+const serviceInquiriesRoutes = require("./routes/serviceInquiries");
+const greenOrdersRoutes = require("./routes/greenOrders");
+const contactMessagesRoutes = require("./routes/contactMessages");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -132,6 +136,10 @@ app.use("/live-chat", liveChatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/career-applications", careerApplicationsRoutes);
 app.use("/blog", blogRoutes);
+app.use("/quotations", quotationsRoutes);
+app.use("/service-inquiries", serviceInquiriesRoutes);
+app.use("/green-orders", greenOrdersRoutes);
+app.use("/contact-messages", contactMessagesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

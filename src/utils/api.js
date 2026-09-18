@@ -201,6 +201,28 @@ export const api = {
     request(`/blog/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteBlogPost: (id) =>
     request(`/blog/${id}`, { method: "DELETE" }),
+  submitQuotation: (quotation) =>
+    request("/quotations", { method: "POST", body: JSON.stringify(quotation) }),
+  getQuotations: () => request("/quotations"),
+  setQuotationStatus: (id, status) =>
+    request(`/quotations/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  submitServiceInquiry: (inquiry) =>
+    request("/service-inquiries", { method: "POST", body: JSON.stringify(inquiry) }),
+  getServiceInquiries: () => request("/service-inquiries"),
+  setServiceInquiryStatus: (id, status) =>
+    request(`/service-inquiries/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  setServiceInquiryFee: (id, agreedFeeCents) =>
+    request(`/service-inquiries/${id}/fee`, { method: "PATCH", body: JSON.stringify({ agreedFeeCents }) }),
+  submitGreenOrder: (order) =>
+    request("/green-orders", { method: "POST", body: JSON.stringify(order) }),
+  getGreenOrders: () => request("/green-orders"),
+  setGreenOrderStatus: (id, status) =>
+    request(`/green-orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  submitContactMessage: (msg) =>
+    request("/contact-messages", { method: "POST", body: JSON.stringify(msg) }),
+  getContactMessages: () => request("/contact-messages"),
+  setContactMessageRead: (id, read) =>
+    request(`/contact-messages/${id}/read`, { method: "PATCH", body: JSON.stringify({ read }) }),
   getCourses: () => request("/courses"),
   createCourse: (course) =>
     request("/courses", { method: "POST", body: JSON.stringify(course) }),
