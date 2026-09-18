@@ -2,6 +2,7 @@ const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const { query } = require("./db");
 const { requireCsrfToken } = require("./utils/csrf");
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
@@ -20,6 +21,7 @@ const newsletterRoutes = require("./routes/newsletter");
 const liveChatRoutes = require("./routes/live-chat");
 const cartRoutes = require("./routes/cart");
 const careerApplicationsRoutes = require("./routes/careerApplications");
+const blogRoutes = require("./routes/blog");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -49,6 +51,36 @@ app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
+
+// Real, dynamic sitemap for blog posts specifically -- the main, static public/sitemap.xml is
+// generated at BUILD time (scripts/generate-sitemap.mjs) and genuinely has no database access,
+// the same real constraint that already excludes Academy courses from it (see that script's own
+// comment). Blog posts have the identical problem -- entirely database-driven, zero static data
+// a build-time script could read -- so rather than leave them out of every sitemap forever (a
+// real, meaningful loss for the whole point of building a blog: organic search discovery), this
+// serves a real, separate, dynamic sitemap that always reflects the actual, current set of
+// published posts. Referenced as an additional real entry in the main sitemap (standard sitemap-
+// index practice), not a replacement for it.
+app.get("/sitemap-blog.xml", async (req, res) => {
+  // The real, actual public-facing domain -- not FRONTEND_URL's own Railway-staging fallback
+  // (that's the right default for backend-generated email links, which work regardless of
+  // domain, but a sitemap is specifically about what search engines should index, and indexing
+  // the wrong domain would be a real, meaningful mistake). Same real reasoning
+  // scripts/generate-sitemap.mjs's own SITE_ORIGIN already applies to the main sitemap.
+  const siteUrl = process.env.SITE_ORIGIN || "https://morning-aroma.com";
+  let posts = [];
+  try {
+    const result = await query("SELECT slug, updated_at FROM blog_posts WHERE status = 'Published' ORDER BY published_at DESC", []);
+    posts = result.rows;
+  } catch (e) {
+    console.error("Failed to generate blog sitemap:", e);
+  }
+  const urlsXml = posts.map((p) => {
+    const lastmod = (p.updated_at instanceof Date ? p.updated_at : new Date(p.updated_at)).toISOString().slice(0, 10);
+    return `  <url>\n    <loc>${siteUrl}/blog-post/${p.slug}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>`;
+  }).join("\n");
+  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlsXml}\n</urlset>\n`);
+});
 
 // Mounted with express.raw(), and BEFORE the global express.json() below -- Paystack's webhook
 // signature is an HMAC over the exact raw request body. If express.json() ran first, it would
@@ -99,6 +131,7 @@ app.use("/newsletter", newsletterRoutes);
 app.use("/live-chat", liveChatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/career-applications", careerApplicationsRoutes);
+app.use("/blog", blogRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

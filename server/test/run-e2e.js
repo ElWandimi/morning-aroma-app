@@ -1573,6 +1573,58 @@ async function main() {
   check("welcome email's real HTML excludes an everyday-tier product -- premium only, same as the real homepage", !featuredHtml.includes("Welcome Test Everyday"));
   check("welcome email's real HTML shows the product's actual real price", featuredHtml.includes("$22.00"));
 
+  console.log("\nReal blog -- previously nothing existed at all (no route, no posts table). Public read (published only, server-enforced), admin-only write, real XSS sanitization, and real image resolution through this app's existing Cloudinary infrastructure:");
+  // Set explicitly, not assumed inherited from the earlier photo-upload tests -- this file's own
+  // real CLOUDINARY_* set/delete window (around the photo-upload section) closes well before this
+  // point, and the exact same class of gap (RESEND_API_KEY, in the welcome-email section just
+  // above this one) already bit this suite once this session -- confirmed directly this needed
+  // its own explicit set here too, not assumed.
+  process.env.CLOUDINARY_CLOUD_NAME = "mock-cloud";
+  process.env.CLOUDINARY_API_KEY = "mock-key";
+  process.env.CLOUDINARY_API_SECRET = "mock-secret";
+  const TINY_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+  const blogNoAuthList = await get("/blog");
+  check("public blog listing needs no auth", blogNoAuthList.status === 200);
+  const blogNoAuthCreate = await post("/blog", { title: "Test", excerpt: "e", contentHtml: "<p>hi</p>" });
+  check("anonymous caller can't create a post", blogNoAuthCreate.status === 401);
+
+  const dirtyHtml = `<p>Real content <b>bold</b></p><script>alert(1)</script><img src="${TINY_PNG}" onerror="alert(2)">`;
+  const blogCreate = await post("/blog", { title: "How We Source Our Kenyan Coffee", excerpt: "A real look at sourcing.", contentHtml: dirtyHtml, coverImageUrl: TINY_PNG }, token);
+  check("returns 201", blogCreate.status === 201);
+  check("real XSS script tag stripped from stored content", !blogCreate.body.post.contentHtml.includes("<script>"));
+  check("real onerror attribute stripped", !blogCreate.body.post.contentHtml.includes("onerror"));
+  check("real bold formatting preserved", blogCreate.body.post.contentHtml.includes("<b>bold</b>"));
+  check("inline image resolved to a real cloudinary URL, not left as a raw data: URL", blogCreate.body.post.contentHtml.includes("res.cloudinary.com") && !blogCreate.body.post.contentHtml.includes("data:image"));
+  check("cover image resolved to a real cloudinary URL", blogCreate.body.post.coverImageUrl && blogCreate.body.post.coverImageUrl.includes("res.cloudinary.com"));
+  check("a new post starts as a real Draft, not published", blogCreate.body.post.status === "Draft" && !blogCreate.body.post.publishedAt);
+
+  const blogPostId = blogCreate.body.post.id;
+  const blogSlug = blogCreate.body.post.slug;
+
+  const blogListStillEmpty = await get("/blog");
+  check("a real draft is NOT visible in the public list", !blogListStillEmpty.body.posts.some((p) => p.id === blogPostId));
+  const blogBySlugDraft = await get(`/blog/${blogSlug}`);
+  check("a real draft's own slug 404s for a public request", blogBySlugDraft.status === 404);
+
+  const blogPublish = await patch(`/blog/${blogPostId}`, { status: "Published" }, token);
+  check("admin can genuinely publish a post", blogPublish.status === 200 && blogPublish.body.post.status === "Published" && !!blogPublish.body.post.publishedAt);
+
+  const blogListNow = await get("/blog");
+  check("a real, published post IS now visible publicly", blogListNow.body.posts.some((p) => p.id === blogPostId));
+  const blogBySlugPublished = await get(`/blog/${blogSlug}`);
+  check("a published post's real slug now resolves publicly", blogBySlugPublished.status === 200);
+
+  const firstPublishedAt = blogPublish.body.post.publishedAt;
+  await new Promise((r) => setTimeout(r, 30));
+  const blogEditAfterPublish = await patch(`/blog/${blogPostId}`, { title: "How We Source Our Real Kenyan Coffee" }, token);
+  check("editing an already-published post keeps its real, original publishedAt", blogEditAfterPublish.body.post.publishedAt === firstPublishedAt);
+
+  const blogSecondSlug = await post("/blog", { title: "How We Source Our Kenyan Coffee", excerpt: "e2", contentHtml: "<p>x</p>" }, token);
+  check("a real title collision gets a genuinely unique slug", blogSecondSlug.body.post.slug !== blogSlug && blogSecondSlug.body.post.slug.startsWith(blogSlug));
+
+  const blogDelete = await fetch(base + `/blog/${blogSecondSlug.body.post.id}`, { method: "DELETE", headers: { Cookie: token, ...csrfHeaderFrom(token) } });
+  check("admin can delete a post", blogDelete.status === 204);
+
   console.log("\nReal career applications -- previously nothing existed at all (no careers page, no route). Anonymous, no account required, matching this app's own established real pattern for public submissions:");
   const careerApply = await post("/career-applications", { name: "Jane Applicant", email: "jane-applicant@morningaroma.local", location: "Remote", roleInterest: "Roasting", message: "I'd genuinely love to work with you.", resumeUrl: "https://linkedin.com/in/jane-applicant" });
   check("returns 201", careerApply.status === 201);

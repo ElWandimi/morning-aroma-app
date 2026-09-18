@@ -236,3 +236,21 @@ CREATE TABLE career_applications (
 );
 
 CREATE INDEX idx_career_applications_status ON career_applications (status);
+
+-- See migrations/026_blog_posts.sql for the real, full reasoning.
+CREATE TABLE blog_posts (
+  id              TEXT PRIMARY KEY,
+  slug            TEXT NOT NULL UNIQUE,
+  title           TEXT NOT NULL,
+  excerpt         TEXT NOT NULL,
+  cover_image_url TEXT,
+  content_html    TEXT NOT NULL,
+  author_name     TEXT NOT NULL DEFAULT 'The Morning Aroma Team',
+  status          TEXT NOT NULL DEFAULT 'Draft',
+  published_at    TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_blog_posts_status ON blog_posts (status);
+CREATE INDEX idx_blog_posts_slug ON blog_posts (slug);

@@ -28,7 +28,7 @@ const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|
 const STATIC_PAGES = Object.keys(PAGE_TO_SLUG).filter(
   (page) => ![
     "product", "moment", "brewguide", "course", "growingprofile", "country", "growingfactor",
-    "admin", "checkout", "journey", "searchresults",
+    "admin", "checkout", "journey", "searchresults", "blogpost",
   ].includes(page)
 );
 

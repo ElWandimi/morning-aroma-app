@@ -34,6 +34,8 @@ const JourneyPage = lazy(() => import("./pages/Journey").then((m) => ({ default:
 const ContactPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.ContactPage })));
 const FaqPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.FaqPage })));
 const CareersPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.CareersPage })));
+const BlogIndexPage = lazy(() => import("./pages/Blog").then((m) => ({ default: m.BlogIndexPage })));
+const BlogPostPage = lazy(() => import("./pages/Blog").then((m) => ({ default: m.BlogPostPage })));
 const PrivacyPolicyPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.PrivacyPolicyPage })));
 const SourceLibraryPage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.SourceLibraryPage })));
 const TermsOfServicePage = lazy(() => import("./pages/Misc").then((m) => ({ default: m.TermsOfServicePage })));
@@ -59,7 +61,7 @@ const WorldJourneyPage = lazy(() => import("./pages/WorldJourney").then((m) => (
 // reading from the static arrays here would keep showing a stale title/description after an
 // admin genuinely renamed a product or changed a course's blurb, since those static arrays are
 // never updated by an admin edit at all, only ever by a code change.
-function getPageMeta(route, realProducts, realCourses) {
+function getPageMeta(route, realProducts, realCourses, blogPosts) {
   const suffix = " | Morning Aroma";
   // Every branch below returns the real canonical path for its route via pathFor -- the exact
   // same function real internal links and browser history already use to build URLs, so this can
@@ -74,6 +76,12 @@ function getPageMeta(route, realProducts, realCourses) {
       return p
         ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note, canonicalPath: pathFor(route.page, { id: route.id }), image: getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 1200) }
         : { ...PAGE_META[route.page === "product" ? "shop" : "growing"], canonicalPath: pathFor(route.page === "product" ? "shop" : "growing") };
+    }
+    case "blogpost": {
+      const post = (blogPosts || []).find((p) => p.slug === route.id);
+      return post
+        ? { title: `${post.title}${suffix}`, description: post.excerpt, canonicalPath: pathFor("blogpost", { id: post.slug }), image: post.coverImageUrl }
+        : { ...PAGE_META.blog, canonicalPath: pathFor("blog") };
     }
     case "moment": {
       const m = MOMENTS.find((m) => m.id === route.id);
@@ -130,10 +138,10 @@ export function AppShell() {
   const [authView, setAuthView] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const { route } = useRoute();
-  const { settings, getAllProducts, getAllCourses } = useAdmin();
+  const { settings, getAllProducts, getAllCourses, blogPosts } = useAdmin();
   const routeKey = route.page + (route.id || "");
   useScrollReveal(routeKey);
-  const pageMeta = getPageMeta(route, getAllProducts(), getAllCourses());
+  const pageMeta = getPageMeta(route, getAllProducts(), getAllCourses(), blogPosts);
   useDocumentMeta(pageMeta.title, pageMeta.description, pageMeta.canonicalPath, pageMeta.image);
   useEffect(() => {
     // Real page-view tracking for GA4 -- this is a client-side-routed SPA, so GA4's own automatic
@@ -192,6 +200,8 @@ export function AppShell() {
             {route.page === "faq" && <FaqPage />}
             {route.page === "contact" && <ContactPage />}
             {route.page === "careers" && <CareersPage />}
+            {route.page === "blog" && <BlogIndexPage />}
+            {route.page === "blogpost" && <BlogPostPage id={route.id} />}
             {route.page === "sourcelibrary" && <SourceLibraryPage />}
             {route.page === "privacy" && <PrivacyPolicyPage />}
             {route.page === "terms" && <TermsOfServicePage />}

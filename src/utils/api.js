@@ -191,6 +191,16 @@ export const api = {
     request("/career-applications"),
   setCareerApplicationStatus: (id, status) =>
     request(`/career-applications/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  getBlogPosts: () => request("/blog"),
+  getBlogPost: (slug) => request(`/blog/${slug}`),
+  getAllBlogPostsAdmin: () => request("/blog/admin/all"),
+  getBlogPostAdmin: (id) => request(`/blog/admin/${id}`),
+  createBlogPost: (post) =>
+    request("/blog", { method: "POST", body: JSON.stringify(post) }),
+  updateBlogPost: (id, patch) =>
+    request(`/blog/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteBlogPost: (id) =>
+    request(`/blog/${id}`, { method: "DELETE" }),
   getCourses: () => request("/courses"),
   createCourse: (course) =>
     request("/courses", { method: "POST", body: JSON.stringify(course) }),

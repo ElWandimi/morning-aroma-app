@@ -303,6 +303,25 @@ a { color: inherit; text-decoration: none; }
 .everyday-photo { height: 100px; border-radius: 10px; background: linear-gradient(135deg, var(--almond), var(--gold)); background-size: contain; background-repeat: no-repeat; background-position: center; margin-bottom: 10px; position: relative; }
 .everyday-card p { font-size: 0.9rem; color: #6b5647; margin: 6px 0 12px; }
 
+/* Real blog card/post styles -- BlogIndexPage / BlogPostPage (src/pages/Blog.jsx). */
+.blog-card-photo-wrap { display: block; width: 100%; aspect-ratio: 16/10; border-radius: 10px; overflow: hidden; margin-bottom: 4px; }
+.blog-card-photo { width: 100%; height: 100%; object-fit: cover; }
+.blog-post-cover-wrap { display: block; width: 100%; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; margin: 20px 0 32px; }
+.blog-post-cover { width: 100%; height: 100%; object-fit: cover; }
+.blog-post-page { max-width: 760px; margin: 0 auto; }
+/* Mirrors blog-editor-body's own real typography (src/admin/index.jsx's BlogEditor) so what an
+   admin sees while writing genuinely matches what a visitor reads -- same font, same sizing, same
+   real coffee-premium feel (serif headings, generous line-height) carried through consistently. */
+.blog-post-body { font-family: Georgia, 'Times New Roman', serif; font-size: 1.05rem; line-height: 1.8; color: var(--espresso); }
+.blog-post-body h2 { font-family: 'Cormorant Garamond', serif; color: var(--chestnut); font-size: 1.8rem; margin: 32px 0 14px; }
+.blog-post-body h3 { font-family: 'Cormorant Garamond', serif; color: var(--chestnut); font-size: 1.4rem; margin: 26px 0 10px; }
+.blog-post-body p { margin: 0 0 18px; }
+.blog-post-body img { max-width: 100%; height: auto; border-radius: 10px; margin: 24px 0; display: block; }
+.blog-post-body blockquote { border-left: 3px solid var(--terracotta-btn); margin: 24px 0; padding: 6px 0 6px 20px; color: var(--almond-text); font-style: italic; font-size: 1.1rem; }
+.blog-post-body a { color: var(--terracotta-btn); }
+.blog-post-body ul, .blog-post-body ol { margin: 0 0 18px; padding-left: 24px; }
+.blog-post-body li { margin-bottom: 6px; }
+
 /* moments */
 .moments { padding: 70px 24px; background: linear-gradient(180deg, rgba(249,230,212,0.3) 0%, var(--steam) 100%); }
 .moments-inner { max-width: 1200px; margin: 0 auto; }
@@ -1046,6 +1065,25 @@ a { color: inherit; text-decoration: none; }
 .admin-card:hover { box-shadow: 0 8px 22px rgba(62,44,35,0.12); }
 .admin-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap; }
 .admin-card-head select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; }
+/* Real status pills -- used by AdminBlog (blog post Draft/Published) and reusable wherever a
+   short, colored status label is needed going forward, rather than a one-off inline style. */
+.status-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.status-pill.status-draft { background: var(--steam); color: var(--chestnut); }
+.status-pill.status-published { background: var(--green); color: white; }
+/* Real, lightweight rich-text editor (AdminBlog's own BlogEditor) -- deliberately plain,
+   bordered chrome matching this admin's existing form-field look, not a heavy third-party
+   editor's own visual language. */
+.blog-editor { border: 1px solid var(--gold); border-radius: 10px; overflow: hidden; }
+.blog-editor-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; background: var(--cream); border-bottom: 1px solid var(--gold); }
+.blog-editor-toolbar button { background: white; border: 1px solid var(--gold); border-radius: 6px; padding: 5px 10px; font-size: 0.85rem; cursor: pointer; color: var(--espresso); }
+.blog-editor-toolbar button:hover { background: var(--steam); }
+.blog-editor-body { min-height: 260px; padding: 16px; font-family: Georgia, 'Times New Roman', serif; font-size: 1rem; line-height: 1.7; color: var(--espresso); outline: none; }
+.blog-editor-body h2 { font-family: 'Cormorant Garamond', serif; color: var(--chestnut); margin: 20px 0 10px; }
+.blog-editor-body h3 { font-family: 'Cormorant Garamond', serif; color: var(--chestnut); margin: 16px 0 8px; }
+.blog-editor-body p { margin: 0 0 12px; }
+.blog-editor-body img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
+.blog-editor-body blockquote { border-left: 3px solid var(--terracotta-btn); margin: 14px 0; padding: 4px 0 4px 16px; color: var(--almond-text); font-style: italic; }
+.blog-editor-body a { color: var(--terracotta-btn); }
 .reviewed-toggle { font-size: 0.8rem; display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--chestnut); }
 .admin-message-edit { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; box-sizing: border-box; margin-bottom: 8px; }
 .admin-add-message { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; max-width: 500px; }

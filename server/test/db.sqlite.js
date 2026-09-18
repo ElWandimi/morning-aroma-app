@@ -146,6 +146,14 @@ async function query(text, params = []) {
       "INSERT INTO career_applications (id, name, email, location, role_interest, message, resume_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
     );
     values = [id, ...values, createdAt];
+  } else if (/INSERT INTO blog_posts/i.test(sql) && /RETURNING \*/i.test(sql)) {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    sql = sql.replace(
+      "INSERT INTO blog_posts (slug, title, excerpt, cover_image_url, content_html, author_name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      "INSERT INTO blog_posts (id, slug, title, excerpt, cover_image_url, content_html, author_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+    );
+    values = [id, ...values, now, now];
   } else if (/INSERT INTO live_chat_messages/i.test(sql)) {
     // No RETURNING * on this one in the real route -- it's a fire-and-forget insert, the real
     // response is built by re-querying the chat + its messages afterward, so this genuinely just

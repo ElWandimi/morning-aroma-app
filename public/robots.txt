@@ -11,3 +11,12 @@ Disallow: /checkout
 Disallow: /journey
 
 Sitemap: https://morning-aroma.com/sitemap.xml
+# The main sitemap is real, static, and generated at build time (scripts/generate-sitemap.mjs) --
+# genuinely can't include blog posts, since they're entirely database-driven and this build
+# script has no database access (same real constraint that already excludes Academy courses).
+# This second, real, dynamic sitemap (server-side, GET /sitemap-blog.xml in server/src/app.js)
+# always reflects the actual, current set of published posts. On the backend's own real domain,
+# not morning-aroma.com's -- a real, valid, standard practice (a sitemap's own domain doesn't
+# have to match the site it lists, only the URLs it CONTAINS have to be real and correct, which
+# these are).
+Sitemap: https://upbeat-rebirth-production.up.railway.app/sitemap-blog.xml

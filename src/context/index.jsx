@@ -955,6 +955,79 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real, backend-persisted blog -- see migrations/026_blog_posts.sql for the full reasoning.
+  // blogPosts is the real, PUBLIC list (published only, server-enforced) -- fetched
+  // unconditionally on app load, same as realProducts, since a visitor (and Google's own
+  // crawler) needs to see this with no sign-in at all. adminBlogPosts is the genuinely separate
+  // admin editing queue (every real post regardless of status), only fetched for a real
+  // signed-in admin/staff user.
+  const [blogPosts, setBlogPosts] = useState([]);
+  const [blogPostsLoading, setBlogPostsLoading] = useState(true);
+  useEffect(() => {
+    api.getBlogPosts()
+      .then((body) => setBlogPosts(pluck(body, "posts", { array: true })))
+      .catch(() => {})
+      .finally(() => setBlogPostsLoading(false));
+  }, []);
+
+  const [adminBlogPosts, setAdminBlogPosts] = useState([]);
+  const [adminBlogPostsLoading, setAdminBlogPostsLoading] = useState(true);
+  const [adminBlogPostsError, setAdminBlogPostsError] = useState("");
+  const refetchAdminBlogPosts = () => {
+    if (!user) { setAdminBlogPostsLoading(false); return; }
+    setAdminBlogPostsLoading(true);
+    setAdminBlogPostsError("");
+    api.getAllBlogPostsAdmin()
+      .then((body) => setAdminBlogPosts(pluck(body, "posts", { array: true })))
+      .catch((e) => { if (e.status !== 403) setAdminBlogPostsError(e.message); })
+      .finally(() => setAdminBlogPostsLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchAdminBlogPosts();
+    else setAdminBlogPostsLoading(false);
+  }, [user && user.role]);
+
+  const createBlogPost = async (post) => {
+    try {
+      const { post: created } = await api.createBlogPost(post);
+      setAdminBlogPosts((prev) => [created, ...prev]);
+      return { ok: true, post: created };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const updateBlogPost = async (id, patch) => {
+    try {
+      const { post: updated } = await api.updateBlogPost(id, patch);
+      setAdminBlogPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      // A real, published post edited from the admin side should reflect immediately in the
+      // real, public blogPosts list too (e.g. a typo fix going live right away), not require a
+      // full page reload to show up -- this keeps both real lists in sync from the one
+      // successful write, rather than silently letting the public list go stale until the next
+      // unconditional refetch.
+      setBlogPosts((prev) => {
+        const stillPublished = updated.status === "Published";
+        const alreadyThere = prev.some((p) => p.id === id);
+        if (stillPublished && alreadyThere) return prev.map((p) => (p.id === id ? updated : p));
+        if (stillPublished && !alreadyThere) return [updated, ...prev].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+        return prev.filter((p) => p.id !== id); // moved back to Draft -- no longer real/public
+      });
+      return { ok: true, post: updated };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  const deleteBlogPost = async (id) => {
+    try {
+      await api.deleteBlogPost(id);
+      setAdminBlogPosts((prev) => prev.filter((p) => p.id !== id));
+      setBlogPosts((prev) => prev.filter((p) => p.id !== id));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
   const [momentOverrides, setMomentOverrides] = useState({});
   const [courseOverrides, setCourseOverrides] = useState({});
   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
@@ -1570,6 +1643,7 @@ export function AdminDataProvider({ children }) {
         serviceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
         liveChats, liveChatsLoading, liveChatsError, refetchLiveChats, refetchLiveChatsSilently,
         careerApplications, careerApplicationsLoading, careerApplicationsError, refetchCareerApplications, submitCareerApplication, setCareerApplicationStatus,
+        blogPosts, blogPostsLoading, adminBlogPosts, adminBlogPostsLoading, adminBlogPostsError, refetchAdminBlogPosts, createBlogPost, updateBlogPost, deleteBlogPost,
         startChat, sendLiveChatGreeting, sendChatMessage, replyToLiveChat, updateChatStatus,
         feedbackList, addFeedback, toggleFeedbackReviewed,
         newsletterSubscribers, newsletterSubscribersLoading, addNewsletterSubscriber, refetchNewsletterSubscribers,

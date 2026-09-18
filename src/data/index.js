@@ -956,7 +956,7 @@ export const GROWING_PATHS = ["Variety", "Country", "Growing Factor"];
 
 export const CHECKOUT_STEPS = ["Review", "Sign in", "Shipping", "Payment", "Done"];
 
-export const ADMIN_SECTIONS = ["Overview", "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content", "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Newsletter", "Career Applications", "Live Messages", "Audit Log", "Settings"];
+export const ADMIN_SECTIONS = ["Overview", "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content", "Blog", "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Newsletter", "Career Applications", "Live Messages", "Audit Log", "Settings"];
 
 // Real path-based routing map (e.g. /shop or /shop/geisha-panama) -- requires a real server for
 // every environment that serves this app (a real SPA-fallback server in production, and Vite's
@@ -970,7 +970,7 @@ export const PAGE_TO_SLUG = {
   growing: "growing", growingprofile: "growing-profile", country: "country",
   growingfactor: "growing-factor", soilexplorer: "soil-explorer", seasons: "seasons",
   history: "history", promise: "our-promise", journey: "journey", checkout: "checkout",
-  quiz: "quiz", rituals: "rituals", faq: "faq", contact: "contact", careers: "careers",
+  quiz: "quiz", rituals: "rituals", faq: "faq", contact: "contact", careers: "careers", blog: "blog", blogpost: "blog-post",
   sourcelibrary: "source-library", admin: "admin", worldjourney: "world-journey", services: "services",
   privacy: "privacy", terms: "terms", greenbeans: "green-beans", searchresults: "search-results",
   verifycertificate: "verify-certificate",
@@ -996,6 +996,7 @@ export const PAGE_META = {
   faq: { title: "FAQ — Morning Aroma", description: "Answers to common questions about freshness, shipping, subscriptions, and wholesale." },
   contact: { title: "Contact Us — Morning Aroma", description: "Get in touch with the Morning Aroma team." },
   careers: { title: "Careers — Morning Aroma", description: "We're a small, global team of coffee people. No open roles right now — but we'd genuinely like to hear from you." },
+  blog: { title: "Journal — Morning Aroma", description: "Real stories on sourcing, brewing, and the people behind every bag." },
   sourcelibrary: { title: "Source Library — Morning Aroma", description: "Origin maps, processing methods, and published FOB pricing — full transparency on where your coffee comes from." },
   admin: { title: "Admin Dashboard — Morning Aroma", description: "Store management dashboard." },
   worldjourney: { title: "The World Journey — Morning Aroma", description: "All eight origin countries, their coffee history, and the varieties grown there." },
@@ -1010,6 +1011,7 @@ export const KNOWN_ROUTES = new Set([
   "growing", "growingprofile", "country", "growingfactor", "soilexplorer", "seasons", "history",
   "promise", "journey", "checkout", "quiz", "rituals", "faq", "contact", "sourcelibrary", "admin",
   "worldjourney", "services", "privacy", "terms", "greenbeans", "searchresults", "verifycertificate",
+  "careers", "blog", "blogpost",
 ]);
 
 export const MARQUEE_IMAGES = [
