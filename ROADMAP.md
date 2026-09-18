@@ -780,6 +780,17 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
       a real app password) — this address previously could only send transactional email via
       Resend, with nowhere for a reply or a direct inquiry to actually land.
 - [ ] Real localized content (currently machine-translated via Google Translate, not real copy)
+- [ ] **Known, confirmed gap, not yet fixed: Admin > Audit Log is fake.** Found during a landing-page
+      session (2026-09-19) while auditing which admin sections read from real vs. client-only
+      state, the same discipline that caught Live Messages, Quotations, Service Inquiries, Green
+      Orders, and Contact Messages earlier — Audit Log is the one remaining item from that same
+      family never actually fixed. It renders from local component state only; no backend table,
+      no route, nothing durable. An admin looking at it today sees either nothing or stale
+      in-memory entries that vanish on refresh and were never real to begin with — not a security
+      hole (nothing currently claims to rely on it for accountability), but a real, visible gap if
+      anyone ever treats what it shows as an actual record. Flagged to the project owner directly;
+      scope (which actions should actually get logged — every admin mutation, or a narrower set)
+      not yet agreed, so not started.
 - [x] **History timeline, Source Library, and Brew Guides expanded beyond the 6 origins.** 5 new,
       cross-verified historical moments (Sumatra 1888, Tanzania 1925, Burundi 1933, Costa Rica
       1989, Peru 1990s) — Turkish and Vietnamese coffee preparation steps specifically researched
@@ -816,6 +827,21 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
 
 ## Change log (most recent first)
 
+- **Landing page premium-feel pass, plus a second security audit — both real, not cosmetic.**
+  (1) Found and fixed a real, live production bug: the footer tagline in Settings had been saved
+  as garbled text ("Where quality meets its scent lets Brew It 😊") instead of the real copy —
+  fixed directly via Admin > Settings, confirmed live. (2) Replaced raw platform emoji (🚚🔒☕🌍
+  in the trust strip, 🌅⚡🌿🕯️ in Coffee Moments) with hand-drawn inline SVG line icons in the
+  site's own terracotta/chestnut palette — emoji render inconsistently across OS/browser and read
+  as an unfinished placeholder rather than a designed detail; this was the single biggest
+  "AI-generated" tell on the page. Delivered as a clean-room-verified patch (applies to a fresh
+  clone, builds clean) rather than committed directly. (3) A fresh full-app security audit
+  (dependencies, auth, CSRF, admin/permission gates, IDOR, payment trust, XSS, SQL injection,
+  CORS/headers) found nothing new to fix — confirms the previous audit's fetch-timeout fix and
+  everything else already reviewed is still solid; recorded here as "checked, still clean" rather
+  than skipped. Flagged Admin > Audit Log as a real, known, not-yet-fixed gap while auditing which
+  admin sections are genuinely backend-backed (see the Tier 2 item above) — not fixed this round,
+  scope not yet agreed with the project owner.
 - **Payments/API-routes/dependencies security review — real findings, most areas confirmed
   clean rather than assumed clean, closing out the remaining scope from the earlier full-app
   security audit below.** Payments (`webhooks.js`, `paymentVerification.js`, `paystack.js`):
