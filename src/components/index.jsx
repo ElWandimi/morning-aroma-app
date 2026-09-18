@@ -1222,13 +1222,27 @@ export function Footer() {
           {(settings.instagramHandle || settings.facebookUrl || settings.twitterUrl) && (
             <div className="footer-social">
               {settings.twitterUrl && (
-                <a href={settings.twitterUrl} target="_blank" rel="noopener noreferrer">X</a>
+                <a href={settings.twitterUrl} target="_blank" rel="noopener noreferrer" aria-label="X" title="X">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                </a>
               )}
               {settings.instagramHandle && (
-                <a href={`https://instagram.com/${settings.instagramHandle}`} target="_blank" rel="noopener noreferrer">Instagram</a>
+                <a href={`https://instagram.com/${settings.instagramHandle}`} target="_blank" rel="noopener noreferrer" aria-label="Instagram" title="Instagram">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <rect x="2.5" y="2.5" width="19" height="19" rx="5" />
+                    <circle cx="12" cy="12" r="4.6" />
+                    <circle cx="17.6" cy="6.4" r="1.1" fill="currentColor" stroke="none" />
+                  </svg>
+                </a>
               )}
               {settings.facebookUrl && (
-                <a href={settings.facebookUrl} target="_blank" rel="noopener noreferrer">Facebook</a>
+                <a href={settings.facebookUrl} target="_blank" rel="noopener noreferrer" aria-label="Facebook" title="Facebook">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                    <path d="M22 12.06C22 6.505 17.523 2 12 2S2 6.505 2 12.06c0 5.02 3.657 9.184 8.438 9.94v-7.03H7.898v-2.91h2.54V9.845c0-2.523 1.492-3.917 3.777-3.917 1.094 0 2.238.197 2.238.197v2.475h-1.26c-1.243 0-1.63.775-1.63 1.57v1.89h2.773l-.443 2.91h-2.33V22c4.78-.756 8.437-4.92 8.437-9.94z" />
+                  </svg>
+                </a>
               )}
             </div>
           )}

@@ -1650,9 +1650,9 @@ a { color: inherit; text-decoration: none; }
 .inv-status.low { background: #fdf0ea; color: var(--terracotta-btn); }
 .inv-status.out { background: #f5e0e0; color: #a8433f; }
 .admin-badge-sold-out { background: #f5e0e0; color: #a8433f; margin-left: 6px; }
-.footer-social { display: flex; gap: 16px; margin-top: 10px; }
-.footer-social a { font-size: 0.85rem; text-decoration: underline; opacity: 0.85; }
-.footer-social a:hover { opacity: 1; }
+.footer-social { display: flex; gap: 14px; margin-top: 10px; }
+.footer-social a { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(249,230,212,0.3); color: var(--steam); opacity: 0.85; transition: opacity .15s ease, background-color .15s ease; }
+.footer-social a:hover { opacity: 1; background-color: rgba(249,230,212,0.08); }
 .admin-table-toolbar { display: flex; gap: 10px; align-items: center; margin: 10px 0 14px; flex-wrap: wrap; }
 .admin-search-input { flex: 1 1 240px; min-width: 180px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; }
 .admin-add-form { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 20px 22px; margin-bottom: 20px; }
