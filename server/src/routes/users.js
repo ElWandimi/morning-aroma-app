@@ -11,10 +11,21 @@ const router = express.Router();
 // malformed or malicious PATCH body can't silently store garbage in a real user's permissions
 // column, even though an unrecognized value wouldn't actually grant access to anything on the
 // frontend either way.
+//
+// A real, confirmed bug this hand-sync already produced once: "Blog" and "Career Applications"
+// were added to ADMIN_SECTIONS on the frontend when those features shipped, but this list wasn't
+// updated at the same time -- the staff-permissions UI (src/admin/index.jsx's own
+// STAFF_PERMISSIONS, which iterates ADMIN_SECTIONS directly) genuinely rendered real, clickable
+// checkboxes for both, but checking either one and saving would silently fail this validation
+// with an opaque 400, since neither string existed here yet. Every one of this session's own
+// tests used a super_admin session, which bypasses this check entirely (see
+// middleware/requireAdmin.js), so nothing caught it until a real, direct audit of every
+// permission string across both real lists. When adding a new admin section in the future: it
+// needs to land in BOTH lists in the same change, not just ADMIN_SECTIONS.
 const VALID_PERMISSIONS = [
-  "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content",
+  "Analytics", "Orders", "Invoices", "Customers", "Products", "Inventory", "Content", "Blog",
   "Quotations", "Service Inquiries", "Green Orders", "Live Chat", "Feedback", "Newsletter",
-  "Live Messages", "Audit Log", "Settings",
+  "Career Applications", "Live Messages", "Audit Log", "Settings",
 ];
 const VALID_ROLES = ["customer", "staff", "super_admin"];
 

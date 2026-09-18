@@ -259,6 +259,18 @@ async function main() {
   check("role actually changed", promote.body.user && promote.body.user.role === "staff");
   check("permissions actually saved, in the right shape (a real array, not a JSON string)", Array.isArray(promote.body.user.permissions) && promote.body.user.permissions.includes("Orders") && promote.body.user.permissions.includes("Inventory"));
 
+  // A real, previously-shipped bug this catches: "Blog" and "Career Applications" were added to
+  // ADMIN_SECTIONS on the frontend (and the staff-permissions UI genuinely renders real,
+  // clickable checkboxes for both, since it iterates that same list) but this route's own
+  // VALID_PERMISSIONS wasn't updated in the same change -- checking either box and saving would
+  // have silently failed with an opaque 400. Every other real permissions test in this suite
+  // uses names that existed from the start, so nothing caught this until a direct audit compared
+  // every permission string across both real lists.
+  console.log("\nPATCH /users/:id — grant the two most recently added real admin sections (Blog, Career Applications):");
+  const promoteNewSections = await patch(`/users/${customerId}`, { role: "staff", permissions: ["Blog", "Career Applications"] }, token);
+  check("returns 200, not a stale-permissions-list 400", promoteNewSections.status === 200);
+  check("both newer permissions genuinely saved", Array.isArray(promoteNewSections.body.user.permissions) && promoteNewSections.body.user.permissions.includes("Blog") && promoteNewSections.body.user.permissions.includes("Career Applications"));
+
   console.log("\nPATCH /users/:id — demoting staff back to customer clears their permissions:");
   const demote = await patch(`/users/${customerId}`, { role: "customer" }, token);
   check("returns 200", demote.status === 200);
