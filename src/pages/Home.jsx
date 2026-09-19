@@ -71,22 +71,41 @@ export function TrustBar() {
   );
 }
 
+// The clips that make up the scrolling hero marquee, in display order. The track below renders
+// this sequence TWICE back to back (see .hero-marquee-track's own comment in theme.js for why
+// that's what makes the loop seamless), so this list only needs to name each clip once.
+const HERO_MARQUEE_CLIPS = [
+  "/video/hero/hero-marquee-1.mp4",
+  "/video/hero/hero-marquee-2.mp4",
+  "/video/hero/hero-marquee-3.mp4",
+];
+
 export function Hero() {
   const { go } = useRoute();
   const reducedMotion = usePrefersReducedMotion();
   return (
     <section className="hero hero-split">
-      <video
-        className="hero-video"
-        autoPlay={!reducedMotion}
-        loop
-        muted
-        playsInline
-        poster="/video/hero-poster.jpg"
-        aria-hidden="true"
-      >
-        <source src="/video/hero-coffee.mp4" type="video/mp4" />
-      </video>
+      {reducedMotion ? (
+        <div className="hero-video" style={{ background: "#14100d center/cover url('/video/hero-poster.jpg')" }} aria-hidden="true" />
+      ) : (
+        <div className="hero-marquee" aria-hidden="true">
+          <div className="hero-marquee-track">
+            {[...HERO_MARQUEE_CLIPS, ...HERO_MARQUEE_CLIPS].map((src, i) => (
+              <video
+                key={`${src}-${i}`}
+                className="hero-marquee-clip"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload={i < HERO_MARQUEE_CLIPS.length ? "auto" : "metadata"}
+              >
+                <source src={src} type="video/mp4" />
+              </video>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="hero-overlay" />
       <div className="hero-split-inner">
         <div

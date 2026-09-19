@@ -43,6 +43,27 @@ a { color: inherit; text-decoration: none; }
 .hero-video {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center;
 }
+/* Scrolling video marquee -- replaces the old single looping .hero-video background with several
+   short clips laid side by side in one long strip that drifts continuously right-to-left, like a
+   film reel behind the hero content. .hero-marquee-track holds the sequence TWICE back to back
+   (see Home.jsx) and animates from translateX(0) to translateX(-50%) -- since the two halves are
+   identical, the moment the first half has scrolled fully out of view the second half is sitting
+   exactly where the first one started, so the loop point is invisible with no jump or reset. */
+.hero-marquee { position: absolute; inset: 0; overflow: hidden; }
+.hero-marquee-track {
+  position: absolute; inset: 0; display: flex; align-items: center; height: 100%; width: max-content;
+  animation: heroMarqueeScroll 48s linear infinite;
+  will-change: transform;
+}
+.hero-marquee-clip {
+  height: 100%; width: 46vw; max-width: 640px; min-width: 340px; flex: 0 0 auto;
+  object-fit: cover; object-position: center; display: block;
+}
+@keyframes heroMarqueeScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (max-width: 700px) { .hero-marquee-clip { width: 78vw; min-width: 260px; } }
+@media (prefers-reduced-motion: reduce) {
+  .hero-marquee-track { animation: none; transform: translateX(0); }
+}
 .hero-overlay {
   position: absolute; inset: 0;
   /* The existing top-to-bottom fade (0.6 at the very top, down to 0.35 through the middle) put
@@ -77,7 +98,11 @@ a { color: inherit; text-decoration: none; }
     radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
   }
 }
-@media (prefers-reduced-motion: reduce) { .hero-video { display: none; } .hero { background: #14100d center/cover url('/video/hero-poster.jpg'); } }
+@media (prefers-reduced-motion: reduce) {
+  .hero-video { display: none; }
+  .hero-marquee video { display: none; }
+  .hero { background: #14100d center/cover url('/video/hero-poster.jpg'); }
+}
 
 /* buttons */
 .btn-primary { background: var(--terracotta-btn); color: var(--btn-cream); border: none; padding: 12px 22px; border-radius: 30px; font-weight: 700; cursor: pointer; transition: transform .15s, background .2s, box-shadow .2s; }
