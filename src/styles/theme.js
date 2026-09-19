@@ -1007,41 +1007,48 @@ a { color: inherit; text-decoration: none; }
 /* admin dashboard */
 .admin-btn { border-color: var(--chestnut); color: var(--chestnut); font-size: 0.85rem; padding: 8px 14px; }
 .admin-page {
-  display: grid; grid-template-columns: 220px 1fr; min-height: 70vh; max-width: 1200px; margin: 20px auto 40px;
+  display: grid; grid-template-columns: 240px 1fr; min-height: 70vh; max-width: 1280px; margin: 20px auto 40px;
   border-radius: 18px; overflow: hidden; box-shadow: 0 24px 60px rgba(62,44,35,0.16);
 }
 @media (max-width: 800px) { .admin-page { grid-template-columns: 1fr; } }
 .admin-sidebar {
-  display: flex; flex-direction: column; gap: 2px; padding: 28px 0;
+  display: flex; flex-direction: column; gap: 3px; padding: 28px 0;
   background: linear-gradient(165deg, var(--espresso) 0%, var(--chestnut) 100%);
+  min-width: 0; overflow-x: hidden;
 }
-.admin-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; background: none; border: none; padding: 11px 20px; font-weight: 700; font-size: 0.9rem; color: var(--nav-text-dark); cursor: pointer; border-left: 3px solid transparent; transition: background .15s ease, color .15s ease; }
-.admin-nav-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
-.admin-nav-item.active { background: rgba(232,213,181,0.14); color: var(--gold); border-left-color: var(--gold); }
-.admin-nav-badge { background: var(--terracotta-btn); color: var(--btn-cream); font-size: 0.68rem; font-weight: 700; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
-.admin-content { padding: 30px 24px 80px; background: radial-gradient(circle at 15% 0%, rgba(232,213,181,0.18) 0%, transparent 45%), var(--cream); }
-.admin-content-head { margin-bottom: 24px; }
-.admin-content-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.admin-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; background: none; border: none; padding: 12px 20px; font-weight: 700; font-size: 0.92rem; color: var(--nav-text-dark); cursor: pointer; border-left: 3px solid transparent; transition: background .15s ease, color .15s ease; white-space: nowrap; }
+.admin-nav-item:hover { background: rgba(255,255,255,0.08); color: var(--cream); }
+.admin-nav-item.active { background: rgba(232,213,181,0.16); color: var(--gold); border-left-color: var(--gold); }
+.admin-nav-item:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; background: rgba(255,255,255,0.08); }
+.admin-nav-badge { background: var(--terracotta-btn); color: var(--btn-cream); font-size: 0.7rem; font-weight: 700; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; flex-shrink: 0; }
+.admin-content { padding: 32px 28px 80px; background: radial-gradient(circle at 15% 0%, rgba(232,213,181,0.18) 0%, transparent 45%), var(--cream); min-width: 0; }
+.admin-content-head { margin-bottom: 26px; }
+.admin-content-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
 .notification-bell-wrap { position: relative; flex-shrink: 0; }
-.notification-bell-btn { position: relative; background: white; border: 1px solid var(--gold); border-radius: 50%; width: 42px; height: 42px; font-size: 1.15rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(62,44,35,0.08); transition: transform .15s ease; }
-.notification-bell-btn:hover { transform: translateY(-1px); }
+.notification-bell-btn { position: relative; background: white; border: 1px solid var(--gold); border-radius: 50%; width: 44px; height: 44px; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(62,44,35,0.08); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+.notification-bell-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(62,44,35,0.14); border-color: var(--terracotta-btn); }
+.notification-bell-btn:focus-visible { outline: 2px solid var(--chestnut); outline-offset: 2px; }
 .notification-bell-badge { position: absolute; top: -4px; right: -4px; background: var(--terracotta-btn); color: var(--btn-cream); font-size: 0.65rem; font-weight: 700; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--cream); }
 .notification-bell-panel { position: absolute; top: calc(100% + 10px); right: 0; width: 260px; background: white; border: 1px solid var(--gold); border-radius: 14px; box-shadow: 0 16px 40px rgba(62,44,35,0.2); padding: 14px 0; z-index: 20; }
 .notification-bell-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--almond-text); padding: 0 16px 10px; margin: 0; }
 .notification-bell-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 16px; background: none; border: none; text-align: left; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--espresso); cursor: pointer; transition: background .15s ease; }
 .notification-bell-item:hover { background: var(--steam); }
-.admin-content-head h1 { font-size: 1.8rem; }
+.admin-content-head h1 { font-size: 1.9rem; }
 
-.admin-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 34px; }
-.admin-kpi-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-top: 3px solid var(--terracotta-btn); border-radius: 12px; padding: 16px; box-shadow: 0 6px 18px rgba(62,44,35,0.08); }
-.admin-kpi-value { font-size: 1.5rem; font-weight: 700; color: var(--chestnut); font-family: 'Cormorant Garamond', serif; }
+.admin-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 34px; }
+.admin-kpi-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-top: 3px solid var(--terracotta-btn); border-radius: 14px; padding: 18px; box-shadow: 0 6px 18px rgba(62,44,35,0.08); transition: transform .15s ease, box-shadow .15s ease; }
+.admin-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(62,44,35,0.13); }
+.admin-kpi-card .filter-label { margin-top: 0; }
+.admin-kpi-value { font-size: 1.65rem; font-weight: 700; color: var(--chestnut); font-family: 'Cormorant Garamond', serif; }
 
-.admin-status-bars { display: flex; flex-direction: column; gap: 10px; max-width: 500px; }
-.admin-status-row { display: grid; grid-template-columns: 100px 1fr 30px; align-items: center; gap: 10px; font-size: 0.88rem; }
-.admin-status-row-wide { grid-template-columns: 150px 1fr 70px; }
-.admin-status-track { height: 10px; background: var(--gold); border-radius: 6px; overflow: hidden; }
-.admin-status-fill { height: 100%; background: var(--chestnut); }
+.admin-status-bars { display: flex; flex-direction: column; gap: 12px; max-width: 560px; }
+.admin-status-row { display: grid; grid-template-columns: minmax(90px, 120px) 1fr 40px; align-items: center; gap: 12px; font-size: 0.9rem; color: var(--espresso); }
+.admin-status-row-wide { grid-template-columns: minmax(120px, 170px) 1fr 80px; }
+.admin-status-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-status-row > span:last-child { text-align: right; font-weight: 600; }
+.admin-status-track { height: 11px; background: var(--gold); border-radius: 6px; overflow: hidden; }
+.admin-status-fill { height: 100%; background: linear-gradient(90deg, var(--terracotta-btn), var(--chestnut)); border-radius: 6px; transition: width .4s ease; }
 /* Academy's certificate-progress bar reuses the admin dashboard's status-bar styling, but wants
    the fill to visibly animate when it updates (e.g. right after passing a quiz) rather than snap
    -- scoped so the admin dashboard's own bars (which don't need this) are unaffected. */
@@ -1057,12 +1064,13 @@ a { color: inherit; text-decoration: none; }
    a real minimum width and the table scrolls horizontally below that -- the same pattern as any
    data-dense admin table -- so every column, and every button inside the actions column, keeps
    its actual legible size instead of being squeezed. */
-.admin-row { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: center; padding: 10px 14px; background: white; border-bottom: 1px solid var(--gold); font-size: 0.86rem; transition: background .15s ease; min-width: 640px; }
+.admin-row { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: center; padding: 13px 16px; background: white; border-bottom: 1px solid var(--gold); font-size: 0.9rem; color: var(--espresso); transition: background .15s ease; min-width: 640px; }
 .admin-table .admin-row:not(.admin-header):hover { background: var(--steam); }
 .admin-table-products .admin-row { grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr; }
-.admin-header { font-weight: 700; color: var(--almond-text); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; background: linear-gradient(180deg, var(--steam), rgba(249,230,212,0.5)); }
-.admin-row select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; }
-.admin-price-input { width: 70px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; }
+.admin-header { font-weight: 700; color: var(--almond-text); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; background: linear-gradient(180deg, var(--steam), rgba(249,230,212,0.5)); padding-top: 12px; padding-bottom: 12px; }
+.admin-row select { padding: 7px 10px; border-radius: 6px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; background: white; color: var(--espresso); cursor: pointer; }
+.admin-row select:focus-visible, .admin-price-input:focus-visible { outline: 2px solid var(--chestnut); outline-offset: 1px; }
+.admin-price-input { width: 84px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; color: var(--espresso); }
 .role-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; text-transform: capitalize; background: var(--steam); color: var(--chestnut); }
 .role-badge.super_admin { background: var(--chestnut); color: var(--cream); }
 .role-badge.premium { background: var(--espresso); color: var(--gold); }
@@ -1075,10 +1083,10 @@ a { color: inherit; text-decoration: none; }
 .payment-badge.refund_pending { background: #fff3cd; color: #7a5c00; }
 .payment-mode-badge { display: inline-block; margin-left: 5px; padding: 1px 6px; border-radius: 10px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.03em; background: #fff3cd; color: #7a5c00; }
 
-.admin-card-list { display: flex; flex-direction: column; gap: 12px; }
-.admin-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-left: 3px solid var(--terracotta-btn); border-radius: 12px; padding: 16px; box-shadow: 0 6px 16px rgba(62,44,35,0.07); transition: box-shadow .15s ease; }
-.admin-card:hover { box-shadow: 0 8px 22px rgba(62,44,35,0.12); }
-.admin-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap; }
+.admin-card-list { display: flex; flex-direction: column; gap: 14px; }
+.admin-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-left: 3px solid var(--terracotta-btn); border-radius: 14px; padding: 18px 20px; box-shadow: 0 6px 16px rgba(62,44,35,0.07); transition: box-shadow .15s ease, transform .15s ease; }
+.admin-card:hover { box-shadow: 0 10px 24px rgba(62,44,35,0.12); transform: translateY(-1px); }
+.admin-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 10px; flex-wrap: wrap; }
 .admin-card-head select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; }
 /* Real status pills -- used by AdminBlog (blog post Draft/Published) and reusable wherever a
    short, colored status label is needed going forward, rather than a one-off inline style. */
@@ -1090,8 +1098,9 @@ a { color: inherit; text-decoration: none; }
    editor's own visual language. */
 .blog-editor { border: 1px solid var(--gold); border-radius: 10px; overflow: hidden; }
 .blog-editor-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; background: var(--cream); border-bottom: 1px solid var(--gold); }
-.blog-editor-toolbar button { background: white; border: 1px solid var(--gold); border-radius: 6px; padding: 5px 10px; font-size: 0.85rem; cursor: pointer; color: var(--espresso); }
-.blog-editor-toolbar button:hover { background: var(--steam); }
+.blog-editor-toolbar button { background: white; border: 1px solid var(--gold); border-radius: 6px; padding: 6px 11px; font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--espresso); transition: background .15s ease, border-color .15s ease; }
+.blog-editor-toolbar button:hover { background: var(--steam); border-color: var(--terracotta-btn); }
+.blog-editor-toolbar button:focus-visible { outline: 2px solid var(--chestnut); outline-offset: 1px; }
 .blog-editor-body { min-height: 260px; padding: 16px; font-family: Georgia, 'Times New Roman', serif; font-size: 1rem; line-height: 1.7; color: var(--espresso); outline: none; }
 .blog-editor-body h2 { font-family: 'Cormorant Garamond', serif; color: var(--chestnut); margin: 20px 0 10px; }
 .blog-editor-body h3 { font-family: 'Cormorant Garamond', serif; color: var(--chestnut); margin: 16px 0 8px; }
@@ -1627,10 +1636,11 @@ a { color: inherit; text-decoration: none; }
 .green-bean-stock.low { color: var(--terracotta-btn); }
 
 /* new admin sections — Inventory, Invoices, Green Orders */
-.admin-subhead { font-family: 'Cormorant Garamond', serif; font-size: 1.25rem; color: var(--chestnut); margin: 28px 0 10px; }
+.admin-subhead { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; color: var(--chestnut); margin: 30px 0 12px; line-height: 1.3; }
 .admin-subhead:first-of-type { margin-top: 16px; }
-.admin-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin: 14px 0 24px; }
-.admin-stat-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-top: 3px solid var(--green); border-radius: 12px; padding: 16px 18px; box-shadow: 0 6px 18px rgba(62,44,35,0.08); }
+.admin-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin: 14px 0 24px; }
+.admin-stat-card { background: linear-gradient(160deg, white 0%, var(--cream) 100%); border: 1px solid var(--gold); border-top: 3px solid var(--green); border-radius: 14px; padding: 18px 20px; box-shadow: 0 6px 18px rgba(62,44,35,0.08); transition: transform .15s ease, box-shadow .15s ease; }
+.admin-stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(62,44,35,0.13); }
 .admin-stat-alert { border-color: var(--terracotta-btn); background: #fdf0ea; }
 .admin-stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--almond-text); margin: 0 0 6px; }
 .admin-stat-value { font-size: 1.5rem; font-weight: 700; color: var(--chestnut); margin: 0; }
@@ -1638,7 +1648,11 @@ a { color: inherit; text-decoration: none; }
 .admin-table-invoices .admin-row { grid-template-columns: 0.8fr 1.4fr 0.8fr 0.8fr 1fr; min-width: 600px; }
 .admin-table-invoices-service .admin-row { grid-template-columns: 1.2fr 1.4fr 0.8fr 0.8fr 1fr; min-width: 640px; }
 .admin-table-invoices-service .admin-price-input { width: 80px; }
-.admin-inline-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-inline-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; row-gap: 8px; }
+/* .hint text (used throughout admin for helper copy under tables/forms) is a touch low-contrast
+   for a "make text visible" pass -- bumped a shade darker and slightly larger only inside the
+   admin dashboard, matching the same tone family so it still reads as secondary copy. */
+.admin-page .hint { font-size: 0.82rem; color: #7a6650; }
 /* Card-level action row (Edit / Save / Cancel / Discontinue / photo-upload labels, on Products,
    Academy courses & chapters, Countries, Kenya messages, Moments, etc.) -- these buttons used to
    just flow inline after the card's text with nothing but link-btn's own 8px margin-left holding
@@ -1647,11 +1661,34 @@ a { color: inherit; text-decoration: none; }
    narrow widths. A real flex row fixes the spacing; a distinct danger style for destructive
    actions (Discontinue, Delete, Revoke) stops them from being visually identical to Edit/Save,
    which is what actually matters here -- Discontinue and Edit look the same today. */
-.admin-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px; }
+.admin-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 .admin-card-actions .link-btn, .admin-card-actions .btn-danger-link { margin-left: 0; }
 .btn-danger-link { background: none; border: none; color: #a8433f; text-decoration: underline; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
 .btn-danger-link:hover { color: #832e2b; }
 .btn-danger-link:disabled { opacity: 0.5; cursor: default; }
+/* Inside the admin dashboard, .link-btn and .btn-danger-link are the PRIMARY row/card actions
+   (Save, Edit, Download PDF, Discontinue, Revoke…), not secondary inline text links the way they
+   are on the public site -- but they inherited the public site's plain-underline-text treatment,
+   which reads as barely-clickable copy rather than a button, especially packed several to a row.
+   Scoped to .admin-page so the public site's own genuine text links are completely unaffected. */
+.admin-page .link-btn, .admin-page .btn-danger-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 0; padding: 7px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: 700;
+  text-decoration: none; border: 1.5px solid var(--gold); background: white; white-space: nowrap;
+  transition: transform .12s ease, box-shadow .12s ease, background .15s ease, border-color .15s ease, color .15s ease;
+}
+.admin-page .link-btn { color: var(--terracotta-btn); }
+.admin-page .link-btn:hover { background: var(--terracotta-btn); color: var(--btn-cream); border-color: var(--terracotta-btn); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(62,44,35,0.16); }
+.admin-page .btn-danger-link { color: #a8433f; border-color: #eecac6; }
+.admin-page .btn-danger-link:hover { background: #a8433f; color: white; border-color: #a8433f; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(168,67,63,0.25); }
+.admin-page .btn-danger-link:disabled, .admin-page .link-btn:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
+.admin-page .link-btn:focus-visible, .admin-page .btn-danger-link:focus-visible { outline: 2px solid var(--chestnut); outline-offset: 2px; }
+/* AdminPager's Prev/Next and AdminOrders/AdminProducts sortable headers reuse .link-btn too but
+   read better as quiet text there rather than pill buttons -- keep those two spots on the plain
+   underline treatment instead of the new pill style above. */
+.admin-pager .link-btn { border: none; background: none; padding: 6px 4px; border-radius: 4px; text-decoration: underline; }
+.admin-pager .link-btn:hover { background: none; color: var(--chestnut); transform: none; box-shadow: none; }
+.admin-pager .link-btn:disabled { text-decoration: none; }
 .inv-status { font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; display: inline-block; width: fit-content; }
 .inv-status.ok { background: #e8f0e0; color: var(--green); }
 .inv-status.low { background: #fdf0ea; color: var(--terracotta-btn); }
@@ -1661,12 +1698,13 @@ a { color: inherit; text-decoration: none; }
 .footer-social a { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(249,230,212,0.3); color: var(--steam); opacity: 0.85; transition: opacity .15s ease, background-color .15s ease; }
 .footer-social a:hover { opacity: 1; background-color: rgba(249,230,212,0.08); }
 .admin-table-toolbar { display: flex; gap: 10px; align-items: center; margin: 10px 0 14px; flex-wrap: wrap; }
-.admin-search-input { flex: 1 1 240px; min-width: 180px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; }
-.admin-add-form { background: white; border: 1px solid var(--gold); border-radius: 14px; padding: 20px 22px; margin-bottom: 20px; }
+.admin-search-input { flex: 1 1 240px; min-width: 180px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--gold); font-family: inherit; font-size: 16px; color: var(--espresso); transition: border-color .15s ease, box-shadow .15s ease; }
+.admin-search-input:focus-visible, .admin-search-input:focus { outline: none; border-color: var(--chestnut); box-shadow: 0 0 0 3px rgba(139,90,58,0.14); }
+.admin-add-form { background: white; border: 1px solid var(--gold); border-radius: 16px; padding: 22px 24px; margin-bottom: 22px; box-shadow: 0 8px 22px rgba(62,44,35,0.08); }
 .admin-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px 18px; }
 .admin-form-grid input, .admin-form-grid select { width: 100%; box-sizing: border-box; }
 .admin-tag-checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.admin-tag-checks .chip { cursor: pointer; user-select: none; }
+.admin-tag-checks .chip { cursor: pointer; user-select: none; font-size: 0.82rem; padding: 6px 13px; }
 
 /* login modal — coffee-themed two-column layout */
 .login-card { display: flex; max-width: 720px; width: 100%; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 70px rgba(20,13,9,0.35); }
@@ -1698,10 +1736,12 @@ a { color: inherit; text-decoration: none; }
 .admin-photo-preview { width: 70px; height: 70px; object-fit: cover; border-radius: 10px; border: 1px solid var(--gold); flex-shrink: 0; background: white; }
 .admin-photo-label { cursor: pointer; }
 .role-badge.staff { background: var(--green); color: var(--cream); }
-.admin-permissions-row { background: var(--steam); border-radius: 10px; padding: 14px 16px; margin: -2px 0 6px; }
-.admin-pager { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px 0 4px; }
-.admin-sortable { cursor: pointer; user-select: none; }
+.admin-permissions-row { background: var(--steam); border-radius: 10px; padding: 16px 18px; margin: 4px 0 8px; }
+.admin-pager { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 18px 0 6px; flex-wrap: wrap; }
+.admin-pager .hint { font-weight: 600; }
+.admin-sortable { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 2px; }
 .admin-sortable:hover { color: var(--chestnut); }
+.admin-sortable:focus-visible { outline: 2px solid var(--chestnut); outline-offset: 2px; border-radius: 3px; }
 
 /* search: quick-search modal's "view all" link, and the dedicated results page */
 .search-view-all { display: block; width: 100%; text-align: center; background: var(--steam); border: none; padding: 12px; border-radius: 10px; margin-top: 8px; font-weight: 700; color: var(--terracotta-btn); cursor: pointer; }
