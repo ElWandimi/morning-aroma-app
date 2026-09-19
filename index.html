@@ -82,20 +82,81 @@
       <div id="ma-preload" aria-hidden="true">
         <div class="ma-preload-cup-wrap">
           <svg viewBox="0 0 76 76" xmlns="http://www.w3.org/2000/svg">
-            <!-- Three coffee beans, bouncing up out of the cup on a staggered loop -->
-            <g fill="#3E2C23">
-              <ellipse class="ma-preload-bean" cx="28" cy="30" rx="4.5" ry="6" />
-              <ellipse class="ma-preload-bean" cx="38" cy="26" rx="4.5" ry="6" />
-              <ellipse class="ma-preload-bean" cx="48" cy="30" rx="4.5" ry="6" />
+            <defs>
+              <!-- Light source from the top-left throughout, so every gradient below agrees with
+                   the same imagined light and the cup reads as one consistent solid object
+                   rather than flat shapes with unrelated shading pasted on. -->
+              <linearGradient id="ma-preload-shadow-g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#3E2C23" stop-opacity="0.16" />
+                <stop offset="100%" stop-color="#3E2C23" stop-opacity="0" />
+              </linearGradient>
+              <radialGradient id="ma-preload-saucer-g" cx="35%" cy="30%" r="75%">
+                <stop offset="0%" stop-color="#F5E9D3" />
+                <stop offset="100%" stop-color="#D8BE95" />
+              </radialGradient>
+              <linearGradient id="ma-preload-cup-g" x1="0" y1="0" x2="1" y2="0.3">
+                <stop offset="0%" stop-color="#FFFFFF" />
+                <stop offset="45%" stop-color="#FDF8F0" />
+                <stop offset="100%" stop-color="#E8D5B5" />
+              </linearGradient>
+              <radialGradient id="ma-preload-coffee-g" cx="38%" cy="35%" r="70%">
+                <stop offset="0%" stop-color="#A9714A" />
+                <stop offset="55%" stop-color="#7A4A2E" />
+                <stop offset="100%" stop-color="#5C3620" />
+              </radialGradient>
+              <linearGradient id="ma-preload-handle-g" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#A9714A" />
+                <stop offset="100%" stop-color="#6B4226" />
+              </linearGradient>
+              <linearGradient id="ma-preload-rim-g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9" />
+                <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <!-- Three coffee beans, bouncing up out of the cup on a staggered loop -- given the
+                 same rounded, two-tone shading as a real coffee bean (a highlight on the side
+                 facing the light) rather than a single flat fill, so they read as small solid
+                 objects rather than flat dots even while in motion. -->
+            <g>
+              <g class="ma-preload-bean">
+                <ellipse cx="28" cy="30" rx="4.5" ry="6" fill="#3E2C23" />
+                <ellipse cx="26.5" cy="28" rx="1.6" ry="2.4" fill="#6B4226" />
+              </g>
+              <g class="ma-preload-bean">
+                <ellipse cx="38" cy="26" rx="4.5" ry="6" fill="#3E2C23" />
+                <ellipse cx="36.5" cy="24" rx="1.6" ry="2.4" fill="#6B4226" />
+              </g>
+              <g class="ma-preload-bean">
+                <ellipse cx="48" cy="30" rx="4.5" ry="6" fill="#3E2C23" />
+                <ellipse cx="46.5" cy="28" rx="1.6" ry="2.4" fill="#6B4226" />
+              </g>
             </g>
-            <!-- Saucer -->
-            <ellipse cx="38" cy="66" rx="26" ry="5" fill="#E8D5B5" />
-            <!-- Cup body -->
-            <path d="M14 38 L18 60 Q18 64 22 64 L54 64 Q58 64 58 60 L62 38 Z" fill="#FDF8F0" stroke="#8B5A3A" stroke-width="2.5" stroke-linejoin="round" />
-            <!-- Coffee surface -->
-            <ellipse cx="38" cy="38" rx="24" ry="5" fill="#8B5A3A" />
-            <!-- Handle -->
-            <path d="M62 42 Q74 42 74 50 Q74 58 62 57" fill="none" stroke="#8B5A3A" stroke-width="4" stroke-linecap="round" />
+            <!-- Soft contact shadow the cup casts onto the saucer -- the single biggest cue that
+                 the cup is a raised object sitting ON the saucer rather than a flat sticker lying
+                 next to it. -->
+            <ellipse cx="38" cy="61.5" rx="21" ry="3.5" fill="url(#ma-preload-shadow-g)" />
+            <!-- Saucer -- a radial gradient (lit top-left, darker toward the rim) plus a thin
+                 darker underline along its bottom edge gives it real plate-like curvature instead
+                 of a flat tinted oval. -->
+            <ellipse cx="38" cy="67" rx="26" ry="5" fill="#C9A876" />
+            <ellipse cx="38" cy="66" rx="26" ry="5" fill="url(#ma-preload-saucer-g)" />
+            <!-- Cup body -- a diagonal gradient (bright highlight top-left, warm shadow bottom-
+                 right) is what actually makes a flat-drawn shape read as a rounded, lit ceramic
+                 form rather than a flat cutout with a stroke around it. -->
+            <path d="M14 38 L18 60 Q18 64 22 64 L54 64 Q58 64 58 60 L62 38 Z" fill="url(#ma-preload-cup-g)" stroke="#8B5A3A" stroke-width="2" stroke-linejoin="round" />
+            <!-- Coffee surface -- radial gradient for a pooled-liquid look, plus a small crescent
+                 highlight catching the same top-left light as everything else, so the liquid
+                 reads as reflective rather than a flat brown ellipse. -->
+            <ellipse cx="38" cy="38" rx="24" ry="5" fill="url(#ma-preload-coffee-g)" />
+            <ellipse cx="30" cy="36.5" rx="6" ry="1.4" fill="#C89968" opacity="0.55" />
+            <!-- Handle -- same diagonal light-to-shadow gradient as the cup body it's attached to,
+                 so it reads as one continuous piece of ceramic rather than a separately-colored
+                 loop. -->
+            <path d="M62 42 Q74 42 74 50 Q74 58 62 57" fill="none" stroke="url(#ma-preload-handle-g)" stroke-width="4.5" stroke-linecap="round" />
+            <!-- A thin bright rim-light tracing just inside the cup's top-left edge -- the small
+                 extra detail that reads as "glazed ceramic catching the light" rather than a flat
+                 outline, without needing an actual 3D renderer to get there. -->
+            <path d="M15.5 40 Q16.5 44 19 56" fill="none" stroke="url(#ma-preload-rim-g)" stroke-width="2" stroke-linecap="round" opacity="0.7" />
           </svg>
         </div>
         <p>Morning Aroma</p>
