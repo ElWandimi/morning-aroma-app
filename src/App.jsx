@@ -73,8 +73,20 @@ function getPageMeta(route, realProducts, realCourses, blogPosts) {
     case "product":
     case "growingprofile": {
       const p = realProducts.find((p) => p.id === route.id);
+      // getProductPhotoUrl returns a bare relative path (e.g. "/photos/products/sl28-kenya.png")
+      // for any product whose photo ships bundled with the app rather than uploaded to Cloudinary
+      // -- a real, live bug confirmed on every one of the 15 seeded products: og:image and
+      // twitter:image both got that relative path verbatim (useDocumentMeta in hooks/index.js has
+      // no way to know it needs absolutizing, it just passes `image` straight through), so a
+      // product link shared on WhatsApp/Instagram/X had no preview image at all. Shop.jsx's own
+      // separate Product structured-data block already guards against exactly this
+      // (`url.startsWith("http") ? url : ...`) -- this applies the same real fix here.
+      const rawImage = getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 1200);
+      const image = rawImage && !rawImage.startsWith("http") && !rawImage.startsWith("data:")
+        ? `${window.location.origin}${rawImage}`
+        : rawImage;
       return p
-        ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note, canonicalPath: pathFor(route.page, { id: route.id }), image: getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 1200) }
+        ? { title: `${p.name} — ${p.country}${suffix}`, description: p.note, canonicalPath: pathFor(route.page, { id: route.id }), image }
         : { ...PAGE_META[route.page === "product" ? "shop" : "growing"], canonicalPath: pathFor(route.page === "product" ? "shop" : "growing") };
     }
     case "blogpost": {
