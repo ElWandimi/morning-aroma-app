@@ -74,16 +74,22 @@ a { color: inherit; text-decoration: none; }
      where the eyebrow-through-subhead content actually sits), layered on top of the original
      linear fade rather than replacing it, so the effect stays local to the text -- the corners
      and edges of the frame keep their original brightness instead of the whole image going darker. */
+  /* Overlay lightened across the board (~30-35% less opacity on every darkening stop) so the
+     marquee video reads through much more clearly, while the radial darken directly behind the
+     text block is kept (just lighter) rather than removed outright, since that's the only thing
+     giving the headline/subhead contrast against a moving, unpredictable video background. The
+     bottom stop that fades into the cream section below (0.94) is a layout transition, not part
+     of the darkening effect, so it's left as-is. */
   background-image:
-    radial-gradient(ellipse 600px 420px at 50% 45%, rgba(20,13,9,0.42) 0%, rgba(20,13,9,0.12) 60%, transparent 100%),
-    linear-gradient(180deg, rgba(20,13,9,0.5) 0%, rgba(20,13,9,0.28) 45%, rgba(253,248,240,0.94) 92%),
-    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
+    radial-gradient(ellipse 600px 420px at 50% 45%, rgba(20,13,9,0.28) 0%, rgba(20,13,9,0.08) 60%, transparent 100%),
+    linear-gradient(180deg, rgba(20,13,9,0.32) 0%, rgba(20,13,9,0.16) 45%, rgba(253,248,240,0.94) 92%),
+    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.05) 0, transparent 40%);
 }
 @media (max-width: 700px) {
   .hero-overlay { background-image:
-    radial-gradient(ellipse 90vw 360px at 50% 45%, rgba(20,13,9,0.45) 0%, rgba(20,13,9,0.15) 60%, transparent 100%),
-    linear-gradient(180deg, rgba(20,13,9,0.5) 0%, rgba(20,13,9,0.28) 45%, rgba(253,248,240,0.94) 92%),
-    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
+    radial-gradient(ellipse 90vw 360px at 50% 45%, rgba(20,13,9,0.3) 0%, rgba(20,13,9,0.1) 60%, transparent 100%),
+    linear-gradient(180deg, rgba(20,13,9,0.32) 0%, rgba(20,13,9,0.16) 45%, rgba(253,248,240,0.94) 92%),
+    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.05) 0, transparent 40%);
   }
 }
 /* hero-split moved the text block from centered to the right column, so the radial darken (tuned
@@ -93,9 +99,9 @@ a { color: inherit; text-decoration: none; }
    original centered darken is already correct again. */
 @media (min-width: 761px) {
   .hero-split .hero-overlay { background-image:
-    radial-gradient(ellipse 620px 440px at 72% 50%, rgba(20,13,9,0.42) 0%, rgba(20,13,9,0.12) 60%, transparent 100%),
-    linear-gradient(180deg, rgba(20,13,9,0.5) 0%, rgba(20,13,9,0.28) 45%, rgba(253,248,240,0.94) 92%),
-    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.08) 0, transparent 40%);
+    radial-gradient(ellipse 620px 440px at 72% 50%, rgba(20,13,9,0.28) 0%, rgba(20,13,9,0.08) 60%, transparent 100%),
+    linear-gradient(180deg, rgba(20,13,9,0.32) 0%, rgba(20,13,9,0.16) 45%, rgba(253,248,240,0.94) 92%),
+    radial-gradient(circle at 20% 30%, rgba(139,90,58,0.05) 0, transparent 40%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
