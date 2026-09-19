@@ -160,7 +160,12 @@ export function AppShell() {
     description: settings.tagline,
     address: settings.businessAddress ? { "@type": "PostalAddress", addressLocality: settings.businessAddress } : undefined,
     email: settings.contactEmail,
-    sameAs: [settings.instagramHandle && `https://instagram.com/${settings.instagramHandle}`, settings.facebookUrl].filter(Boolean),
+    sameAs: [
+      settings.instagramHandle && `https://instagram.com/${settings.instagramHandle}`,
+      settings.facebookUrl,
+      settings.twitterUrl,
+      settings.tiktokUrl,
+    ].filter(Boolean),
   });
   return (
     <div className="ma-root">

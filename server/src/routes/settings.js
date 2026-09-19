@@ -12,7 +12,7 @@ const router = express.Router();
 const VALID_KEYS = new Set([
   "tagline", "announcementEnabled", "announcementText", "contactEmail", "whatsappNumber",
   "phoneNumber", "businessName", "businessAddress", "taxId", "taxRatePercent", "invoiceNotes",
-  "bankDetails", "instagramHandle", "facebookUrl", "twitterUrl", "notificationTypes",
+  "bankDetails", "instagramHandle", "facebookUrl", "twitterUrl", "tiktokUrl", "notificationTypes",
   "academyLifetimePriceCents", "kenyaLiveMessages",
 ]);
 
@@ -44,6 +44,8 @@ const FALLBACK_SETTINGS = {
   // the simplest, most honest real choice: it just works, unchanged, however X's own domain
   // conventions shift in the future.
   twitterUrl: "https://x.com/MorningAromaR",
+  // Full URL, same convention as twitterUrl/facebookUrl above.
+  tiktokUrl: "https://www.tiktok.com/@morning.aromar",
   notificationTypes: ["Orders", "Quotations", "Service Inquiries", "Green Orders", "Feedback", "Live Chat", "Career Applications"],
   // A real, reasonable starting value -- roughly what a year of two or three individual courses
   // would cost combined, making lifetime access a genuine value proposition rather than an

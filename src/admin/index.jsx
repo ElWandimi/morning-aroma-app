@@ -2968,6 +2968,9 @@ function AdminSettingsForm() {
 
       <label className="filter-label" htmlFor="set-facebook" style={{ marginTop: 16 }}>Facebook page URL (optional)</label>
       <input id="set-facebook" type="url" value={draft.facebookUrl} onChange={(e) => setDraft({ ...draft, facebookUrl: e.target.value })} maxLength={200} placeholder="https://facebook.com/…" />
+
+      <label className="filter-label" htmlFor="set-tiktok" style={{ marginTop: 16 }}>TikTok URL (optional)</label>
+      <input id="set-tiktok" type="url" value={draft.tiktokUrl} onChange={(e) => setDraft({ ...draft, tiktokUrl: e.target.value })} maxLength={200} placeholder="https://www.tiktok.com/@…" />
       <p className="hint" style={{ marginTop: 4 }}>Leave any of these blank to hide that icon from the footer.</p>
 
       <h4 className="admin-subhead">Notifications</h4>

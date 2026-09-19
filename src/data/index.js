@@ -1147,6 +1147,7 @@ export const DEFAULT_SETTINGS = {
   instagramHandle: "morningaromarosters",
   facebookUrl: "",
   twitterUrl: "https://x.com/MorningAromaR",
+  tiktokUrl: "https://www.tiktok.com/@morning.aromar",
   // Which pending-item types actually generate a bell notification for admin -- all on by
   // default, but an admin who doesn't want to be interrupted by, say, live chat pings can turn
   // just that one off without losing the others.
