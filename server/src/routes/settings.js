@@ -11,7 +11,7 @@ const router = express.Router();
 // together if a new setting is ever added.
 const VALID_KEYS = new Set([
   "tagline", "announcementEnabled", "announcementText", "contactEmail", "whatsappNumber",
-  "phoneNumber", "businessName", "businessAddress", "taxId", "taxRatePercent", "invoiceNotes",
+  "phoneNumber", "businessName", "businessAddress", "websiteUrl", "taxId", "taxRatePercent", "invoiceNotes",
   "bankDetails", "instagramHandle", "facebookUrl", "twitterUrl", "tiktokUrl", "notificationTypes",
   "academyLifetimePriceCents", "kenyaLiveMessages",
 ]);
@@ -31,6 +31,9 @@ const FALLBACK_SETTINGS = {
   phoneNumber: "+254 712 345 678",
   businessName: "Morning Aroma Coffee Roasters Ltd.",
   businessAddress: "Nairobi, Kenya",
+  // Real, live production domain -- printed on every invoice/receipt/quotation PDF footer
+  // alongside phone/email, the same real business detail every other footer field already is.
+  websiteUrl: "https://morning-aroma.com",
   taxId: "",
   taxRatePercent: 0,
   invoiceNotes: "Payment due within 14 days of invoice date. Thank you for your business.",

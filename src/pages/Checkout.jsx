@@ -267,7 +267,7 @@ export function CheckoutPage() {
     });
     const business = {
       name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
-      phone: settings.phoneNumber, taxId: settings.taxId, bankDetails: settings.bankDetails,
+      phone: settings.phoneNumber, website: settings.websiteUrl, taxId: settings.taxId, bankDetails: settings.bankDetails,
     };
     generateReceiptPDF({
       receiptNumber: `${confirmedOrder.orderNumber}-R`,

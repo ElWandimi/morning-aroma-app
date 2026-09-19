@@ -511,7 +511,7 @@ export function AdminInvoices() {
   const [feeDrafts, setFeeDrafts] = useState({});
   const business = {
     name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
-    phone: settings.phoneNumber, taxId: settings.taxId, taxRatePercent: settings.taxRatePercent,
+    phone: settings.phoneNumber, website: settings.websiteUrl, taxId: settings.taxId, taxRatePercent: settings.taxRatePercent,
     invoiceNotes: settings.invoiceNotes, bankDetails: settings.bankDetails,
   };
   // Shows a local typing draft if one exists, otherwise falls back to whatever fee was already
@@ -1397,7 +1397,7 @@ export function AdminQuotations() {
     if (!priceCents || priceCents <= 0) { addToast("Enter a quoted price first"); return; }
     const business = {
       name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
-      phone: settings.phoneNumber, taxId: settings.taxId, bankDetails: settings.bankDetails,
+      phone: settings.phoneNumber, website: settings.websiteUrl, taxId: settings.taxId, bankDetails: settings.bankDetails,
     };
     const validUntilDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     generateQuotationPDF({
@@ -1514,7 +1514,7 @@ export function AdminGreenOrders() {
   const STATUSES = ["New", "Quoted", "Invoiced", "Shipped", "Fulfilled"];
   const business = {
     name: settings.businessName, address: settings.businessAddress, email: settings.contactEmail,
-    phone: settings.phoneNumber, taxId: settings.taxId, taxRatePercent: settings.taxRatePercent,
+    phone: settings.phoneNumber, website: settings.websiteUrl, taxId: settings.taxId, taxRatePercent: settings.taxRatePercent,
     invoiceNotes: settings.invoiceNotes, bankDetails: settings.bankDetails,
   };
   const downloadInvoice = (o) => {
@@ -2939,6 +2939,9 @@ function AdminSettingsForm() {
 
       <label className="filter-label" htmlFor="set-bizaddr" style={{ marginTop: 16 }}>Business address</label>
       <input id="set-bizaddr" value={draft.businessAddress} onChange={(e) => setDraft({ ...draft, businessAddress: e.target.value })} maxLength={160} />
+
+      <label className="filter-label" htmlFor="set-bizwebsite" style={{ marginTop: 16 }}>Website URL</label>
+      <input id="set-bizwebsite" type="url" value={draft.websiteUrl} onChange={(e) => setDraft({ ...draft, websiteUrl: e.target.value })} maxLength={200} placeholder="https://morning-aroma.com" />
 
       <label className="filter-label" htmlFor="set-taxid" style={{ marginTop: 16 }}>Tax / VAT ID (optional)</label>
       <input id="set-taxid" value={draft.taxId} onChange={(e) => setDraft({ ...draft, taxId: e.target.value })} maxLength={60} placeholder="Leave blank to omit from invoices" />

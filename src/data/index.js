@@ -1138,6 +1138,7 @@ export const DEFAULT_SETTINGS = {
   phoneNumber: "+254 712 345 678",
   businessName: "Morning Aroma Coffee Roasters Ltd.",
   businessAddress: "Nairobi, Kenya",
+  websiteUrl: "https://morning-aroma.com",
   taxId: "",
   taxRatePercent: 0,
   invoiceNotes: "Payment due within 14 days of invoice date. Thank you for your business.",
