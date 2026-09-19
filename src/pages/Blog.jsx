@@ -46,7 +46,7 @@ export function BlogIndexPage() {
               style={{ cursor: "pointer" }}
             >
               {post.coverImageUrl && (
-                <ImgWithSkeleton src={post.coverImageUrl} alt="" wrapClassName="blog-card-photo-wrap" className="blog-card-photo" />
+                <ImgWithSkeleton src={post.coverImageUrl} alt={post.title} wrapClassName="blog-card-photo-wrap" className="blog-card-photo" loading="lazy" />
               )}
               <p className="eyebrow" style={{ marginTop: post.coverImageUrl ? 12 : 0 }}>{fmtDate(post.publishedAt)}</p>
               <h3>{post.title}</h3>
@@ -104,7 +104,7 @@ export function BlogPostPage({ id }) {
         <h1>{post.title}</h1>
       </div>
       {post.coverImageUrl && (
-        <ImgWithSkeleton src={post.coverImageUrl} alt="" wrapClassName="blog-post-cover-wrap" className="blog-post-cover" />
+        <ImgWithSkeleton src={post.coverImageUrl} alt={post.title} wrapClassName="blog-post-cover-wrap" className="blog-post-cover" />
       )}
       <div className="blog-post-body" dangerouslySetInnerHTML={{ __html: post.contentHtml }} />
       <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid var(--gold)" }}>

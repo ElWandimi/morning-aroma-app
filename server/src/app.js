@@ -86,6 +86,31 @@ app.get("/sitemap-blog.xml", async (req, res) => {
   res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlsXml}\n</urlset>\n`);
 });
 
+// Real, dynamic sitemap for Academy courses -- the exact same gap as blog posts above, and
+// explicitly called out but never actually closed in scripts/generate-sitemap.mjs's own comment
+// ("course ... stay excluded here, not an oversight ... courses now live in the real database").
+// Courses are real, individually browsable pages (/course/:id) with real content (name, category,
+// blurb, instructor) -- leaving them out of every sitemap means search engines have no real path
+// to discover any of them at all, only the /academy hub page that links to them. Same shape as
+// the blog sitemap: real slugs and real lastmod straight from the database, so this can never
+// silently drift the way a hand-maintained list would the moment a course is added, renamed, or
+// removed through Admin.
+app.get("/sitemap-courses.xml", async (req, res) => {
+  const siteUrl = process.env.SITE_ORIGIN || "https://morning-aroma.com";
+  let courses = [];
+  try {
+    const result = await query("SELECT id, updated_at FROM courses WHERE removed = false ORDER BY name ASC", []);
+    courses = result.rows;
+  } catch (e) {
+    console.error("Failed to generate courses sitemap:", e);
+  }
+  const urlsXml = courses.map((c) => {
+    const lastmod = (c.updated_at instanceof Date ? c.updated_at : new Date(c.updated_at)).toISOString().slice(0, 10);
+    return `  <url>\n    <loc>${siteUrl}/course/${c.id}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>`;
+  }).join("\n");
+  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlsXml}\n</urlset>\n`);
+});
+
 // Mounted with express.raw(), and BEFORE the global express.json() below -- Paystack's webhook
 // signature is an HMAC over the exact raw request body. If express.json() ran first, it would
 // consume and parse that body before this route ever saw the original bytes, making a correct
