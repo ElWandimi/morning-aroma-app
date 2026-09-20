@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-data
+dist-prerendered
 .DS_Store
 
 # Environment variables — never commit real secrets

@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/generate-sitemap.mjs && vite build && node scripts/generate-route-meta.mjs",
+    "prerender": "node scripts/prerender.mjs",
     "start": "node server.cjs",
     "preview": "vite preview",
     "test:e2e": "playwright test"
