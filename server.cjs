@@ -219,6 +219,31 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginOpenerPolicy: { policy
 // regardless of what routes exist client-side, the same reasoning Railway's own SPA guide gives.
 app.get("/health", (req, res) => res.json({ ok: true }));
 
+// TEMPORARY diagnostic route -- lists what's actually on disk in dist/ and dist/assets/ in the
+// running container right now, to debug a live mismatch between the JS filename index.html
+// references and what express.static actually finds. Safe to remove once resolved: read-only,
+// lists filenames only (no file contents), and reveals nothing not already visible by requesting
+// the files directly.
+app.get("/__debug-dist", (req, res) => {
+  let distFiles = [];
+  let assetsFiles = [];
+  let indexHtmlScriptTag = null;
+  try { distFiles = fs.readdirSync(DIST_DIR); } catch (e) { distFiles = [String(e)]; }
+  try { assetsFiles = fs.readdirSync(path.join(DIST_DIR, "assets")); } catch (e) { assetsFiles = [String(e)]; }
+  try {
+    const liveIndexHtml = fs.readFileSync(path.join(DIST_DIR, "index.html"), "utf8");
+    indexHtmlScriptTag = liveIndexHtml.match(/<script[^>]*src="[^"]+"[^>]*>/g);
+  } catch (e) { indexHtmlScriptTag = String(e); }
+  res.json({
+    DIST_DIR,
+    distFiles,
+    assetsFilesCount: assetsFiles.length,
+    assetsFiles,
+    inMemoryIndexHtmlScriptTag: INDEX_HTML.match(/<script[^>]*src="[^"]+"[^>]*>/g),
+    liveIndexHtmlScriptTag: indexHtmlScriptTag,
+  });
+});
+
 // Fingerprinted build assets (Vite hashes filenames under /assets) are safe to cache forever --
 // a new deploy produces new filenames, it never reuses one with different content.
 app.use("/assets", express.static(path.join(DIST_DIR, "assets"), { immutable: true, maxAge: "1y" }));
