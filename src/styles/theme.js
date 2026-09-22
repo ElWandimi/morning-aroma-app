@@ -535,7 +535,17 @@ a { color: inherit; text-decoration: none; }
 
 /* feedback bean */
 .feedback-bean { position: fixed; bottom: 24px; right: 24px; width: 58px; height: 58px; border-radius: 50%; background: var(--chestnut); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(62,44,35,0.35); z-index: 30; }
-.bean-shape { width: 24px; height: 30px; background: var(--gold); border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; position: relative; }
+/* display was missing here -- a bare <span className="bean-shape" /> is inline by default, and
+   width/height/border-radius on an inline element are ignored by the box model, so every plain
+   (non-flex-parented) usage collapsed to just its ::after crease line: a thin vertical bar with
+   no visible bean body. Confirmed live on the Our Promise page's value cards (Promise.jsx line
+   46, a bare <span className="bean-shape" /> with no wrapping flex/grid), where it overlapped
+   the card title instead of showing as a bean icon. Usages that happened to sit inside a
+   display:flex parent (e.g. .feedback-bean) were accidentally fine already, since flex give
+   their children real box dimensions regardless of the child's own inline default -- but every
+   other usage (Checkout, Journey, Promise, App's admin-chunk-loading fallback, the profile-page
+   loading spinner in components/index.jsx) was equally broken by the same missing rule. */
+.bean-shape { display: block; width: 24px; height: 30px; background: var(--gold); border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; position: relative; }
 .bean-shape::after { content: ''; position: absolute; top: 4px; left: 50%; width: 1.5px; height: 22px; background: var(--espresso); }
 .bean-steam { position: absolute; top: -30px; }
 .feedback-bean:hover .steam { animation-duration: 2s; }

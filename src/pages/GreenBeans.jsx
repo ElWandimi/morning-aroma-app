@@ -17,6 +17,12 @@ export function GreenBeansPage() {
   // real data has actually loaded, rather than guessing at an id that might not even exist.
   const [selectedId, setSelectedId] = useState(null);
   const selected = allGreenBeans.find((g) => g.id === selectedId) || allGreenBeans[0];
+  // selectedId itself stays null until the user actually picks a lot (see above), but every
+  // place that shows *which* lot is active -- the card highlight and the <select> -- needs to
+  // agree with `selected`, which already falls back to allGreenBeans[0]. Comparing against the
+  // raw selectedId here left every card unhighlighted on first load (nothing has id === null),
+  // even though the form/price was silently using the first bean the whole time.
+  const activeId = selected?.id ?? null;
   // Safe default rather than assuming `selected` exists -- during the brief window before the
   // real catalog has loaded (or if it's ever genuinely empty), `selected` is undefined here, and
   // reading .minOrderKg off it directly would throw a real runtime exception, not just show a
@@ -106,7 +112,7 @@ export function GreenBeansPage() {
         {allGreenBeans.map((g) => (
           <div
             key={g.id}
-            className={`green-bean-card ${selectedId === g.id ? "selected" : ""}`}
+            className={`green-bean-card ${activeId === g.id ? "selected" : ""}`}
             onClick={() => selectBean(g.id)}
           >
             <div className="green-bean-photo" style={{ backgroundImage: `url('${withTargetWidth(COUNTRY_JOURNEY_PHOTO[g.country], 450)}')` }} />
@@ -145,7 +151,7 @@ export function GreenBeansPage() {
             ) : (
               <form onSubmit={submit}>
                 <label htmlFor="gb-bean">Which lot?</label>
-                <select id="gb-bean" value={selectedId} onChange={(e) => selectBean(e.target.value)}>
+                <select id="gb-bean" value={activeId} onChange={(e) => selectBean(e.target.value)}>
                   {allGreenBeans.map((g) => (
                     <option key={g.id} value={g.id}>{g.name} — {format(getGreenPrice(g.id))}/kg</option>
                   ))}

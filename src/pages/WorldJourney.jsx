@@ -13,7 +13,10 @@ export function WorldJourneyPage() {
       <div className="shop-head">
         <p className="eyebrow">every bag starts somewhere</p>
         <h1>The World Journey</h1>
-        <p className="shop-sub">Eight countries, eight stories, one plant. Scroll through where your coffee actually comes from.</p>
+        {/* Was a hardcoded "Eight countries, eight stories" -- COUNTRIES has grown to 15 entries
+            since that copy was written, so it silently under-counted every origin added after
+            the first eight. Driven off COUNTRIES.length now so it can't drift out of sync again. */}
+        <p className="shop-sub">{COUNTRIES.length} countries, {COUNTRIES.length} stories, one plant. Scroll through where your coffee actually comes from.</p>
       </div>
 
       {COUNTRIES.map((country) => {
