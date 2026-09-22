@@ -1623,6 +1623,19 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 700px) {
   .moment-story-row { flex-direction: column; padding: 28px 20px; }
   .moment-story-photo { width: 100%; min-height: 240px; order: -1; } /* photo shows first on mobile, reads naturally above the text it illustrates */
+  /* Real, confirmed bug: .moment-story-row-reverse's own flex-direction: row-reverse rule below
+     sits OUTSIDE this media query, so on every "reversed" row (the alternating layout's even-
+     indexed entries -- First Light and The Reset on the Moments hub, and the equivalent rows on
+     Brew Guides/Growing/History, which all share this exact class) it silently overrode the
+     column layout above at any width under 700px, same specificity, later in source order. The
+     row then tried to lay text and photo out side-by-side in a viewport far too narrow for both,
+     which pushed the text block (icon, heading, benefit line, "Explore this moment" link) out of
+     the visible area entirely -- confirmed directly: at a 606px viewport, only the photo was
+     visible on First Light/The Reset, with nothing broken about the *other* two, non-reversed
+     rows at the same width. Restating column here, scoped to the same breakpoint, makes every row
+     collapse to the same intentional mobile order regardless of which alternating variant it is.
+  */
+  .moment-story-row-reverse { flex-direction: column; }
 }
 .moment-story-row-reverse { flex-direction: row-reverse; }
 
