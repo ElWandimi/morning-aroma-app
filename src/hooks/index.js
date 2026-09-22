@@ -13,7 +13,20 @@ export function useScrollReveal(dep) {
       (entries) => {
         entries.forEach((e) => {
           if (e.isIntersecting) {
-            e.target.classList.add("revealed");
+            // Deferred one frame: elements that mount already inside the viewport (e.g. a grid
+            // that only renders once an async product/rating fetch resolves, via the
+            // MutationObserver path below) can have this callback fire before the browser has
+            // committed a first paint of the un-revealed (opacity: 0) state. With nothing
+            // painted to transition *from*, the opacity/transform transition never runs and the
+            // element is left stuck at its base opacity: 0 permanently, even though `.revealed`
+            // is present on it from that point on -- a real, confirmed production bug (see the
+            // signature-card investigation), not a CSS specificity or source-order issue. A
+            // double rAF guarantees a completed paint of the base state exists before the class
+            // (and its transition) is applied.
+            const target = e.target;
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+              target.classList.add("revealed");
+            }));
             obs.unobserve(e.target);
           }
         });
