@@ -445,8 +445,14 @@ a { color: inherit; text-decoration: none; }
 .signature-tags { font-size: 0.82rem; color: #6b5647; margin: 0 0 10px; }
 .signature-cta-bar { text-align: center; margin-top: 36px; }
 
-/* origin-highlights -- real product-photo strip filling the gap after the signature grid */
-.origin-highlights { display: flex; justify-content: center; align-items: flex-end; gap: 28px; max-width: 1100px; margin: 56px auto 0; padding: 0 24px 48px; }
+/* origin-highlights -- real product-photo strip filling the gap after the signature grid.
+   margin-top brought down from 56px (which combined with signature-cta-bar's own 36px
+   margin-top produced ~126px of flat, textureless cream between the "Explore the Shop" button
+   and these photos) -- a real, confirmed emptiness complaint against the live site: that gap
+   reads as much bigger than 126px sounds, since at typical viewport heights it's a fifth of the
+   visible screen with nothing in it. 24px keeps the two elements visually separated as their own
+   groups without the dead space. */
+.origin-highlights { display: flex; justify-content: center; align-items: flex-end; gap: 28px; max-width: 1100px; margin: 24px auto 0; padding: 0 24px 48px; }
 /* min-width: 0 -- a real, confirmed mobile bug this fixes: flex items default to min-width: auto,
    meaning a flex item can never shrink below its CONTENT's intrinsic size, regardless of
    flex-shrink or the mobile media query's flex-basis: 140px override below -- the real coffee-bag
