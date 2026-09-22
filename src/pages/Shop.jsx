@@ -8,7 +8,7 @@ import { useStructuredData } from "../hooks";
 export function ShopPage() {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPriceForSize, getStock, getAllProducts, realProductsLoading } = useAdmin();
+  const { getPriceForSize, getStock, getAllProducts, realProductsLoading, realProductsError, refetchRealProducts } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const [filters, setFilters] = useState({ aroma: [], body: "", acidity: "", roast: "", moment: "", brew: "" });
@@ -138,6 +138,19 @@ export function ShopPage() {
           <p className="results-count">{filtered.length} of {allProducts.length} varieties</p>
           {realProductsLoading ? (
             <p className="hint">Loading the catalog…</p>
+          ) : realProductsError ? (
+            // Was falling through to the "Nothing matches yet" empty state below whenever the
+            // catalog fetch itself failed (backend unreachable, not just zero real matches) --
+            // realProductsLoading always goes false once the failed fetch settles, and an empty
+            // realProducts array reads identically to "your filters matched nothing," silently
+            // blaming the customer's filters for what's actually a server-side outage. The
+            // top-of-page ServiceDisruptionBanner already tells the truth about this, but a
+            // customer scrolled past it straight into the results area would only ever see the
+            // misleading filter-blaming message, never this honest one.
+            <div className="empty-state">
+              <p>We couldn't load the catalog right now — please try again in a moment.</p>
+              <button className="btn-outline small" onClick={refetchRealProducts}>Try again</button>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="empty-state">
               <p>Nothing matches yet — try clearing a filter.</p>
@@ -205,7 +218,7 @@ export function ShopPage() {
 export function ProductPage({ id }) {
   const { go } = useRoute();
   const { add } = useCart();
-  const { getPrice, getPriceForSize, getTier, getStock, getAllProducts, getProductFeedback, realProductsLoading } = useAdmin();
+  const { getPrice, getPriceForSize, getTier, getStock, getAllProducts, getProductFeedback, realProductsLoading, realProductsError, refetchRealProducts } = useAdmin();
   const { format } = useCurrency();
   const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
   const { addToast } = useToast();
@@ -286,6 +299,19 @@ export function ProductPage({ id }) {
 
   if (realProductsLoading) {
     return <p className="hint" style={{ padding: 80, textAlign: "center" }}>Loading…</p>;
+  }
+
+  if (!product && realProductsError) {
+    // Was falling straight through to the generic "We couldn't find that variety" below whenever
+    // the catalog fetch itself failed -- realProductsLoading always goes false once the failed
+    // fetch settles, so a genuinely real, existing product looked exactly like a typo'd URL to a
+    // customer, with no way to tell the two apart or any way to retry short of a manual refresh.
+    return (
+      <div className="empty-state" style={{ padding: 80 }}>
+        <p>We couldn't load this variety right now — please try again in a moment.</p>
+        <button className="btn-outline small" onClick={refetchRealProducts}>Try again</button>
+      </div>
+    );
   }
 
   if (!product) {
