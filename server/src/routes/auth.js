@@ -51,6 +51,31 @@ function issueSession(res, user, extra = {}) {
   return res.json({ user: publicUser(user), csrfToken, ...extra });
 }
 
+// Shared by every "a matching email either signs in or creates a new account" path (/register,
+// /google, /otp/verify) for the one real edge case all three otherwise handle inconsistently on
+// their own: an email that belongs to a soft-deleted account (migrations/
+// 028_soft_delete_account.sql). The email UNIQUE constraint means a plain INSERT for that email
+// would fail outright, so a "new account" here genuinely means resurrecting that same row --
+// while still behaving exactly like a fresh signup from every other real angle: role reset to
+// what a brand-new account would get (never the old, possibly-elevated role -- reviving a
+// deleted account's old staff/admin grant this way would be a real privilege-escalation path),
+// permissions cleared, deleted_at cleared, and token_version bumped so a token belonging to that
+// row's previous, deleted identity can never authenticate as its new one. Callers that already
+// know they're creating a brand-new account (no existing row at all) should keep using a plain
+// INSERT -- this only replaces the INSERT step for the one case where a same-email row exists but
+// is soft-deleted.
+async function resurrectDeletedAccount(deletedUserId, { name, passwordHash, role, emailVerified }) {
+  const result = await query(
+    `UPDATE users
+       SET name = $1, password_hash = $2, role = $3, permissions = $4, email_verified = $5,
+           deleted_at = NULL, token_version = token_version + 1
+     WHERE id = $6
+     RETURNING *`,
+    [name, passwordHash, role, [], emailVerified, deletedUserId]
+  );
+  return result.rows[0];
+}
+
 // Real, not a placeholder -- verifying a Google-issued ID token needs the actual OAuth Client ID
 // from Google Cloud Console (see ROADMAP.md) as the expected `audience`, or a forged token for a
 // completely different Google app could otherwise pass verification.
@@ -118,11 +143,18 @@ router.post("/register", async (req, res) => {
   if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "Name is required." });
 
   const cleanEmail = email.trim().toLowerCase();
-  const existing = await query("SELECT id FROM users WHERE email = $1", [cleanEmail]);
+  const existing = await query("SELECT id, deleted_at FROM users WHERE email = $1", [cleanEmail]);
+  const existingUser = existing.rows[0];
   // Registration is the one place it's fine (and expected UX) to say an email is already taken --
   // unlike login or password-reset-request, where doing the same thing would let an attacker
-  // enumerate which emails have accounts at all.
-  if (existing.rows.length > 0) return res.status(409).json({ error: "An account with that email already exists." });
+  // enumerate which emails have accounts at all. A soft-deleted account (migrations/
+  // 028_soft_delete_account.sql) is the one exception: from a real visitor's perspective they
+  // deleted their account and are simply signing up again, so this must succeed exactly like a
+  // brand-new registration, not surface an "already exists" error about an account they no longer
+  // consider theirs.
+  if (existingUser && !existingUser.deleted_at) {
+    return res.status(409).json({ error: "An account with that email already exists." });
+  }
 
   // Bootstrap: the very first account created on a fresh deployment becomes super_admin
   // automatically. Unlike the old in-memory demo (which had a hardcoded seeded admin), a real
@@ -137,10 +169,15 @@ router.post("/register", async (req, res) => {
   const role = isFirstUser ? "super_admin" : "customer";
 
   const passwordHash = await hashPassword(password);
-  const result = await query(
-    "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, false) RETURNING *",
-    [cleanEmail, name.trim(), passwordHash, role]
-  );
+  // existingUser here (if set) is always a soft-deleted row -- the check above already rejected
+  // the request outright if it were an active account. Real ownership of the inbox hasn't been
+  // re-proven yet either way (email_verified: false), same as any other password registration.
+  const result = existingUser
+    ? { rows: [await resurrectDeletedAccount(existingUser.id, { name: name.trim(), passwordHash, role, emailVerified: false })] }
+    : await query(
+        "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, false) RETURNING *",
+        [cleanEmail, name.trim(), passwordHash, role]
+      );
   const user = result.rows[0];
   // Real email verification -- a password-based registration is the one signup path where email
   // ownership genuinely hasn't been proven yet (Google verifies it itself; OTP/email-code signup
@@ -248,6 +285,14 @@ router.post("/login", async (req, res) => {
 
   if (!user || !ok) return res.status(401).json({ error: "Invalid email or password." });
 
+  // Same generic error as a wrong password above, deliberately -- telling an attacker "this
+  // account was deleted" (as opposed to "never existed") would leak account existence, exactly
+  // the enumeration risk this file already avoids everywhere else (see the /register and
+  // password-reset-request comments on the same point). A genuinely deleted account should look,
+  // from the outside, indistinguishable from a wrong password or an email that was never
+  // registered at all.
+  if (user.deleted_at) return res.status(401).json({ error: "Invalid email or password." });
+
   if (!user.email_verified) {
     // Correct password, but this account was created via password registration and never
     // finished email verification -- same "right password, one more real step before a real
@@ -308,6 +353,13 @@ router.post("/google", async (req, res) => {
   const cleanEmail = payload.email.trim().toLowerCase();
   const result = await query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
   let user = result.rows[0];
+  // A soft-deleted account (migrations/028_soft_delete_account.sql) must not be silently
+  // resurrected with its old role/name/permissions intact just because Google sign-in happens to
+  // run against its email -- same "un-delete = fresh account" reset /register performs via
+  // resurrectDeletedAccount, reused below instead of falling into the plain-INSERT branch (which
+  // would fail outright on the email UNIQUE constraint anyway).
+  const deletedExistingId = user && user.deleted_at ? user.id : null;
+  if (deletedExistingId) user = undefined;
 
   if (!user) {
     // Same first-user-becomes-admin bootstrap as /register above -- Google sign-in is a real,
@@ -332,13 +384,14 @@ router.post("/google", async (req, res) => {
     // and the already-real "forgot password" flow above is exactly how someone would set one
     // later if they want email+password as a second way in.
     const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
-    const inserted = await query(
-      // email_verified: true -- Google already verified this email itself (checked above via
-      // payload.email_verified) before ever handing back a usable ID token.
-      "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, true) RETURNING *",
-      [cleanEmail, displayName, randomPasswordHash, role]
-    );
-    user = inserted.rows[0];
+    // email_verified: true either way -- Google already verified this email itself (checked
+    // above via payload.email_verified) before ever handing back a usable ID token.
+    user = deletedExistingId
+      ? await resurrectDeletedAccount(deletedExistingId, { name: displayName, passwordHash: randomPasswordHash, role, emailVerified: true })
+      : (await query(
+          "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, true) RETURNING *",
+          [cleanEmail, displayName, randomPasswordHash, role]
+        )).rows[0];
     sendWelcomeEmail(user).catch((err) => console.error("Failed to send welcome email:", err));
   }
 
@@ -413,6 +466,9 @@ router.post("/otp/verify", async (req, res) => {
 
   let userResult = await query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
   let user = userResult.rows[0];
+  // Same "un-delete = fresh account" reasoning as /google above -- see resurrectDeletedAccount.
+  const deletedExistingId = user && user.deleted_at ? user.id : null;
+  if (deletedExistingId) user = undefined;
 
   if (!user) {
     // Same first-user-becomes-admin bootstrap as /register and /google above.
@@ -423,13 +479,15 @@ router.post("/otp/verify", async (req, res) => {
     // never-disclosed password_hash -- this account genuinely doesn't have a password yet, and
     // "forgot password" is exactly how someone would set one later if they want it.
     const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
-    const inserted = await query(
-      // email_verified: true -- successfully entering the real code just sent to this inbox
-      // (checked above, before this account is even created) already proves ownership.
-      "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, true) RETURNING *",
-      [cleanEmail, cleanEmail.split("@")[0], randomPasswordHash, role]
-    );
-    user = inserted.rows[0];
+    // email_verified: true either way -- successfully entering the real code just sent to this
+    // inbox (checked above, before this account is even created/resurrected) already proves
+    // ownership.
+    user = deletedExistingId
+      ? await resurrectDeletedAccount(deletedExistingId, { name: cleanEmail.split("@")[0], passwordHash: randomPasswordHash, role, emailVerified: true })
+      : (await query(
+          "INSERT INTO users (email, name, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, true) RETURNING *",
+          [cleanEmail, cleanEmail.split("@")[0], randomPasswordHash, role]
+        )).rows[0];
     sendWelcomeEmail(user).catch((err) => console.error("Failed to send welcome email:", err));
   }
 
@@ -469,6 +527,39 @@ router.get("/me", requireAuth, async (req, res) => {
 // something tells it to stop, and page JS can't clear an httpOnly cookie itself (that's the whole
 // point of httpOnly). This is now the only way a session cookie actually gets removed.
 router.post("/logout", (req, res) => {
+  clearSessionCookie(res);
+  clearCsrfCookie(res);
+  res.json({ ok: true });
+});
+
+// Self-service "delete my account," explicitly requested as a soft delete: the account must
+// genuinely stop working everywhere (can't sign back in, existing session dies immediately, the
+// admin dashboard's own Customers list stops counting them as an active customer -- see the
+// deleted_at IS NULL filter added to GET /users in users.js), while the underlying row -- and
+// every real order, subscription, or other record referencing users(id) via foreign key -- stays
+// intact and restorable, rather than either being destroyed outright (losing real order history
+// for no real benefit) or left dangling as an orphaned reference a real DELETE FROM users would
+// risk given those foreign keys. See migrations/028_soft_delete_account.sql for the schema side
+// of this, and requireAuth / POST /auth/login for the two places a deleted account is actually
+// kept from authenticating again.
+router.post("/me/delete", requireAuth, async (req, res) => {
+  // token_version bumped in the SAME UPDATE as deleted_at, same atomicity reasoning as the
+  // password-reset route's own comment on this pattern -- so there's no window where deleted_at
+  // is set but a still-valid old token could theoretically be checked against a stale
+  // token_version by some future code path that (mistakenly) checked one without the other.
+  const result = await query(
+    "UPDATE users SET deleted_at = $1, token_version = token_version + 1 WHERE id = $2 AND deleted_at IS NULL RETURNING id",
+    [new Date(), req.user.sub]
+  );
+  if (result.rows.length === 0) {
+    // Already deleted (a retried request, or two tabs) -- treat as success either way, since the
+    // actual goal ("this account is deleted") is already true. Clearing cookies below still runs
+    // regardless, harmless even if they were already cleared by whatever ended the previous
+    // session.
+    clearSessionCookie(res);
+    clearCsrfCookie(res);
+    return res.json({ ok: true });
+  }
   clearSessionCookie(res);
   clearCsrfCookie(res);
   res.json({ ok: true });

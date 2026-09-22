@@ -159,6 +159,84 @@ function TwoFactorPanel({ user }) {
   );
 }
 
+// Self-service "delete my account" -- server-side this is a soft delete (server/src/routes/
+// auth.js's POST /auth/me/delete just sets deleted_at, real order/subscription history stays
+// intact and restorable by an admin), but from right here it's presented as, and behaves as,
+// something the person can't casually undo themselves: signing out immediately, with no "undo"
+// button anywhere in this app. Matches TwoFactorPanel's own multi-step-flow convention (idle ->
+// a confirmation step that asks for something extra before the real action fires), but uses a
+// typed confirmation phrase rather than a password re-prompt -- unlike disabling 2FA, this
+// person is already in an authenticated session and isn't proving identity, they're proving
+// intent against a genuinely irreversible-looking action a stray double-click on a bare button
+// shouldn't be able to trigger.
+function DeleteAccountPanel({ user }) {
+  const { deleteAccount } = useAuth();
+  const { addToast } = useToast();
+  const [step, setStep] = useState("idle"); // idle | confirming
+  const [confirmText, setConfirmText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const beginConfirm = () => {
+    setStep("confirming");
+    setConfirmText("");
+    setError("");
+  };
+
+  const cancelConfirm = () => {
+    setStep("idle");
+    setConfirmText("");
+    setError("");
+  };
+
+  const confirmDelete = async (e) => {
+    e.preventDefault();
+    if (confirmText.trim().toUpperCase() !== "DELETE") {
+      setError('Type "DELETE" to confirm.');
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    const result = await deleteAccount();
+    setSubmitting(false);
+    if (!result.ok) {
+      setError(result.error || "Something went wrong. Please try again.");
+      return;
+    }
+    // No further UI to show from here -- setUser(null) inside deleteAccount() already ends the
+    // session, and the surrounding page (JourneyPage's own `if (!user)` branch) takes over on
+    // the very next render, same as what already happens after a real sign-out.
+    addToast("Your account has been deleted.");
+  };
+
+  if (step === "confirming") {
+    return (
+      <>
+        <p className="hint" style={{ marginTop: 0 }}>{user.email}</p>
+        <p className="form-error" style={{ marginTop: 0 }}>
+          You'll be signed out immediately and won't be able to sign back in with this email. If you'd like it back later, contact us — we can restore it.
+        </p>
+        <form onSubmit={confirmDelete}>
+          <label htmlFor="delete-account-confirm">Type DELETE to confirm</label>
+          <input id="delete-account-confirm" value={confirmText} onChange={(e) => { setConfirmText(e.target.value); setError(""); }} autoFocus required />
+          {error && <p className="form-error">{error}</p>}
+          <button type="submit" className="btn-outline full" disabled={submitting}>{submitting ? "Deleting…" : "Permanently delete my account"}</button>
+        </form>
+        <button className="link-btn" style={{ marginTop: 10 }} onClick={cancelConfirm}>Cancel</button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className="hint">
+        Deleting your account signs you out and removes your access for good. Your order history is kept for our own records, but you won't be able to see or use this account again.
+      </p>
+      <button className="btn-outline small" onClick={beginConfirm}>Delete my account</button>
+    </>
+  );
+}
+
 export function JourneyPage() {
   const { user, setNotificationsEnabled } = useAuth();
   const { go } = useRoute();
@@ -285,6 +363,11 @@ export function JourneyPage() {
               This is a real, saved preference — but this prototype has no email delivery set up yet, so nothing is actually sent
               either way right now. It's here for when that's wired up.
             </p>
+          </div>
+
+          <div className="mini-brew">
+            <h3>Delete Account</h3>
+            <DeleteAccountPanel user={user} />
           </div>
 
           <div className="mini-brew">

@@ -20,6 +20,12 @@ CREATE TABLE users (
   -- so any session token signed before that moment fails its next verification, instead of
   -- staying valid for its full remaining life regardless of the reset.
   token_version             INTEGER NOT NULL DEFAULT 0,
+  -- See migrations/028_soft_delete_account.sql for the real, full reasoning: NULL (the default)
+  -- means active; a non-NULL timestamp means the account owner deleted their own account (or an
+  -- admin did it on their behalf) and it must be treated as gone everywhere a real user is
+  -- expected, while the row itself -- and everything referencing it via foreign key -- stays
+  -- intact and restorable rather than being destroyed outright.
+  deleted_at                TEXT,
   created_at                TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

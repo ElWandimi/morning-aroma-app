@@ -38,9 +38,19 @@ async function requireAuth(req, res, next) {
     // only the one column actually needed here (not the full row, unlike requireAdmin's own
     // re-fetch, which genuinely needs the current role/permissions to hand back) to keep the real,
     // per-request cost of this specific check as small as it can be.
-    const result = await query("SELECT token_version FROM users WHERE id = $1", [payload.sub]);
+    const result = await query("SELECT token_version, deleted_at FROM users WHERE id = $1", [payload.sub]);
     const currentUser = result.rows[0];
     if (!currentUser || currentUser.token_version !== payload.tokenVersion) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    // Self-service account deletion (see migrations/028_soft_delete_account.sql and
+    // POST /auth/me/delete) bumps token_version in the same update as setting deleted_at, so this
+    // check is technically redundant with the one just above on every real request going forward
+    // -- kept anyway as a second, explicit line of defense: token_version's whole job is session
+    // invalidation in general, while this specifically documents and enforces "a deleted account
+    // can never authenticate as itself again," which deserves to be true on its own terms even if
+    // a future change to how token_version gets bumped ever decoupled the two.
+    if (currentUser.deleted_at) {
       return res.status(401).json({ error: "Invalid or expired token" });
     }
     req.user = payload;

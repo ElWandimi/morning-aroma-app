@@ -40,11 +40,23 @@ function publicUser(row) {
     notificationsEnabled: row.notifications_enabled,
     emailVerified: !!row.email_verified,
     createdAt: row.created_at,
+    deletedAt: row.deleted_at,
   };
 }
 
 router.get("/", requireAuth, requireAdmin, async (req, res) => {
-  const result = await query("SELECT * FROM users ORDER BY created_at ASC", []);
+  // Excludes soft-deleted accounts (migrations/028_soft_delete_account.sql) by default -- an
+  // account someone deleted themselves shouldn't keep showing up as an active customer in the
+  // admin dashboard's Customers list or its "customers" count on Overview. The row itself, and
+  // any real order/subscription history referencing it, is untouched; this is purely a display
+  // filter on the one endpoint the dashboard reads from, not a data change. includeDeleted=true
+  // (an explicit, deliberate opt-in a future "show deleted accounts" admin view could pass) skips
+  // the filter entirely -- there's no separate "list only the deleted ones" mode yet since
+  // nothing calls this route that way today, but the same query param could trivially grow one.
+  const includeDeleted = req.query.includeDeleted === "true";
+  const result = includeDeleted
+    ? await query("SELECT * FROM users ORDER BY created_at ASC", [])
+    : await query("SELECT * FROM users WHERE deleted_at IS NULL ORDER BY created_at ASC", []);
   res.json({ users: result.rows.map(publicUser) });
 });
 
@@ -95,6 +107,29 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     "UPDATE users SET role = $1, permissions = $2, email_verified = $3 WHERE id = $4 RETURNING *",
     [nextRole, nextPermissions, nextEmailVerified, id]
   );
+  res.json({ user: publicUser(result.rows[0]) });
+});
+
+// Admin-side restore for a self-service-deleted account (migrations/028_soft_delete_account.sql,
+// POST /auth/me/delete) -- the one intended way to reverse a soft delete, since there's no admin
+// UI wired to it yet and support/the account owner asking directly is the realistic path this
+// covers today. Clears deleted_at only; role/permissions/name/password are left exactly as they
+// were at the moment of deletion (unlike the deliberate reset resurrectDeletedAccount performs
+// when someone registers a NEW account under a previously-deleted email -- a genuinely different
+// scenario: this route is "give the same person their same account back," not "let a fresh
+// signup happen to land on this row").
+router.post("/:id/restore", requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const result = await query(
+    "UPDATE users SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL RETURNING *",
+    [id]
+  );
+  if (result.rows.length === 0) {
+    // Either no such user, or the user exists but isn't currently deleted -- both real,
+    // legitimate reasons this could be called (a stale admin UI, a double click), not a case
+    // worth distinguishing from the caller's perspective.
+    return res.status(404).json({ error: "No deleted account found with that ID." });
+  }
   res.json({ user: publicUser(result.rows[0]) });
 });
 

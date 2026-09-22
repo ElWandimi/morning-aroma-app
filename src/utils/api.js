@@ -94,6 +94,13 @@ export const api = {
     request("/auth/me"),
   logout: () =>
     request("/auth/logout", { method: "POST" }),
+  // Self-service "delete my account" -- server/src/routes/auth.js's POST /auth/me/delete soft-
+  // deletes the row (sets deleted_at, keeps everything else intact and restorable) rather than a
+  // real DELETE, but from the frontend's perspective this behaves exactly like an irreversible
+  // account deletion: the session dies immediately server-side, and there is no route this app
+  // exposes to undo it from here.
+  deleteAccount: () =>
+    request("/auth/me/delete", { method: "POST" }),
   requestPasswordReset: (email) =>
     request("/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email }) }),
   confirmPasswordReset: (token, newPassword) =>

@@ -307,6 +307,24 @@ export function AuthProvider({ children }) {
     return { ok: false, error: lastError?.message };
   };
 
+  // Self-service "delete my account" (server-side: a soft delete, see api.deleteAccount's own
+  // comment) -- deliberately NOT retried the way logout() above retries a transient failure.
+  // logout() retrying is safe because signing out twice is harmless; retrying a failed delete
+  // could mean firing the request again after a response was merely lost in transit, and the
+  // caller genuinely needs to know if it failed rather than have this silently paper over that
+  // with a second attempt. Local state is only cleared on a confirmed success -- unlike logout(),
+  // which clears optimistically even on failure, a failed delete should leave the person looking
+  // signed in, since they still likely are.
+  const deleteAccount = async () => {
+    try {
+      await api.deleteAccount();
+      setUser(null);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e?.message };
+    }
+  };
+
   const setRole = (email, role) => {
     setUsers((prev) => prev.map((u) => (u.email === email ? { ...u, role, permissions: role === "staff" ? (u.permissions || []) : [] } : u)));
     setUser((prev) => (prev && prev.email === email ? { ...prev, role, permissions: role === "staff" ? (prev.permissions || []) : [] } : prev));
@@ -330,7 +348,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthCtx.Provider
       value={{
-        user, users, login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, logout, setRole, setPermissions, error, setError,
+        user, users, login, register, requestOtpLogin, verifyOtpLogin, loginWithGoogle, logout, deleteAccount, setRole, setPermissions, error, setError,
         pendingTwoFactorToken, verifyTwoFactorLogin, cancelTwoFactorLogin,
         pendingEmailVerificationToken, verifyEmailCode, resendEmailVerificationCode, cancelEmailVerification,
         startTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, setNotificationsEnabled,
