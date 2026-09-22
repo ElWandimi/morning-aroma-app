@@ -55,24 +55,63 @@ function getCsrfToken() {
   return readCsrfCookie() || inMemoryCsrfToken;
 }
 
+// Real, confirmed bug: this in-memory token is per-tab, but the CSRF claim it has to match lives
+// in ONE shared session cookie for the whole browser. Signed-in with the site open in more than
+// one tab -- an everyday case, not an edge case -- and whichever tab's own /auth/me happens to
+// resolve most recently silently re-signs that shared cookie with a NEW claim, invalidating every
+// OTHER tab's already-cached inMemoryCsrfToken even though it was genuinely valid the moment it
+// was minted. That other tab's next mutating request (submitting a quiz, syncing the cart,
+// checking out) then gets a real 403 ("Invalid or missing CSRF token.") despite a perfectly valid
+// session -- reproduced directly: two tabs open, mint a token in tab A, mint a fresh one in tab B
+// (rotating the shared cookie), and tab A's old token is now rejected even though nothing about
+// tab A's own session ever expired or became invalid on its own.
+//
+// Fixed the same way the double-submit-cookie pattern always recovers from a rotated token: on a
+// 403 whose body is specifically this CSRF error (not just any 403, which could be a real
+// permissions failure this shouldn't mask), re-fetch /auth/me to pick up the CURRENT token that
+// matches whatever the cookie now actually holds, and retry the original request exactly once
+// with it. A second, still-failing 403 after that retry is left alone and surfaced normally --
+// almost certainly means the session itself is genuinely gone (signed out elsewhere, expired),
+// which requireAuth's own 401 downstream is the correct signal for, not something to keep retrying.
+const CSRF_ERROR_MESSAGE = "Invalid or missing CSRF token.";
+
 async function request(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
-  const csrfToken = !SAFE_METHODS.has(method) ? getCsrfToken() : null;
-  const res = await fetch(`${API_URL || ""}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
-      ...options.headers,
-    },
-  });
-  let body;
-  try {
-    body = await res.json();
-  } catch {
-    body = {};
+  const isSafe = SAFE_METHODS.has(method);
+
+  const doFetch = async () => {
+    const csrfToken = !isSafe ? getCsrfToken() : null;
+    const res = await fetch(`${API_URL || ""}${path}`, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
+        ...options.headers,
+      },
+    });
+    let body;
+    try {
+      body = await res.json();
+    } catch {
+      body = {};
+    }
+    return { res, body };
+  };
+
+  let { res, body } = await doFetch();
+
+  if (!res.ok && res.status === 403 && !isSafe && body.error === CSRF_ERROR_MESSAGE) {
+    try {
+      const meBody = await request("/auth/me");
+      if (meBody.csrfToken) setCsrfToken(meBody.csrfToken);
+    } catch {
+      // /auth/me itself failing (e.g. genuinely signed out) means the retry below will just hit
+      // the same 403 (or a 401) again, which falls through to the normal error handling as-is.
+    }
+    ({ res, body } = await doFetch());
   }
+
   if (!res.ok) {
     const error = new Error(body.error || "Something went wrong. Please try again.");
     error.status = res.status;
