@@ -2,6 +2,34 @@
 // HTTP requests against a real (SQLite, for this sandbox) database — not a unit test with mocked
 // internals. Swaps only the db module, via Node's require cache, before app.js (and therefore
 // auth.js) is ever loaded.
+//
+// Hard safety check, checked FIRST, before anything else in this file runs: if a real Postgres
+// connection string is present in the environment, refuse outright rather than proceeding. This
+// script's whole safety story rests on the require.cache swap a few lines below always winning
+// the race against ../src/db.js's own module-load-time `new Pool(...)` -- true today, but a
+// silent, structural assumption with no enforcement of its own, and exactly the kind of thing a
+// future refactor (of this file, of src/db.js's own connection logic, or of require() timing
+// itself) could invalidate without anyone noticing until real rows show up in production. A real
+// incident already happened for exactly this class of reason: 111 obviously-fake accounts
+// (e2e-customer-*/e2e-staff-*/e2e-test-*@example.com) ended up live in the real users table --
+// this codebase's own test files don't generate that email pattern, so some run of this suite (or
+// something very like it) executed with DATABASE_URL actually pointed at production at the time,
+// and nothing here would have stopped or even flagged that. DATABASE_URL is also the one env var
+// Railway itself always injects for any service wired to its Postgres plugin, so its mere
+// presence is a real, meaningful signal completely independent of whether the require.cache swap
+// below is currently working correctly.
+if (process.env.DATABASE_URL) {
+  console.error(
+    "\nREFUSING TO RUN: DATABASE_URL is set in this environment.\n" +
+    "This suite writes and deletes real rows (test users, orders, etc.) and must only ever run\n" +
+    "against the in-memory SQLite database in test/db.sqlite.js, never a real Postgres database --\n" +
+    "regardless of whether the in-process require.cache swap below would have caught it anyway.\n" +
+    "Unset DATABASE_URL (and confirm you're not in a Railway shell/service context that injects it\n" +
+    "automatically) before running `npm test` again.\n"
+  );
+  process.exit(1);
+}
+
 process.env.JWT_SECRET = "test-secret-at-least-32-characters-long-for-testing";
 process.env.NODE_ENV = "test";
 process.env.PAYSTACK_SECRET_KEY = "sk_test_fake_key_for_testing_only";
