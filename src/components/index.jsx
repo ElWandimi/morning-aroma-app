@@ -1530,9 +1530,21 @@ function LiveChatPanel({ onBack, onClose }) {
     if (getStorageConsent() === "accepted") storage.set("ma_live_chat_id", greeted.chat.id);
   };
 
+  // The greeting text a customer sees the instant a chat starts -- was a bare one-liner with no
+  // real information in it ("I'm here — what can I help you with today?"). Expanded to actually
+  // say what the business sells and when a real person is online to reply, matching the same
+  // detailed greeting/hours copy already in place for the WhatsApp channel, so a customer sees a
+  // consistent message regardless of which contact option they pick.
+  const greetingFor = (firstName) =>
+    `Hi ${firstName}! Welcome to Morning Aroma. We roast and ship real, single-origin specialty ` +
+    `coffee from Kenya and beyond, plus green (unroasted) beans for roasters and roasting/brewing ` +
+    `consulting for cafes and teams. Our team is online Mon-Fri, 8:00am-5:00pm EAT and usually ` +
+    `replies within a few minutes during that time -- outside those hours your message is saved ` +
+    `and we'll get back to you as soon as we're back online. What can I help you with today?`;
+
   useEffect(() => {
     if (chatId) return; // already have a real, persisted chat to reconnect to below -- don't start a second one
-    if (user && !starting) beginRealChat(user.name, user.email, `Hi ${user.name.split(" ")[0]}! I'm here — what can I help you with today?`);
+    if (user && !starting) beginRealChat(user.name, user.email, greetingFor(user.name.split(" ")[0]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -1566,7 +1578,7 @@ function LiveChatPanel({ onBack, onClose }) {
 
   const beginChat = (e) => {
     e.preventDefault();
-    beginRealChat(name, email, `Hi ${name.split(" ")[0]}! Thanks for reaching out — what can I help you with today?`);
+    beginRealChat(name, email, greetingFor(name.split(" ")[0]));
   };
 
   const send = async () => {
