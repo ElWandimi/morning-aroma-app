@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAdmin, useAuth, useCurrency, useRoute, useSubscriptions, useToast } from "../context";
-import { RECIPE_CARDS } from "../data";
+import { RECIPE_CARDS, COURSE_PHOTOS } from "../data";
 import { loadPaystackScript, activateOnEnterOrSpace, initialsFromName, colorFromName } from "../utils/helpers";
 import { generateRecipeCardPDF, generateCertificatePDF, generateLessonPDF } from "../utils/pdf";
 import { useStructuredData } from "../hooks";
@@ -132,17 +132,33 @@ export function AcademyHubPage() {
           <button className="btn-outline small" onClick={refetchRealCourses}>Try again</button>
         </div>
       ) : (
-        <div className="course-grid">
-          {filtered.map((c) => (
-            <div key={c.id} className="course-card" onClick={() => go("course", { id: c.id })} onKeyDown={activateOnEnterOrSpace(() => go("course", { id: c.id }))} role="link" tabIndex={0}>
-              <p className="eyebrow">{c.category}</p>
-              <h3>{c.name}</h3>
-              <p>{c.blurb}</p>
-              <div className="course-meta">
-                <span>{c.lessons} lessons</span>
-                <span>{c.instructor}</span>
+        // Was a plain uniform grid of text-only cards -- no photo at all, so every course looked
+        // identical at a glance. Now a picture-and-highlight row per course, alternating which
+        // side the photo sits on as you scroll down, with the row's height driven by the image
+        // (object-fit cover keeps it cropped cleanly rather than stretched).
+        <div className="course-rows">
+          {filtered.map((c, i) => (
+            <div
+              key={c.id}
+              className={`course-row ${i % 2 === 1 ? "course-row-reverse" : ""}`}
+              onClick={() => go("course", { id: c.id })}
+              onKeyDown={activateOnEnterOrSpace(() => go("course", { id: c.id }))}
+              role="link"
+              tabIndex={0}
+            >
+              <div className="course-row-photo">
+                {COURSE_PHOTOS[c.name] && <img src={COURSE_PHOTOS[c.name]} alt={c.name} loading="lazy" />}
               </div>
-              <p className="course-price">{format(c.monthlyPriceCents)}/mo</p>
+              <div className="course-row-highlight">
+                <p className="eyebrow">{c.category}</p>
+                <h3>{c.name}</h3>
+                <p>{c.blurb}</p>
+                <div className="course-meta">
+                  <span>{c.lessons} lessons</span>
+                  <span>{c.instructor}</span>
+                </div>
+                <p className="course-price">{format(c.monthlyPriceCents)}/mo</p>
+              </div>
             </div>
           ))}
         </div>

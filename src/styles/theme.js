@@ -750,6 +750,31 @@ a { color: inherit; text-decoration: none; }
 .course-card p { color: #6b5647; font-size: 0.88rem; margin: 6px 0 12px; }
 .course-meta { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--almond-text); font-weight: 700; }
 .course-price { margin-top: 12px; font-weight: 700; color: var(--chestnut); font-size: 0.95rem; }
+
+/* Academy course rows: alternating photo-left/highlight-right cards (reversed every other row).
+   The row's height is driven by the photo (a fixed aspect-ratio box), and the highlight panel
+   stretches to match that same height via the flex row, so neither side ever looks cropped
+   short or oddly taller than its neighbor. */
+.course-rows { display: flex; flex-direction: column; gap: 28px; max-width: 1100px; margin: 0 auto; }
+.course-row {
+  display: flex; align-items: stretch; background: white; border: 1px solid var(--gold);
+  border-radius: 20px; overflow: hidden; cursor: pointer; transition: transform .2s var(--spring), box-shadow .2s;
+}
+.course-row:hover { transform: translateY(-4px); box-shadow: 0 14px 28px rgba(62,44,35,0.14); }
+.course-row-reverse { flex-direction: row-reverse; }
+.course-row-photo { flex: 0 0 42%; aspect-ratio: 4 / 3; overflow: hidden; background: var(--gold); }
+.course-row-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.course-row-highlight { flex: 1 1 58%; padding: 28px 32px; display: flex; flex-direction: column; justify-content: center; }
+.course-row-highlight h3 { font-size: 1.5rem; margin: 2px 0 8px; }
+.course-row-highlight p { color: #6b5647; font-size: 0.95rem; margin: 0 0 14px; }
+.course-row-highlight .course-meta { display: flex; justify-content: flex-start; gap: 18px; font-size: 0.8rem; color: var(--almond-text); font-weight: 700; }
+.course-row-highlight .course-price { margin-top: 14px; font-weight: 700; color: var(--chestnut); font-size: 1.05rem; }
+
+@media (max-width: 720px) {
+  .course-row, .course-row-reverse { flex-direction: column; }
+  .course-row-photo { flex: none; width: 100%; aspect-ratio: 16 / 9; }
+  .course-row-highlight { padding: 20px 22px; }
+}
 .academy-lifetime-banner { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; background: var(--espresso); color: var(--cream); border-radius: 16px; padding: 24px 28px; max-width: 1100px; margin: 0 auto 30px; }
 .academy-lifetime-banner.unlocked { background: var(--green); text-align: center; justify-content: center; }
 /* A signed-in, engaged, non-lifetime user sees the lifetime-access upsell banner AND (further

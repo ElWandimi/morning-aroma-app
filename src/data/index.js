@@ -397,6 +397,29 @@ export const COURSES = [
   { name: "Cafe Management", category: "Professional", blurb: "Costing, staffing, and menu design for running a specialty coffee bar.", instructor: "Elena Rossi", lessons: 9 },
 ];
 
+// Keyed by course name so it survives the real, admin-editable course list changing id/order --
+// the Academy hub's alternating picture/highlight cards look up a course's photo by c.name here.
+// Cappuccino and Mocha currently reuse the closest on-theme shot we had on hand (espresso
+// group-head close-up, and a latte-art cup) rather than a mismatched non-coffee photo -- swap
+// these two for real dedicated photos of those drinks when available.
+export const COURSE_PHOTOS = {
+  Espresso: "/photos/academy/espresso.jpg",
+  Cappuccino: "/photos/academy/cappuccino.jpg",
+  Latte: "/photos/academy/latte.jpg",
+  "Flat White": "/photos/academy/flat-white.jpg",
+  Mocha: "/photos/academy/mocha.jpg",
+  Americano: "/photos/academy/americano.jpg",
+  "Cold Brew": "/photos/academy/cold-brew.jpg",
+  Turkish: "/photos/academy/turkish.jpg",
+  Vietnamese: "/photos/academy/vietnamese.jpg",
+  "Moka Pot": "/photos/academy/moka-pot.jpg",
+  Affogato: "/photos/academy/affogato.jpg",
+  "Home Brewing": "/photos/academy/home-brewing.jpg",
+  "Sensory & Cupping": "/photos/academy/sensory-cupping.jpg",
+  "Roasting Fundamentals": "/photos/academy/roasting-fundamentals.jpg",
+  "Cafe Management": "/photos/academy/cafe-management.jpg",
+};
+
 export const GROWING_PROFILES = {
   "geisha-panama": { altitude: "1,650–1,900m", temp: "18–21°C", rainfall: "2,300mm/yr", soilType: "Volcanic loam", pH: 5.8, shade: "80% canopy", pests: "Coffee leaf rust, monitored monthly", nutrients: { n: 7, p: 5, k: 6 } },
   "laurina-brazil": { altitude: "1,100–1,300m", temp: "20–23°C", rainfall: "1,500mm/yr", soilType: "Red latosol", pH: 5.5, shade: "20% canopy", pests: "Coffee berry borer, pheromone trapped", nutrients: { n: 6, p: 4, k: 5 } },
