@@ -312,8 +312,14 @@ a { color: inherit; text-decoration: none; }
 .glass-dark { background: rgba(62,44,35,0.55); border-color: rgba(232,213,181,0.3); color: var(--cream); }
 .quiz-section {
   position: relative; padding: 70px 24px; display: flex; justify-content: center; overflow: hidden;
+  /* Overlay lightened from the original rgba(...,0.75)/rgba(...,0.9) -- at that opacity the photo
+     behind it (someone actually holding/pouring a cup) was bleached down to a near-flat beige
+     smear, wasting the image entirely. The .quiz-panel's own .glass treatment (translucent white
+     + blur, defined above) already carries text legibility on its own, so this overlay only needs
+     to keep the photo from fighting with the panel, not to protect contrast by itself -- dropping
+     it lets the photo actually read while the panel text stays just as legible. */
   background:
-    linear-gradient(rgba(232,213,181,0.75), rgba(253,248,240,0.9)),
+    linear-gradient(rgba(232,213,181,0.4), rgba(253,248,240,0.5)),
     url('https://images.unsplash.com/photo-1757688341742-ce7978cdb186?auto=format&fit=crop&w=1600&q=65') center 30%/cover fixed;
 }
 @media (prefers-reduced-motion: reduce) { .quiz-section { background-attachment: scroll; } }
