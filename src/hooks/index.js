@@ -13,20 +13,28 @@ export function useScrollReveal(dep) {
       (entries) => {
         entries.forEach((e) => {
           if (e.isIntersecting) {
-            // Deferred one frame: elements that mount already inside the viewport (e.g. a grid
-            // that only renders once an async product/rating fetch resolves, via the
-            // MutationObserver path below) can have this callback fire before the browser has
-            // committed a first paint of the un-revealed (opacity: 0) state. With nothing
-            // painted to transition *from*, the opacity/transform transition never runs and the
-            // element is left stuck at its base opacity: 0 permanently, even though `.revealed`
-            // is present on it from that point on -- a real, confirmed production bug (see the
-            // signature-card investigation), not a CSS specificity or source-order issue. A
-            // double rAF guarantees a completed paint of the base state exists before the class
-            // (and its transition) is applied.
+            // A real, confirmed production bug (verified directly against morning-aroma.com with
+            // real scroll input, not just automated jumps -- reproduced on .signature-card,
+            // .trust-grid and .quality-split, all through this same hook): elements revealed this
+            // way could get stuck permanently at their base opacity: 0 / translateY(...) even once
+            // `.revealed` was present on them, with no further class or style change ever fixing
+            // it. A first attempt deferred the class add by two requestAnimationFrame callbacks,
+            // reasoning that the browser just hadn't painted a "before" state yet to transition
+            // from -- that didn't hold up under real repro: `target.getAnimations()` on a stuck
+            // element showed a transition object that existed but never actually started
+            // (`currentTime: 0, startTime: null`), i.e. the browser created the transition but
+            // never scheduled it, which extra animation frames don't fix -- rAF timing was never
+            // the mechanism. The reliable fix for "a CSS transition sometimes doesn't fire when a
+            // class is added via IntersectionObserver" is to force the browser to compute and
+            // commit the pre-change style synchronously (a read that triggers layout, like
+            // offsetHeight) before applying the class that changes it, so there's an unambiguous
+            // "old value" for the transition engine to diff against and no ambiguity about
+            // whether a style change actually occurred. This is a standard, well-documented
+            // pattern for this exact class of bug and doesn't depend on frame timing at all.
             const target = e.target;
-            requestAnimationFrame(() => requestAnimationFrame(() => {
-              target.classList.add("revealed");
-            }));
+            // eslint-disable-next-line no-unused-expressions
+            target.offsetHeight; // force a synchronous layout/style read before the class change
+            target.classList.add("revealed");
             obs.unobserve(e.target);
           }
         });

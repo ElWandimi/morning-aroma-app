@@ -1770,6 +1770,13 @@ a { color: inherit; text-decoration: none; }
 
 /* public product reviews (Reviews tab on the Product page) */
 .bean-shape.small { width: 14px; height: 18px; }
+/* .bean-shape::after (the crease line down the middle) is sized for the default 24x30px bean --
+   fixed at 22px tall starting 4px from the top. At the .small 14x18px size that same 22px-tall
+   line overflows the bean's own 18px height, so it reads as a stray tick mark rather than part of
+   a tiny bean -- a real, confirmed legibility issue on the signature-card rating rows. Scaling the
+   crease down to match .small's own proportions (roughly the same 4px-top-inset, ~73%-of-height
+   ratio the default size uses) keeps it looking like a bean instead of a line with a blob on it. */
+.bean-shape.small::after { top: 2px; height: 13px; }
 .reviews-summary { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
 .reviews-summary-beans { display: flex; gap: 4px; }
 .reviews-summary p { margin: 0; font-weight: 700; color: var(--chestnut); }
