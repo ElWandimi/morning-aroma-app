@@ -155,6 +155,19 @@ export function CheckoutPage() {
     phone: "",
   }));
   const [shippingErrors, setShippingErrors] = useState({});
+  // Was a real, confirmed bug: shippingErrors is only ever computed on submit (see the form's
+  // onSubmit below), so once a field was flagged invalid, its red error message stayed on screen
+  // verbatim even after the person went back and actually fixed that exact field -- e.g. picking
+  // a country from the dropdown left "Please select your country." showing underneath the now
+  // correctly-filled-in value, right at the most conversion-critical step of the whole site. This
+  // helper is what every field's onChange now calls instead of setShipping directly: it still
+  // updates the field, but also drops that one field's stale error immediately, so the message
+  // disappears the moment the person addresses it rather than lingering until the next submit
+  // re-validates the whole form.
+  const setShippingField = (field, value) => {
+    setShipping((prev) => ({ ...prev, [field]: value }));
+    setShippingErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+  };
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   // The order is created once, on the first payment attempt, and reused across retries -- so a
   // cancelled or failed Paystack popup doesn't leave behind multiple duplicate unpaid orders for
@@ -389,7 +402,7 @@ export function CheckoutPage() {
                 placeholder="First name"
                 value={shipping.firstName}
                 aria-invalid={!!shippingErrors.firstName}
-                onChange={(e) => setShipping({ ...shipping, firstName: e.target.value })}
+                onChange={(e) => setShippingField("firstName", e.target.value)}
               />
               {shippingErrors.firstName && <p className="form-error">{shippingErrors.firstName}</p>}
             </div>
@@ -401,7 +414,7 @@ export function CheckoutPage() {
                 placeholder="Last name"
                 value={shipping.lastName}
                 aria-invalid={!!shippingErrors.lastName}
-                onChange={(e) => setShipping({ ...shipping, lastName: e.target.value })}
+                onChange={(e) => setShippingField("lastName", e.target.value)}
               />
               {shippingErrors.lastName && <p className="form-error">{shippingErrors.lastName}</p>}
             </div>
@@ -417,7 +430,7 @@ export function CheckoutPage() {
               value={shipping.address}
               aria-invalid={!!shippingErrors.address}
               style={{ paddingLeft: 34 }}
-              onChange={(e) => setShipping({ ...shipping, address: e.target.value })}
+              onChange={(e) => setShippingField("address", e.target.value)}
             />
           </div>
           {shippingErrors.address && <p className="form-error">{shippingErrors.address}</p>}
@@ -431,7 +444,7 @@ export function CheckoutPage() {
                 placeholder="City"
                 value={shipping.city}
                 aria-invalid={!!shippingErrors.city}
-                onChange={(e) => setShipping({ ...shipping, city: e.target.value })}
+                onChange={(e) => setShippingField("city", e.target.value)}
               />
               {shippingErrors.city && <p className="form-error">{shippingErrors.city}</p>}
             </div>
@@ -449,7 +462,7 @@ export function CheckoutPage() {
                 tabIndex={-1}
                 aria-hidden="true"
                 value={shipping.country}
-                onChange={(e) => setShipping({ ...shipping, country: e.target.value })}
+                onChange={(e) => setShippingField("country", e.target.value)}
               >
                 <option value="">Select country</option>
                 {SHIPPING_COUNTRIES.map((c) => (
@@ -462,7 +475,7 @@ export function CheckoutPage() {
                 value={shipping.country}
                 ariaInvalid={!!shippingErrors.country}
                 getDisplay={(c) => ({ value: c.name, label: `${c.flag} ${c.name}` })}
-                onChange={(c) => setShipping({ ...shipping, country: c.name })}
+                onChange={(c) => setShippingField("country", c.name)}
               />
               {shippingErrors.country && <p className="form-error">{shippingErrors.country}</p>}
             </div>
@@ -485,7 +498,7 @@ export function CheckoutPage() {
               placeholder="Phone number"
               value={shipping.phone}
               aria-invalid={!!shippingErrors.phone}
-              onChange={(e) => setShipping({ ...shipping, phone: e.target.value })}
+              onChange={(e) => setShippingField("phone", e.target.value)}
             />
           </div>
           {shippingErrors.phone && <p className="form-error">{shippingErrors.phone}</p>}
