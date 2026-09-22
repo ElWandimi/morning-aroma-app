@@ -916,6 +916,38 @@ export function AnnouncementBar() {
   );
 }
 
+// Shown when the backend is genuinely unreachable -- distinct from "no products yet" (an empty,
+// legitimate catalog) or a 403 (an unauthorized admin call, already handled separately in
+// AdminDataProvider and not surfaced here at all). realProductsError/settingsError only get set
+// on a real fetch failure -- a network error, a 5xx, a timeout -- for the two loads every visitor
+// depends on regardless of login state (see context/index.jsx's own comments on both). Renders as
+// a persistent top banner rather than replacing the page: static content (nav, footer, most
+// marketing pages) still works fine even when the API is down, so hiding all of it behind a full
+// blocking error screen would take away real, working functionality a visitor still has.
+export function ServiceDisruptionBanner() {
+  const { realProductsError, realProductsLoading, refetchRealProducts, settingsError, settingsLoading, refetchSettings } = useAdmin();
+  const [retrying, setRetrying] = useState(false);
+  const hasOutage = (!!realProductsError && !realProductsLoading) || (!!settingsError && !settingsLoading);
+  if (!hasOutage) return null;
+  const retry = () => {
+    setRetrying(true);
+    refetchRealProducts();
+    refetchSettings();
+    // Not tied to the fetches' own promises (refetchRealProducts/refetchSettings don't return
+    // one) -- this just gives the button a brief, honest "trying again" state rather than looking
+    // unresponsive on click; hasOutage itself (recalculated from the real *Loading/*Error state
+    // above) is what actually clears the banner once a retry succeeds.
+    window.setTimeout(() => setRetrying(false), 1200);
+  };
+  return (
+    <div className="service-disruption-banner" role="alert">
+      <span className="sdb-dot" aria-hidden="true" />
+      <span>We're having trouble reaching our servers right now — some parts of the site may not load. We're on it.</span>
+      <button onClick={retry} disabled={retrying}>{retrying ? "Retrying…" : "Try again"}</button>
+    </div>
+  );
+}
+
 export function ConsentBanner() {
   const { go } = useRoute();
   const [choice, setChoice] = useState(() => getStorageConsent());

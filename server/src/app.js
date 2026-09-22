@@ -54,8 +54,6 @@ app.set("trust proxy", 1);
 // break) -- flagged as a separate, deliberate follow-up rather than shipped as a guess.
 app.use(helmet({ contentSecurityPolicy: false }));
 
-app.get("/health", (req, res) => res.json({ ok: true }));
-
 // Real, dynamic sitemap for blog posts specifically -- the main, static public/sitemap.xml is
 // generated at BUILD time (scripts/generate-sitemap.mjs) and genuinely has no database access,
 // the same real constraint that already excludes Academy courses from it (see that script's own
@@ -133,6 +131,16 @@ app.use(express.json({ limit: "5mb" }));
 // open-by-default.
 const allowedOrigins = [process.env.FRONTEND_URL, "http://localhost:5173"].filter(Boolean);
 app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+// Moved here (after CORS) from just after helmet() above: registered before cors(), this route
+// never received Access-Control-Allow-Origin headers at all, so any cross-origin caller (the
+// frontend's own JS doing a real health check, or an uptime monitor calling from a browser)
+// got a hard network-level failure instead of a normal 200 -- confirmed live on production,
+// where /health failed 100% of the time from https://morning-aroma.com while /products and
+// /settings (both mounted after cors(), same as this now is) succeeded every time. Kept
+// unauthenticated and dependency-free on purpose -- it's a liveness probe, not a readiness
+// check, so it must never fail because the database or a third-party API is slow or down.
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 // Must come after CORS (a cross-origin request's cookies are only readable here once CORS has
 // already decided whether to allow it) and before every route below, including the webhook route

@@ -1193,6 +1193,15 @@ a { color: inherit; text-decoration: none; }
 .announcement-bar { background: var(--espresso); color: var(--gold); text-align: center; padding: 8px 40px; font-size: 0.82rem; font-weight: 700; position: relative; }
 .announcement-close { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--gold); font-size: 1.1rem; cursor: pointer; line-height: 1; }
 
+/* service disruption banner -- shown when the backend API can't be reached at all (not a 403,
+   not "no products yet" -- a genuine network/5xx failure on the core catalog/settings load), so
+   a visitor sees a clear, honest explanation instead of a page that just looks broken or empty. */
+.service-disruption-banner { background: #F6E4D8; color: #6B3A1E; border-bottom: 1px solid #E3B99A; text-align: center; padding: 10px 40px; font-size: 0.85rem; font-weight: 600; position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.service-disruption-banner .sdb-dot { width: 8px; height: 8px; border-radius: 50%; background: #C0392B; flex-shrink: 0; animation: sdbPulse 1.6s ease-in-out infinite; }
+@keyframes sdbPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.service-disruption-banner button { background: #6B3A1E; color: #FDF8F0; border: none; padding: 5px 14px; border-radius: 20px; font-weight: 700; font-size: 0.78rem; cursor: pointer; }
+.service-disruption-banner button:disabled { opacity: 0.6; cursor: default; }
+
 /* page fade transition */
 @keyframes pageFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .page-fade { animation: pageFadeIn .35s ease; }

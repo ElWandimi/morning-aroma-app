@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from "react";
 const AdminDashboard = lazy(() => import("./admin").then((m) => ({ default: m.AdminDashboard })));
-import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, WishlistDrawer } from "./components";
+import { AnnouncementBar, CartDrawer, ConsentBanner, CustomerCareWidget, ErrorBoundary, FeedbackBean, Footer, ServiceDisruptionBanner, SignInModal, SignUpModal, Nav, NotFoundPage, SearchModal, WishlistDrawer } from "./components";
 import { AdminDataProvider, AuthProvider, CartProvider, CurrencyProvider, JournalProvider, OrdersProvider, RouteProvider, SubscriptionsProvider, ToastProvider, WishlistProvider, useAdmin, useRoute, pathFor } from "./context";
 import { BREW_GUIDES, COUNTRIES, COUNTRY_JOURNEY_PHOTO, GROWING_FACTORS, KNOWN_ROUTES, MOMENTS, PAGE_META } from "./data";
 import { useDocumentMeta, useScrollReveal, useStructuredData } from "./hooks";
@@ -183,6 +183,7 @@ export function AppShell() {
     <div className="ma-root">
       <style>{CSS}</style>
       <a href="#main-content" className="skip-link">Skip to content</a>
+      <ServiceDisruptionBanner />
       <AnnouncementBar />
       <Nav onOpenLogin={() => setAuthView("signin")} onOpenSearch={() => setSearchOpen(true)} />
       <div key={routeKey} id="main-content" className="page-fade">
