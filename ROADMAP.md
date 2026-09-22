@@ -823,10 +823,54 @@ Tier 1 is in progress, per the stated "launch sooner than later" priority.
       switcher, for anyone who wants to override either layer directly, turned out to already
       exist and be prominently placed in the nav — nothing needed there.
 
+- [x] **Full page-by-page frontend audit (2026-09-22) — every page in the app checked live against
+      its own code, not just skimmed for obvious problems.** Covered Blog, Brew Guides/Growing/
+      History (checked specifically for the shared mobile-layout bug below), Green Coffee, Journey,
+      Misc (Privacy/ToS/FAQ/Contact/Careers/Source Library), Our Promise, Quiz, Rituals, Search,
+      Our Services, and The World Journey — the full page list. Two real, previously-unreported
+      code bugs found and fixed (not just data glitches, which were flagged separately and left
+      alone since they're a content/seed-data problem, not a frontend one):
+      1. **Green Coffee lot selection never highlighted the active lot on page load.** The card
+         highlight and the `<select>` both compared against the raw `selectedId` state, which
+         stays `null` until a customer actually clicks a lot — but the price/quantity logic already
+         silently fell back to the first real bean the whole time. A customer landing on the page
+         saw no lot marked as selected, even though the form was quietly using one. Fixed by
+         deriving a shared `activeId` from the same fallback-aware `selected` value everywhere the
+         UI needs to show which lot is active.
+      2. **The `.bean-shape` icon (the "tap a bean" reveal control on Our Promise, and 7 other
+         usage sites across the codebase — Checkout, Journey, the admin-chunk-loading fallback, a
+         profile-page spinner) rendered as a thin vertical line instead of a bean.** Root cause: the
+         shared CSS rule had no `display` property, and a bare `<span>` is `display: inline` by
+         default — `width`/`height`/`border-radius` are silently ignored by the box model on an
+         inline element, so only the absolutely-positioned `::after` crease line ever showed.
+         Usages that happened to sit inside a `display: flex` parent were accidentally fine; every
+         other one wasn't. Fixed at the shared CSS root cause (`display: block` added), not
+         patched per usage site.
+      3. **The World Journey's hero copy hardcoded "Eight countries, eight stories"** from when the
+         `COUNTRIES` data had 8 entries — now 15, after Tier 4's origin-expansion work, and the
+         copy was never updated to match. Fixed by driving it off `COUNTRIES.length` so it can't
+         drift out of sync again as more origins are added.
+      **Flagged, not fixed (data or lower-priority, not frontend code bugs):** the recurring
+      "SL28. - AA — Kenya" stray-period product name (a stored-data formatting glitch, same root
+      cause everywhere it appears — Journey, Source Library's FOB table, Search results); green
+      bean names showing test/seed-looking values in production ("E2E Green Lot 1787824313929");
+      unsanitized `dangerouslySetInnerHTML` on blog post bodies (admin-only trust boundary, low
+      priority — content comes from `BlogEditor`, no `DOMPurify` call found on that path, though a
+      `purify.es` bundle chunk exists somewhere in the build, not fully traced); a Blog post whose
+      stored body is just a bare `<img>` tag with no text (a CMS content gap, not a rendering bug).
+      All three real fixes verified the same way: clean build, full 438-test backend e2e suite
+      passing, and independently re-verified against a fresh clone before delivery.
+
 ---
 
 ## Change log (most recent first)
 
+- **Full page-by-page frontend audit — every remaining page checked live, 3 real bugs found and
+  fixed (Green Coffee lot-selection highlight, the site-wide `.bean-shape` icon rendering as a
+  thin line instead of a bean, and The World Journey's stale "Eight countries" hero copy vs. the
+  real, now-15-entry `COUNTRIES` list), several data-only glitches flagged but deliberately left
+  unpatched (see Tier 4 for the full list and reasoning).** See Tier 4 above for the complete
+  writeup.
 - **Landing page premium-feel pass, plus a second security audit — both real, not cosmetic.**
   (1) Found and fixed a real, live production bug: the footer tagline in Settings had been saved
   as garbled text ("Where quality meets its scent lets Brew It 😊") instead of the real copy —
