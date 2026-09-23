@@ -1,5 +1,11 @@
-import * as Sentry from "@sentry/react";
-
+// @sentry/react is now dynamically imported inside initSentry() below, rather than statically at
+// the top of this file -- this file itself is statically imported by main.jsx (app startup), so a
+// static Sentry import here meant the entire Sentry SDK was bundled into the very first chunk
+// every visitor downloads, even one who hasn't accepted the consent banner yet and so never
+// actually calls initSentry() at all. A dynamic import() only pulls that code in -- as its own,
+// separate chunk -- for a visitor who's actually accepted, which given the consent gate below is
+// most real visitors eventually, but no longer blocks anyone's very first paint on downloading it.
+//
 // Real error monitoring, gated behind the same consent the ConsentBanner already collects for
 // cart/wishlist local storage -- Sentry receives the visitor's IP address and browser info by
 // default (see sendDefaultPii below, explicitly left false), which is tracking-adjacent data no
@@ -9,8 +15,11 @@ import * as Sentry from "@sentry/react";
 const DSN = import.meta.env.VITE_SENTRY_DSN;
 
 let initialized = false;
+// Holds the real Sentry module once loaded, so reportError() below (which can fire long after
+// initSentry() resolves) doesn't need its own separate dynamic import.
+let SentryModule = null;
 
-export function initSentry() {
+export async function initSentry() {
   if (initialized || !DSN) return;
   initialized = true;
 
@@ -19,6 +28,8 @@ export function initSentry() {
   // Error monitoring breaking is a shame; error monitoring breaking the app itself is a genuinely
   // serious regression, and a real one this project shipped once already.
   try {
+    const Sentry = await import("@sentry/react");
+    SentryModule = Sentry;
     Sentry.init({
       dsn: DSN,
       environment: import.meta.env.PROD ? "production" : "development",
@@ -54,9 +65,13 @@ export function initSentry() {
 }
 
 export function reportError(error, extra) {
-  if (!initialized) return;
+  // Not just !initialized -- initSentry() is now async (it awaits the dynamic import), so there's
+  // a real, reachable window where initialized is about to become true but SentryModule hasn't
+  // landed yet. Both guards together mean a genuinely-not-ready call is silently skipped rather
+  // than throwing on a null SentryModule.captureException.
+  if (!initialized || !SentryModule) return;
   try {
-    Sentry.captureException(error, extra ? { extra } : undefined);
+    SentryModule.captureException(error, extra ? { extra } : undefined);
   } catch (e) {
     console.error("Sentry.captureException threw (non-fatal):", e);
   }

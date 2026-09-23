@@ -17,6 +17,22 @@ export default defineConfig({
   // which keeps the bundle smaller and closer to what the browser actually executes.
   build: {
     target: "es2020",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Forces @sentry/react into its own real, separate chunk. Without this, Rollup was
+          // inlining it straight back into the main entry chunk despite the dynamic import() in
+          // utils/sentry.js -- with only one dynamic call site in the whole app, Rollup's default
+          // heuristic judged it not worth a separate request and merged it anyway, which defeated
+          // the entire point of that change (every visitor, consent or not, downloading the whole
+          // Sentry SDK on first paint). This explicit split is what actually keeps it out of the
+          // chunk every visitor's first page load depends on -- it now only loads for a visitor
+          // who's actually accepted the consent banner (or, on /admin, is signed in as staff),
+          // exactly as intended.
+          sentry: ["@sentry/react"],
+        },
+      },
+    },
   },
 
   server: {
