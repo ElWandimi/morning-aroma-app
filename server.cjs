@@ -61,14 +61,51 @@ function slugify(s) {
 
 const suffix = " | Morning Aroma";
 
-// Mirrors App.jsx's getPageMeta exactly, for every route type that data is actually available
-// for at build time -- product, moment, brewguide, country, growingfactor, and growingprofile
-// (which shares product's own data). "course" is the one deliberate exception: courses now live
-// in the real database (see ROADMAP.md), not static data this script can read without adding a
-// real network dependency to every build -- same real limitation already documented in
-// scripts/generate-sitemap.mjs. A shared link to a course page still falls back to the generic
-// Academy hub's title/description for a crawler that doesn't execute JS, same as before this fix.
-function resolveMeta(pageRoute) {
+// Real backend base URL -- same VITE_API_URL Railway env var the frontend itself uses to reach
+// this exact backend (see src/utils/api.js). This process is a plain Node server, not a Vite
+// build, so it can't read import.meta.env, but Railway exposes every service's env vars to every
+// other service in the same environment, so the same variable name is readable here via
+// process.env just as plainly. Used below to fetch real, live course/blog-post data for meta tags
+// -- something this file could never do for course data before, and the reason course pages fell
+// all the way back to the generic Academy hub meta (see the old comment on resolveMeta's "course"
+// branch, still true for the case this fetch itself fails).
+const API_URL = process.env.VITE_API_URL || process.env.BACKEND_URL || "";
+
+// Tiny in-memory cache -- real course/blog-post content changes rarely (an admin edit, at most a
+// few times a day), so refetching the full list on every single request would be real, wasted
+// load against the live database for content that's virtually always identical to the last
+// request's. 5 minutes balances "an admin's edit shows up in meta tags reasonably soon" against
+// "don't hammer the backend on every crawler hit." Keyed by kind ("courses"/"blogposts") since
+// they're two independent lists with two independent fetches and cache lifetimes.
+const META_CACHE_TTL_MS = 5 * 60 * 1000;
+const metaCache = new Map();
+
+async function fetchJsonCached(cacheKey, url) {
+  const cached = metaCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < META_CACHE_TTL_MS) return cached.data;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+    metaCache.set(cacheKey, { data, fetchedAt: Date.now() });
+    return data;
+  } catch (err) {
+    // A failed fetch (backend momentarily down, no API_URL configured, network hiccup) falls back
+    // to whatever's cached, however stale, rather than nothing -- stale-but-real meta still beats
+    // the generic hub fallback most of the time. Only truly returns null if nothing has ever been
+    // fetched successfully yet (e.g. right after a fresh deploy's first request).
+    console.error(`server.cjs: failed to fetch ${cacheKey} for meta tags:`, err.message || err);
+    return cached ? cached.data : null;
+  }
+}
+
+// Mirrors App.jsx's getPageMeta, for every route type that data is actually available for at
+// build time -- product, moment, brewguide, country, growingfactor, and growingprofile (which
+// shares product's own data) -- plus, now, "course" and "blogpost", fetched live from the real
+// backend (see fetchJsonCached above) rather than from build-time static data, since both are
+// genuinely database-driven content this script has no other way to read. Async because of that
+// real network fetch; every call site below already awaits it.
+async function resolveMeta(pageRoute) {
   const { page, id } = pageRoute;
   if ((page === "product" || page === "growingprofile") && id) {
     const p = PRODUCTS.find((p) => p.id === id);
@@ -91,15 +128,37 @@ function resolveMeta(pageRoute) {
     const f = GROWING_FACTORS.find((f) => slugify(f.name) === id);
     return f ? { title: `${f.name}${suffix}`, description: f.explain } : PAGE_META.growing;
   }
-  // Real course data lives in the database, not this script's static build-time data (same
-  // limitation the sitemap generator documents for the same reason) -- a crawler that doesn't
-  // execute JS previously saw the plain HOMEPAGE'S title/description here for every single course
-  // page, since "course" has no entry in PAGE_META at all and this function's final line falls
-  // all the way back to PAGE_META.home. Falls back to Academy's own real hub meta instead --
-  // still generic for a specific course, but genuinely about coffee courses rather than an
-  // unrelated homepage description, and a real fix that doesn't require adding a network
-  // dependency to the build to fetch live course data.
+  // Real course data lives in the database -- only a list endpoint exists (no GET /courses/:id),
+  // so this fetches the whole catalog (cached, see fetchJsonCached) and finds the matching one.
+  // Courses are few enough that fetching the full list is cheap and the cache keeps it from being
+  // refetched on every request anyway.
+  if (page === "course" && id && API_URL) {
+    const data = await fetchJsonCached("courses", `${API_URL}/courses`);
+    const c = data && Array.isArray(data.courses) ? data.courses.find((c) => c.id === id) : null;
+    if (c) return { title: `${c.name}${suffix}`, description: c.blurb };
+    return PAGE_META.academy;
+  }
   if (page === "course") return PAGE_META.academy;
+  // Real blog posts, fetched by their own real slug via the public GET /blog/:slug endpoint --
+  // unlike courses, this genuinely returns exactly the one post needed, no full-list fetch or
+  // client-side find() required. Not run through fetchJsonCached (that cache is keyed for a
+  // *list* shared across every request; a per-slug cache would need its own map keyed by slug --
+  // not worth the complexity for a page type crawled far less often than the product catalog).
+  // A missing/unpublished slug (404) or a fetch failure both fall back to the blog index's own
+  // meta -- genuinely about the blog, unlike the pre-fix fallback which was silently the homepage's.
+  if (page === "blogpost" && id && API_URL) {
+    try {
+      const res = await fetch(`${API_URL}/blog/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const { post } = await res.json();
+        if (post) return { title: `${post.title}${suffix}`, description: post.excerpt || post.title };
+      }
+    } catch (err) {
+      console.error(`server.cjs: failed to fetch blog post "${id}" for meta tags:`, err.message || err);
+    }
+    return PAGE_META.blog || PAGE_META.home;
+  }
+  if (page === "blogpost") return PAGE_META.blog || PAGE_META.home;
   return PAGE_META[page] || PAGE_META.home;
 }
 
@@ -162,8 +221,8 @@ const PRIVACY_POLICY_STATIC_HTML = `
   </div>
 `;
 
-function renderIndexWithMeta(urlPath) {
-  const meta = resolveMeta(parseRoutePath(urlPath));
+async function renderIndexWithMeta(urlPath) {
+  const meta = await resolveMeta(parseRoutePath(urlPath));
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description || "");
   // The real, current page's own URL -- was missing from this replacement list entirely before
@@ -289,7 +348,7 @@ app.use(express.static(DIST_DIR, { index: false }));
 // extraction was never actually needed anyway, since req.path is read directly in the handler.
 // A path-less app.use() runs for anything the two static-file middlewares above didn't already
 // handle, which is exactly the fallback behavior this needs.
-app.use((req, res) => {
+app.use(async (req, res) => {
   res.set("Content-Type", "text/html");
   // Must never be cached, by the browser or by Cloudflare (this domain is proxied through it) --
   // it references hashed JS filenames that change on every deploy, and those old files are gone
@@ -298,7 +357,7 @@ app.use((req, res) => {
   // forever after a deploy, since the failed script load happens before any of the app's own code
   // -- including its own error handling -- ever gets a chance to run.
   res.set("Cache-Control", "no-store, must-revalidate");
-  res.send(renderIndexWithMeta(req.path));
+  res.send(await renderIndexWithMeta(req.path));
 });
 
 const PORT = process.env.PORT || 3000;

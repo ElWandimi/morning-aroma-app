@@ -165,13 +165,26 @@ export function AppShell() {
   }, [pageMeta.canonicalPath, pageMeta.title]);
   useStructuredData({
     "@context": "https://schema.org",
-    "@type": "Organization",
+    // LocalBusiness (rather than the plain Organization this used to be) is the schema.org type
+    // Google's docs actually recommend for a real, physically-located business like this roastery
+    // -- it's a superset of Organization (every field below still applies) plus the geo/address
+    // fields that let Google surface this as a local result, not just a generic brand entity.
+    "@type": "LocalBusiness",
     name: settings.businessName,
     url: `${window.location.origin}/`,
     logo: `${window.location.origin}/logo-mark.png`,
+    image: `${window.location.origin}/logo-mark.png`,
     description: settings.tagline,
-    address: settings.businessAddress ? { "@type": "PostalAddress", addressLocality: settings.businessAddress } : undefined,
+    address: settings.businessAddress ? { "@type": "PostalAddress", addressLocality: settings.businessAddress, addressCountry: "KE" } : undefined,
+    // Real Nairobi CBD coordinates -- a reasonable, honest city-level anchor for a business whose
+    // only admin-editable location field (settings.businessAddress) is a locality string ("Nairobi,
+    // Kenya"), not a street address. Not fabricated per-visit precision; just Nairobi itself.
+    geo: { "@type": "GeoCoordinates", latitude: -1.286389, longitude: 36.817223 },
+    areaServed: { "@type": "Country", name: "Kenya" },
     email: settings.contactEmail,
+    telephone: settings.phoneNumber || undefined,
+    // No admin-editable opening-hours setting exists yet, so this is deliberately omitted rather
+    // than guessed -- fabricated hours would be worse for real customers than no hours at all.
     sameAs: [
       settings.instagramHandle && `https://instagram.com/${settings.instagramHandle}`,
       settings.facebookUrl,
