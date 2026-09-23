@@ -1,7 +1,19 @@
 import React from "react";
+import DOMPurify from "dompurify";
 import { ImgWithSkeleton, ShareButtons } from "../components";
 import { useAdmin, useRoute, pathFor } from "../context";
 import { useStructuredData } from "../hooks";
+
+// The backend (server/src/routes/blog.js) already runs DOMPurify.sanitize() with a real allowlist
+// on every post create/update before storing it, so this isn't closing a live hole. It's a second,
+// independent sanitization pass on the same allowlist right before the one place this app ever
+// calls dangerouslySetInnerHTML -- so a future backend regression, a direct DB edit, or a second
+// admin-authored content path added later still can't reach a real XSS through this render path.
+const BLOG_ALLOWED_TAGS = ["p", "br", "strong", "b", "em", "i", "u", "h2", "h3", "a", "img", "ul", "ol", "li", "blockquote"];
+const BLOG_ALLOWED_ATTR = ["href", "src", "alt", "target", "rel"];
+function sanitizeBlogHtml(html) {
+  return DOMPurify.sanitize(html || "", { ALLOWED_TAGS: BLOG_ALLOWED_TAGS, ALLOWED_ATTR: BLOG_ALLOWED_ATTR });
+}
 
 function fmtDate(iso) {
   if (!iso) return "";
@@ -106,7 +118,7 @@ export function BlogPostPage({ id }) {
       {post.coverImageUrl && (
         <ImgWithSkeleton src={post.coverImageUrl} alt={post.title} wrapClassName="blog-post-cover-wrap" className="blog-post-cover" />
       )}
-      <div className="blog-post-body" dangerouslySetInnerHTML={{ __html: post.contentHtml }} />
+      <div className="blog-post-body" dangerouslySetInnerHTML={{ __html: sanitizeBlogHtml(post.contentHtml) }} />
       <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid var(--gold)" }}>
         <ShareButtons path={pathFor("blogpost", { id: post.slug })} text={post.title} label="Share this story" />
       </div>

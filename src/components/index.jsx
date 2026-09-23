@@ -1968,7 +1968,10 @@ export class ErrorBoundary extends React.Component {
         <div className="error-boundary-screen" style={wrap}>
           <div style={{ width: 34, height: 44, background: "#E8D5B5", borderRadius: "50%", margin: "0 auto 20px" }} />
           <h2 style={{ marginBottom: 10 }}>Something went wrong brewing this page</h2>
-          <p style={{ marginBottom: 8, opacity: 0.8 }}>A prototype hiccup, not your fault. Reloading usually clears it.</p>
+          {/* Was "A prototype hiccup, not your fault" -- leftover pre-launch wording that no
+              longer matches a live, production site. Reworded to the same reassuring tone
+              without implying the app itself is unfinished. */}
+          <p style={{ marginBottom: 8, opacity: 0.8 }}>Not your fault — reloading usually clears it.</p>
           <button
             style={btn}
             onClick={() => {
