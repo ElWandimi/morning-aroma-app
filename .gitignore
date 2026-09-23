@@ -25,3 +25,4 @@ yarn-error.log*
 # Saved Playwright auth session -- contains a real, live auth token, never commit this.
 tests/e2e/.auth/
 /playwright/.cache/
+*.patch
