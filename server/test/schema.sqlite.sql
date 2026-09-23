@@ -322,3 +322,13 @@ CREATE TABLE content_overrides (
   country_history_overrides   TEXT NOT NULL DEFAULT '{}',
   updated_at                  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- See migrations/031_admin_audit_log.sql for the real, full reasoning.
+CREATE TABLE admin_audit_log (
+  id          TEXT PRIMARY KEY,
+  actor_email TEXT NOT NULL,
+  action      TEXT NOT NULL,
+  detail      TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_admin_audit_log_created_at ON admin_audit_log (created_at DESC);

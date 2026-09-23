@@ -888,7 +888,26 @@ export function AdminDataProvider({ children }) {
   };
   useEffect(() => { refetchRealGreenBeans(); }, []);
 
+  // Real, backend-persisted admin activity log -- previously purely client-only, in-memory state
+  // that vanished the moment an admin's tab closed or refreshed, capped at 200 entries only
+  // because it had nowhere real to go. Fetched (by whoever has the "Audit Log" permission) the
+  // same way as realProducts/settings/content-overrides above -- gated behind that permission on
+  // the read side only, same reasoning as server/src/routes/audit-log.js.
   const [auditLog, setAuditLog] = useState([]);
+  const [auditLogLoading, setAuditLogLoading] = useState(true);
+  const [auditLogError, setAuditLogError] = useState("");
+  const refetchAuditLog = () => {
+    setAuditLogLoading(true);
+    setAuditLogError("");
+    api.getAuditLog()
+      .then((body) => setAuditLog(pluck(body, "entries", { array: true })))
+      .catch((e) => setAuditLogError(e.message))
+      .finally(() => setAuditLogLoading(false));
+  };
+  useEffect(() => {
+    if (user && (user.role === "super_admin" || user.role === "staff")) refetchAuditLog();
+    else setAuditLogLoading(false);
+  }, [user && user.role]);
   // Real, backend-persisted live chat -- was purely local, in-memory state before this (see
   // migrations/023_live_chat.sql for the full reasoning). Exposed as liveChats (the same name it
   // always had) so AdminLiveChat.jsx and every other existing consumer keep working unchanged --
@@ -1084,13 +1103,25 @@ export function AdminDataProvider({ children }) {
   };
   useEffect(() => { refetchSettings(); }, []);
 
+  // Real, backend-persisted write -- every one of this function's ~26 call sites already only
+  // ever fires right after its own real mutation (setPrice, setStock, setMomentContent, etc.)
+  // already succeeded, so this stays fire-and-forget from THEIR perspective: none of them need to
+  // await it or change their own success/failure handling on whether the log write itself lands.
+  // A real, optimistic local prepend keeps the on-screen list feeling instant while the request is
+  // in flight, the same UX the old client-only version always had; refetchAuditLog (called after)
+  // reconciles with the real, server-generated id/timestamp once the write actually completes, so
+  // the temporary client-side id never lingers or gets treated as real.
   const logAction = (action, detail) => {
-    setAuditLog((prev) =>
-      [
-        { id: `${Date.now()}-${Math.random()}`, timestamp: new Date().toISOString(), actor: user?.email || "unknown", action, detail },
-        ...prev,
-      ].slice(0, 200) // cap history so this can't grow unbounded in a long admin session
-    );
+    const optimisticEntry = { id: `pending-${Date.now()}-${Math.random()}`, timestamp: new Date().toISOString(), actor: user?.email || "unknown", action, detail };
+    setAuditLog((prev) => [optimisticEntry, ...prev].slice(0, 200));
+    api.logAdminAction(action, detail)
+      .then(() => refetchAuditLog())
+      .catch(() => {
+        // A failed log write is a real, but low-stakes, problem -- the admin's actual action
+        // (the price change, the content edit, etc.) already succeeded and was already reported
+        // to them as such; silently leaving the optimistic entry in place rather than surfacing a
+        // second, confusing error toast about bookkeeping for an action that already worked.
+      });
   };
 
   const getPrice = (id) => {
@@ -1785,13 +1816,12 @@ export function AdminDataProvider({ children }) {
   // same real precedent already applied when orders/users/quotations/etc. became real: a live
   // database needs its own real backup strategy (Railway's own database backups), not an ad-hoc
   // JSON download, and "restoring" them here would silently overwrite real, fetched state with
-  // stale JSON, with zero actual effect on the real database.
-  const exportAdminData = () => ({
-    auditLog,
-  });
+  // stale JSON, with zero actual effect on the real database. auditLog itself joins that same
+  // list now too -- it's the last piece exportAdminData/restoreAdminData ever covered, so both
+  // functions are now genuinely empty and kept only so nothing calling them elsewhere breaks.
+  const exportAdminData = () => ({});
   const restoreAdminData = (data) => {
     if (!data || typeof data !== "object") return;
-    if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
     logAction("Backup restored", `${Object.keys(data).length} data sets`);
   };
 
@@ -1816,7 +1846,7 @@ export function AdminDataProvider({ children }) {
         getAllGreenBeans, addGreenBean, removeGreenBean,
         realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans,
         greenOrders, greenOrdersLoading, greenOrdersError, refetchGreenOrders, addGreenOrder, updateGreenOrderStatus,
-        auditLog,
+        auditLog, auditLogLoading, auditLogError, refetchAuditLog,
         kenyaMessages: settings.kenyaLiveMessages || [], addKenyaMessage, updateKenyaMessage, removeKenyaMessage,
         quotations, quotationsLoading, quotationsError, refetchQuotations, addQuotation, updateQuotationStatus,
         serviceInquiries, serviceInquiriesLoading, serviceInquiriesError, refetchServiceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,

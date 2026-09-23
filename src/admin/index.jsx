@@ -2215,15 +2215,24 @@ export function AdminLiveMessages() {
 }
 
 export function AdminAuditLog() {
-  const { auditLog } = useAdmin();
+  const { auditLog, auditLogLoading, auditLogError, refetchAuditLog } = useAdmin();
   const fmtTime = (iso) => {
     const d = new Date(iso);
     return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
+  if (auditLogLoading) return <p className="hint">Loading admin activity…</p>;
+  if (auditLogError) {
+    return (
+      <div>
+        <p className="form-error">Couldn't load the audit log: {auditLogError}</p>
+        <button className="btn-outline" onClick={refetchAuditLog}>Try again</button>
+      </div>
+    );
+  }
   return (
     <div>
       <h3 className="matched-head">Admin activity ({auditLog.length})</h3>
-      <p className="hint" style={{ marginBottom: 16 }}>Every price, stock, content, and settings change made from this dashboard, most recent first. Kept in memory for this session only — the last 200 actions.</p>
+      <p className="hint" style={{ marginBottom: 16 }}>Every price, stock, content, and settings change made from this dashboard, most recent first. The last 200 actions.</p>
       {auditLog.length === 0 ? (
         <p className="hint">No admin actions yet this session.</p>
       ) : (

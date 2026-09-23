@@ -1,0 +1,307 @@
+diff --git a/server/migrations/031_admin_audit_log.sql b/server/migrations/031_admin_audit_log.sql
+new file mode 100644
+index 0000000..7479e87
+--- /dev/null
++++ b/server/migrations/031_admin_audit_log.sql
+@@ -0,0 +1,17 @@
++-- Real, backend-persisted admin audit log -- previously purely client-only, in-memory state
++-- (src/context/index.jsx's logAction/auditLog), capped at 200 entries and wiped the moment an
++-- admin's browser tab closed or refreshed. A per-row table, not the single-row JSONB pattern used
++-- by settings/content_overrides, since this is inherently an append-only event log (one row per
++-- admin action, unbounded history, queried by recency) rather than a small set of keyed fields.
++CREATE TABLE IF NOT EXISTS admin_audit_log (
++  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++  -- Loose (non-FK) reference to the acting user's email, not their id -- mirrors how this worked
++  -- client-side (user?.email), and keeps a log entry readable and intact even if that user's
++  -- account is later deleted (soft-deleted rows still exist, but this avoids coupling the log's
++  -- integrity to that mechanism at all).
++  actor_email TEXT NOT NULL,
++  action      TEXT NOT NULL,
++  detail      TEXT NOT NULL DEFAULT '',
++  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created_at ON admin_audit_log (created_at DESC);
+diff --git a/server/src/app.js b/server/src/app.js
+index 5341b4d..40a5c3d 100644
+--- a/server/src/app.js
++++ b/server/src/app.js
+@@ -27,6 +27,7 @@ const serviceInquiriesRoutes = require("./routes/serviceInquiries");
+ const greenOrdersRoutes = require("./routes/greenOrders");
+ const contactMessagesRoutes = require("./routes/contactMessages");
+ const contentOverridesRoutes = require("./routes/content-overrides");
++const auditLogRoutes = require("./routes/audit-log");
+ const webhooksRoutes = require("./routes/webhooks");
+ 
+ const app = express();
+@@ -175,6 +176,7 @@ app.use("/service-inquiries", serviceInquiriesRoutes);
+ app.use("/green-orders", greenOrdersRoutes);
+ app.use("/contact-messages", contactMessagesRoutes);
+ app.use("/content-overrides", contentOverridesRoutes);
++app.use("/audit-log", auditLogRoutes);
+ 
+ app.use((req, res) => {
+   res.status(404).json({ error: "Not found" });
+diff --git a/server/src/routes/audit-log.js b/server/src/routes/audit-log.js
+new file mode 100644
+index 0000000..50511ee
+--- /dev/null
++++ b/server/src/routes/audit-log.js
+@@ -0,0 +1,46 @@
++const express = require("express");
++const { query } = require("../db");
++const { requireAuth } = require("../middleware/requireAuth");
++const { requirePermission } = require("../middleware/requireAdmin");
++
++const router = express.Router();
++
++function publicEntry(row) {
++  const createdAt = row.created_at instanceof Date ? row.created_at : new Date(row.created_at);
++  return {
++    id: row.id,
++    actor: row.actor_email,
++    action: row.action,
++    detail: row.detail,
++    timestamp: createdAt.toISOString(),
++  };
++}
++
++// Gated by requireAuth alone, deliberately NOT requirePermission("Audit Log") -- every admin
++// action across the whole dashboard (pricing, content, settings, quiz questions, and so on) needs
++// to be able to write a log entry for ITSELF, regardless of which specific permission the actor
++// holds. "Audit Log" is a real permission, but it gates who can VIEW the log below, not who can
++// ever add to it -- the same way a store's own CCTV records every till, not just the till a
++// manager happens to be watching.
++router.post("/", requireAuth, async (req, res) => {
++  const { action, detail } = req.body || {};
++  if (typeof action !== "string" || !action.trim()) return res.status(400).json({ error: "action is required." });
++  if (detail !== undefined && typeof detail !== "string") return res.status(400).json({ error: "detail must be a string." });
++
++  const inserted = await query(
++    "INSERT INTO admin_audit_log (actor_email, action, detail) VALUES ($1, $2, $3) RETURNING *",
++    [req.user.email, action.trim(), detail || ""]
++  );
++  res.status(201).json({ entry: publicEntry(inserted.rows[0]) });
++});
++
++// Real permission gate on the READ side -- matches the existing "Audit Log" admin section, which
++// a staff member only sees/reaches if specifically granted that permission (or is super_admin).
++// Capped at the 200 most recent entries, the same real cap the old client-only state enforced,
++// rather than returning this table's full, ever-growing history on every page load.
++router.get("/", requireAuth, requirePermission("Audit Log"), async (req, res) => {
++  const result = await query("SELECT * FROM admin_audit_log ORDER BY created_at DESC LIMIT 200", []);
++  res.json({ entries: result.rows.map(publicEntry) });
++});
++
++module.exports = router;
+diff --git a/server/test/db.sqlite.js b/server/test/db.sqlite.js
+index dca740f..de487c9 100644
+--- a/server/test/db.sqlite.js
++++ b/server/test/db.sqlite.js
+@@ -191,6 +191,14 @@ async function query(text, params = []) {
+       "INSERT INTO contact_messages (id, name, email, message, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *"
+     );
+     values = [id, ...values, createdAt];
++  } else if (/INSERT INTO admin_audit_log/i.test(sql) && /RETURNING \*/i.test(sql)) {
++    const id = crypto.randomUUID();
++    const createdAt = new Date().toISOString();
++    sql = sql.replace(
++      "INSERT INTO admin_audit_log (actor_email, action, detail) VALUES ($1, $2, $3) RETURNING *",
++      "INSERT INTO admin_audit_log (id, actor_email, action, detail, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *"
++    );
++    values = [id, ...values, createdAt];
+   } else if (/INSERT INTO live_chat_messages/i.test(sql)) {
+     // No RETURNING * on this one in the real route -- it's a fire-and-forget insert, the real
+     // response is built by re-querying the chat + its messages afterward, so this genuinely just
+diff --git a/server/test/run-e2e.js b/server/test/run-e2e.js
+index ab739a3..abce4f2 100644
+--- a/server/test/run-e2e.js
++++ b/server/test/run-e2e.js
+@@ -1857,6 +1857,36 @@ async function main() {
+   const overridesAfterCountryPatch = await get("/content-overrides");
+   check("the country edit genuinely persists, and the earlier moment edit is still there too (independent keys, one write doesn't clobber the other)", overridesAfterCountryPatch.body.countryHistoryOverrides.Kenya === "A fully replaced second version of the text." && overridesAfterCountryPatch.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
+ 
++  console.log("\nReal, backend-persisted admin audit log -- previously entirely client-only, in-memory state (src/context/index.jsx's logAction/auditLog), capped at 200 entries and wiped the moment an admin's tab closed or refreshed:");
++  const auditPostNoAuth = await post("/audit-log", { action: "Hijacked", detail: "x" });
++  check("anonymous caller can't write an audit-log entry", auditPostNoAuth.status === 401);
++
++  const auditPostMissingAction = await post("/audit-log", { detail: "no action given" }, token);
++  check("a missing action is genuinely rejected", auditPostMissingAction.status === 400);
++
++  // Deliberately posted with staffToken -- granted only "Inventory" earlier in this file, no
++  // "Audit Log" permission at all -- since every admin action needs to be able to log ITSELF
++  // regardless of which specific permission the actor holds; requirePermission("Audit Log") gates
++  // who can VIEW the log below, never who can add to it.
++  const auditPostAsLimitedStaff = await post("/audit-log", { action: "Stock updated", detail: "sl28-kenya → 40 units" }, staffToken);
++  check("a staff member with an unrelated permission can still genuinely write their own audit entry", auditPostAsLimitedStaff.status === 201);
++  check("the real, server-generated id/timestamp and the real, authenticated actor's email are used, not anything the client could have supplied", !!auditPostAsLimitedStaff.body.entry.id && auditPostAsLimitedStaff.body.entry.actor === "staff-inventory@morningaroma.local");
++
++  const auditGetNoAuth = await get("/audit-log");
++  check("anonymous caller can't read the audit log", auditGetNoAuth.status === 401);
++  const auditGetAsLimitedStaff = await get("/audit-log", staffToken);
++  check("a staff member without the Audit Log permission can't read it, even though they could write to it a moment ago", auditGetAsLimitedStaff.status === 403);
++
++  const auditGetAsSuperAdmin = await get("/audit-log", token);
++  check("a real super_admin can read the audit log", auditGetAsSuperAdmin.status === 200);
++  check("the entry written a moment ago by the limited-permission staff member is genuinely there", auditGetAsSuperAdmin.body.entries.some((e) => e.actor === "staff-inventory@morningaroma.local" && e.action === "Stock updated"));
++
++  const auditLogStaffCandidate = await registerAndVerify("staff-auditlog@morningaroma.local", "correcthorsebattery1", "Audit Log Staff");
++  await patch(`/users/${auditLogStaffCandidate.body.user.id}`, { role: "staff", permissions: ["Audit Log"] }, token);
++  const auditLogStaffToken = sessionCookies(auditLogStaffCandidate);
++  const auditGetAsGrantedStaff = await get("/audit-log", auditLogStaffToken);
++  check("a staff member specifically granted the Audit Log permission can read it too, not just super_admin", auditGetAsGrantedStaff.status === 200);
++
+   console.log(`\n${pass} passed, ${fail} failed`);
+   server.close();
+   process.exit(fail > 0 ? 1 : 0);
+diff --git a/server/test/schema.sqlite.sql b/server/test/schema.sqlite.sql
+index 0cef91b..c3a907a 100644
+--- a/server/test/schema.sqlite.sql
++++ b/server/test/schema.sqlite.sql
+@@ -322,3 +322,13 @@ CREATE TABLE content_overrides (
+   country_history_overrides   TEXT NOT NULL DEFAULT '{}',
+   updated_at                  TEXT NOT NULL DEFAULT (datetime('now'))
+ );
++
++-- See migrations/031_admin_audit_log.sql for the real, full reasoning.
++CREATE TABLE admin_audit_log (
++  id          TEXT PRIMARY KEY,
++  actor_email TEXT NOT NULL,
++  action      TEXT NOT NULL,
++  detail      TEXT NOT NULL DEFAULT '',
++  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
++);
++CREATE INDEX idx_admin_audit_log_created_at ON admin_audit_log (created_at DESC);
+diff --git a/src/admin/index.jsx b/src/admin/index.jsx
+index 819b17d..5bceb2a 100644
+--- a/src/admin/index.jsx
++++ b/src/admin/index.jsx
+@@ -2215,15 +2215,24 @@ export function AdminLiveMessages() {
+ }
+ 
+ export function AdminAuditLog() {
+-  const { auditLog } = useAdmin();
++  const { auditLog, auditLogLoading, auditLogError, refetchAuditLog } = useAdmin();
+   const fmtTime = (iso) => {
+     const d = new Date(iso);
+     return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+   };
++  if (auditLogLoading) return <p className="hint">Loading admin activity…</p>;
++  if (auditLogError) {
++    return (
++      <div>
++        <p className="form-error">Couldn't load the audit log: {auditLogError}</p>
++        <button className="btn-outline" onClick={refetchAuditLog}>Try again</button>
++      </div>
++    );
++  }
+   return (
+     <div>
+       <h3 className="matched-head">Admin activity ({auditLog.length})</h3>
+-      <p className="hint" style={{ marginBottom: 16 }}>Every price, stock, content, and settings change made from this dashboard, most recent first. Kept in memory for this session only — the last 200 actions.</p>
++      <p className="hint" style={{ marginBottom: 16 }}>Every price, stock, content, and settings change made from this dashboard, most recent first. The last 200 actions.</p>
+       {auditLog.length === 0 ? (
+         <p className="hint">No admin actions yet this session.</p>
+       ) : (
+diff --git a/src/context/index.jsx b/src/context/index.jsx
+index c6234ad..169f399 100644
+--- a/src/context/index.jsx
++++ b/src/context/index.jsx
+@@ -888,7 +888,26 @@ export function AdminDataProvider({ children }) {
+   };
+   useEffect(() => { refetchRealGreenBeans(); }, []);
+ 
++  // Real, backend-persisted admin activity log -- previously purely client-only, in-memory state
++  // that vanished the moment an admin's tab closed or refreshed, capped at 200 entries only
++  // because it had nowhere real to go. Fetched (by whoever has the "Audit Log" permission) the
++  // same way as realProducts/settings/content-overrides above -- gated behind that permission on
++  // the read side only, same reasoning as server/src/routes/audit-log.js.
+   const [auditLog, setAuditLog] = useState([]);
++  const [auditLogLoading, setAuditLogLoading] = useState(true);
++  const [auditLogError, setAuditLogError] = useState("");
++  const refetchAuditLog = () => {
++    setAuditLogLoading(true);
++    setAuditLogError("");
++    api.getAuditLog()
++      .then((body) => setAuditLog(pluck(body, "entries", { array: true })))
++      .catch((e) => setAuditLogError(e.message))
++      .finally(() => setAuditLogLoading(false));
++  };
++  useEffect(() => {
++    if (user && (user.role === "super_admin" || user.role === "staff")) refetchAuditLog();
++    else setAuditLogLoading(false);
++  }, [user && user.role]);
+   // Real, backend-persisted live chat -- was purely local, in-memory state before this (see
+   // migrations/023_live_chat.sql for the full reasoning). Exposed as liveChats (the same name it
+   // always had) so AdminLiveChat.jsx and every other existing consumer keep working unchanged --
+@@ -1084,13 +1103,25 @@ export function AdminDataProvider({ children }) {
+   };
+   useEffect(() => { refetchSettings(); }, []);
+ 
++  // Real, backend-persisted write -- every one of this function's ~26 call sites already only
++  // ever fires right after its own real mutation (setPrice, setStock, setMomentContent, etc.)
++  // already succeeded, so this stays fire-and-forget from THEIR perspective: none of them need to
++  // await it or change their own success/failure handling on whether the log write itself lands.
++  // A real, optimistic local prepend keeps the on-screen list feeling instant while the request is
++  // in flight, the same UX the old client-only version always had; refetchAuditLog (called after)
++  // reconciles with the real, server-generated id/timestamp once the write actually completes, so
++  // the temporary client-side id never lingers or gets treated as real.
+   const logAction = (action, detail) => {
+-    setAuditLog((prev) =>
+-      [
+-        { id: `${Date.now()}-${Math.random()}`, timestamp: new Date().toISOString(), actor: user?.email || "unknown", action, detail },
+-        ...prev,
+-      ].slice(0, 200) // cap history so this can't grow unbounded in a long admin session
+-    );
++    const optimisticEntry = { id: `pending-${Date.now()}-${Math.random()}`, timestamp: new Date().toISOString(), actor: user?.email || "unknown", action, detail };
++    setAuditLog((prev) => [optimisticEntry, ...prev].slice(0, 200));
++    api.logAdminAction(action, detail)
++      .then(() => refetchAuditLog())
++      .catch(() => {
++        // A failed log write is a real, but low-stakes, problem -- the admin's actual action
++        // (the price change, the content edit, etc.) already succeeded and was already reported
++        // to them as such; silently leaving the optimistic entry in place rather than surfacing a
++        // second, confusing error toast about bookkeeping for an action that already worked.
++      });
+   };
+ 
+   const getPrice = (id) => {
+@@ -1785,13 +1816,12 @@ export function AdminDataProvider({ children }) {
+   // same real precedent already applied when orders/users/quotations/etc. became real: a live
+   // database needs its own real backup strategy (Railway's own database backups), not an ad-hoc
+   // JSON download, and "restoring" them here would silently overwrite real, fetched state with
+-  // stale JSON, with zero actual effect on the real database.
+-  const exportAdminData = () => ({
+-    auditLog,
+-  });
++  // stale JSON, with zero actual effect on the real database. auditLog itself joins that same
++  // list now too -- it's the last piece exportAdminData/restoreAdminData ever covered, so both
++  // functions are now genuinely empty and kept only so nothing calling them elsewhere breaks.
++  const exportAdminData = () => ({});
+   const restoreAdminData = (data) => {
+     if (!data || typeof data !== "object") return;
+-    if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
+     logAction("Backup restored", `${Object.keys(data).length} data sets`);
+   };
+ 
+@@ -1816,7 +1846,7 @@ export function AdminDataProvider({ children }) {
+         getAllGreenBeans, addGreenBean, removeGreenBean,
+         realGreenBeansLoading, realGreenBeansError, refetchRealGreenBeans,
+         greenOrders, greenOrdersLoading, greenOrdersError, refetchGreenOrders, addGreenOrder, updateGreenOrderStatus,
+-        auditLog,
++        auditLog, auditLogLoading, auditLogError, refetchAuditLog,
+         kenyaMessages: settings.kenyaLiveMessages || [], addKenyaMessage, updateKenyaMessage, removeKenyaMessage,
+         quotations, quotationsLoading, quotationsError, refetchQuotations, addQuotation, updateQuotationStatus,
+         serviceInquiries, serviceInquiriesLoading, serviceInquiriesError, refetchServiceInquiries, addServiceInquiry, updateServiceInquiryStatus, setServiceInquiryFee,
+diff --git a/src/utils/api.js b/src/utils/api.js
+index d8a63ac..6dec969 100644
+--- a/src/utils/api.js
++++ b/src/utils/api.js
+@@ -330,4 +330,7 @@ export const api = {
+     request(`/content-overrides/moments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+   updateCountryHistory: (name, text) =>
+     request(`/content-overrides/countries/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify({ text }) }),
++  getAuditLog: () => request("/audit-log"),
++  logAdminAction: (action, detail) =>
++    request("/audit-log", { method: "POST", body: JSON.stringify({ action, detail }) }),
+ };
+\ No newline at end of file

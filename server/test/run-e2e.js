@@ -1857,6 +1857,36 @@ async function main() {
   const overridesAfterCountryPatch = await get("/content-overrides");
   check("the country edit genuinely persists, and the earlier moment edit is still there too (independent keys, one write doesn't clobber the other)", overridesAfterCountryPatch.body.countryHistoryOverrides.Kenya === "A fully replaced second version of the text." && overridesAfterCountryPatch.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
 
+  console.log("\nReal, backend-persisted admin audit log -- previously entirely client-only, in-memory state (src/context/index.jsx's logAction/auditLog), capped at 200 entries and wiped the moment an admin's tab closed or refreshed:");
+  const auditPostNoAuth = await post("/audit-log", { action: "Hijacked", detail: "x" });
+  check("anonymous caller can't write an audit-log entry", auditPostNoAuth.status === 401);
+
+  const auditPostMissingAction = await post("/audit-log", { detail: "no action given" }, token);
+  check("a missing action is genuinely rejected", auditPostMissingAction.status === 400);
+
+  // Deliberately posted with staffToken -- granted only "Inventory" earlier in this file, no
+  // "Audit Log" permission at all -- since every admin action needs to be able to log ITSELF
+  // regardless of which specific permission the actor holds; requirePermission("Audit Log") gates
+  // who can VIEW the log below, never who can add to it.
+  const auditPostAsLimitedStaff = await post("/audit-log", { action: "Stock updated", detail: "sl28-kenya → 40 units" }, staffToken);
+  check("a staff member with an unrelated permission can still genuinely write their own audit entry", auditPostAsLimitedStaff.status === 201);
+  check("the real, server-generated id/timestamp and the real, authenticated actor's email are used, not anything the client could have supplied", !!auditPostAsLimitedStaff.body.entry.id && auditPostAsLimitedStaff.body.entry.actor === "staff-inventory@morningaroma.local");
+
+  const auditGetNoAuth = await get("/audit-log");
+  check("anonymous caller can't read the audit log", auditGetNoAuth.status === 401);
+  const auditGetAsLimitedStaff = await get("/audit-log", staffToken);
+  check("a staff member without the Audit Log permission can't read it, even though they could write to it a moment ago", auditGetAsLimitedStaff.status === 403);
+
+  const auditGetAsSuperAdmin = await get("/audit-log", token);
+  check("a real super_admin can read the audit log", auditGetAsSuperAdmin.status === 200);
+  check("the entry written a moment ago by the limited-permission staff member is genuinely there", auditGetAsSuperAdmin.body.entries.some((e) => e.actor === "staff-inventory@morningaroma.local" && e.action === "Stock updated"));
+
+  const auditLogStaffCandidate = await registerAndVerify("staff-auditlog@morningaroma.local", "correcthorsebattery1", "Audit Log Staff");
+  await patch(`/users/${auditLogStaffCandidate.body.user.id}`, { role: "staff", permissions: ["Audit Log"] }, token);
+  const auditLogStaffToken = sessionCookies(auditLogStaffCandidate);
+  const auditGetAsGrantedStaff = await get("/audit-log", auditLogStaffToken);
+  check("a staff member specifically granted the Audit Log permission can read it too, not just super_admin", auditGetAsGrantedStaff.status === 200);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();
   process.exit(fail > 0 ? 1 : 0);

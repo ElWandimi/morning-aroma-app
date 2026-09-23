@@ -330,4 +330,7 @@ export const api = {
     request(`/content-overrides/moments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
   updateCountryHistory: (name, text) =>
     request(`/content-overrides/countries/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify({ text }) }),
+  getAuditLog: () => request("/audit-log"),
+  logAdminAction: (action, detail) =>
+    request("/audit-log", { method: "POST", body: JSON.stringify({ action, detail }) }),
 };

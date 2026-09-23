@@ -27,6 +27,7 @@ const serviceInquiriesRoutes = require("./routes/serviceInquiries");
 const greenOrdersRoutes = require("./routes/greenOrders");
 const contactMessagesRoutes = require("./routes/contactMessages");
 const contentOverridesRoutes = require("./routes/content-overrides");
+const auditLogRoutes = require("./routes/audit-log");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -175,6 +176,7 @@ app.use("/service-inquiries", serviceInquiriesRoutes);
 app.use("/green-orders", greenOrdersRoutes);
 app.use("/contact-messages", contactMessagesRoutes);
 app.use("/content-overrides", contentOverridesRoutes);
+app.use("/audit-log", auditLogRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });
