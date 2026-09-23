@@ -14,7 +14,23 @@ const inquiryLimiter = rateLimit({
   message: { error: "Too many requests. Please try again in a few minutes." },
 });
 
-const VALID_INTERESTS = ["Remote Consulting", "Kenyan Auction Representation", "Both / not sure yet"];
+// Kept in sync with the <select id="svc-interest"> options in src/pages/Services.jsx -- expanded
+// from the original 2 services to the real, full consulting lineup (grading, roast profiles,
+// cupping, equipment, menu development, packaging, barista training, and sourcing), each of which
+// is now also its own entry in the SERVICES data array those options describe on the page itself.
+const VALID_INTERESTS = [
+  "Remote Consulting",
+  "Kenyan Auction Representation",
+  "Coffee Grading & Quality Analysis",
+  "Roast Profile Development",
+  "Sensory Evaluation & Cupping Sessions",
+  "Equipment Consulting",
+  "Café Menu & Brew Method Development",
+  "Packaging & Shelf-Life Consultation",
+  "Barista & Staff Training",
+  "Business & Sourcing Consultation",
+  "Not sure yet",
+];
 
 function publicInquiry(row) {
   const createdAtIso = row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at;

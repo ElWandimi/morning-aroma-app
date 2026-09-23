@@ -1443,6 +1443,13 @@ a { color: inherit; text-decoration: none; }
 .service-fee { background: var(--steam); border-radius: 12px; padding: 14px 16px; }
 .service-fee p:last-child { color: var(--espresso); font-weight: 600; margin: 2px 0 0; }
 
+.client-types { padding: 50px 24px 10px; }
+.client-types-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; max-width: 1100px; margin: 0 auto; }
+.client-type-card { text-align: center; padding: 18px 14px; background: var(--steam); border-radius: 14px; }
+.client-type-card .service-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+.client-type-card h4 { margin-bottom: 6px; }
+.client-type-card p { font-size: 0.88rem; color: #6b5647; margin: 0; }
+
 .service-process { background: var(--cream); padding: 50px 24px 60px; }
 .process-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; max-width: 1100px; margin: 0 auto; }
 .process-card { text-align: center; padding: 10px; }

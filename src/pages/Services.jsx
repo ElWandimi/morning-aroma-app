@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAdmin, useAuth, useRoute, useToast } from "../context";
-import { FAQ_ITEMS, SERVICES, SERVICE_PROCESS } from "../data";
+import { FAQ_ITEMS, SERVICES, SERVICE_PROCESS, WHO_WE_WORK_WITH } from "../data";
 import { useStructuredData } from "../hooks";
 
 export function OurServicesPage() {
@@ -38,7 +38,7 @@ export function OurServicesPage() {
   useStructuredData({
     "@context": "https://schema.org",
     "@type": "Service",
-    serviceType: "Coffee roasting and brewing consulting, coffee auction representation",
+    serviceType: "Coffee quality grading, roast profile development, sensory evaluation, equipment consulting, café menu development, packaging consultation, barista training, sourcing consultation, and Kenyan coffee auction representation",
     provider: { "@type": "Organization", name: "Morning Aroma", sameAs: `${window.location.origin}/` },
     areaServed: "Worldwide (remote consulting); Kenya (auction representation)",
     hasOfferCatalog: {
@@ -76,12 +76,40 @@ export function OurServicesPage() {
             <ul className="service-bullets">
               {s.bullets.map((b, i) => (<li key={i}>{b}</li>))}
             </ul>
+            {s.deliverable && (
+              <div className="service-fee">
+                <p className="filter-label" style={{ marginTop: 0 }}>You'll receive</p>
+                <p>{s.deliverable}</p>
+              </div>
+            )}
+            {s.idealFor && (
+              <div className="service-fee">
+                <p className="filter-label" style={{ marginTop: 0 }}>Best for</p>
+                <p>{s.idealFor}</p>
+              </div>
+            )}
             <div className="service-fee">
               <p className="filter-label" style={{ marginTop: 0 }}>Fee</p>
               <p>{s.fee}</p>
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="client-types">
+        <div className="shop-head">
+          <p className="eyebrow">who we work with</p>
+          <h2>Whoever you are, there's a service built for where you're at</h2>
+        </div>
+        <div className="client-types-grid">
+          {WHO_WE_WORK_WITH.map((c) => (
+            <div key={c.type} className="client-type-card">
+              <span className="service-icon">{c.icon}</span>
+              <h4>{c.type}</h4>
+              <p>{c.needs}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="service-process">
@@ -123,6 +151,45 @@ export function OurServicesPage() {
         </div>
       )}
 
+      <div className="client-types">
+        <div className="shop-head">
+          <p className="eyebrow">why work with us</p>
+          <h2>What every engagement includes</h2>
+        </div>
+        <div className="client-types-grid">
+          <div className="client-type-card">
+            <span className="service-icon">📐</span>
+            <h4>SCA-aligned protocols</h4>
+            <p>Industry-standard grading and cupping, not an informal opinion.</p>
+          </div>
+          <div className="client-type-card">
+            <span className="service-icon">🌱</span>
+            <h4>Green bean to retail shelf</h4>
+            <p>Hands-on experience across the whole chain, not just one stage of it.</p>
+          </div>
+          <div className="client-type-card">
+            <span className="service-icon">⚖️</span>
+            <h4>Equipment-agnostic</h4>
+            <p>We recommend what fits your budget, never what we'd profit from selling.</p>
+          </div>
+          <div className="client-type-card">
+            <span className="service-icon">📄</span>
+            <h4>Actionable deliverables</h4>
+            <p>Reports, profiles, recipes, and training materials — always in writing.</p>
+          </div>
+          <div className="client-type-card">
+            <span className="service-icon">🔒</span>
+            <h4>Confidential &amp; professional</h4>
+            <p>Your data and blends stay yours, never shared with other clients.</p>
+          </div>
+          <div className="client-type-card">
+            <span className="service-icon">🔁</span>
+            <h4>Flexible engagement</h4>
+            <p>A one-off consultation, or an ongoing monthly retainer — your call.</p>
+          </div>
+        </div>
+      </div>
+
       <div className="service-inquiry">
         <div className="service-inquiry-inner">
           <div>
@@ -161,7 +228,15 @@ export function OurServicesPage() {
                 <select id="svc-interest" value={interest} onChange={(e) => setInterest(e.target.value)}>
                   <option>Remote Consulting</option>
                   <option>Kenyan Auction Representation</option>
-                  <option>Both / not sure yet</option>
+                  <option>Coffee Grading & Quality Analysis</option>
+                  <option>Roast Profile Development</option>
+                  <option>Sensory Evaluation & Cupping Sessions</option>
+                  <option>Equipment Consulting</option>
+                  <option>Café Menu & Brew Method Development</option>
+                  <option>Packaging & Shelf-Life Consultation</option>
+                  <option>Barista & Staff Training</option>
+                  <option>Business & Sourcing Consultation</option>
+                  <option>Not sure yet</option>
                 </select>
                 <label htmlFor="svc-message">Tell us more</label>
                 <textarea id="svc-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={4} maxLength={1000} placeholder="What are you hoping to get out of this?" required />

@@ -1680,6 +1680,14 @@ async function main() {
   check("real, formatted id assigned (SVC-<n>)", /^SVC-\d+$/.test(svcSubmit.body.inquiry.id));
   const svcNoAuthList = await get("/service-inquiries");
   check("anonymous caller can't list service inquiries", svcNoAuthList.status === 401);
+  // One of the newer service lines added alongside the original two (Remote Consulting, Kenyan
+  // Auction Representation) -- confirms VALID_INTERESTS in serviceInquiries.js was genuinely
+  // expanded to match every option Services.jsx's own <select> now offers, not just left as the
+  // original 3-item list while the page moved on without it.
+  const svcSubmitGrading = await post("/service-inquiries", { name: "Roastery Owner", email: "owner@roastery.co", interest: "Coffee Grading & Quality Analysis", message: "Need a lot graded before we commit to buying it" });
+  check("a newer service line (Coffee Grading & Quality Analysis) is genuinely accepted", svcSubmitGrading.status === 201);
+  const svcBadInterest = await post("/service-inquiries", { name: "Test", email: "test@test.com", interest: "Both / not sure yet", message: "This old option no longer exists" });
+  check("the old, since-renamed interest value is genuinely rejected", svcBadInterest.status === 400);
 
   // A real green bean genuinely needs to exist first -- price_per_kg_cents=950, min_order_kg=5,
   // stock_kg=240, matching the real, published green-kenya lot from migrations/006_green_beans.sql
