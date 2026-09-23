@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import { ShareButtons } from "../components";
 import { useAdmin, useAuth, useCurrency, useToast } from "../context";
-import { COUNTRY_JOURNEY_PHOTO } from "../data";
+import { COUNTRY_JOURNEY_PHOTO, GREEN_BEAN_PHOTO } from "../data";
+
+// Shown up front; the rest reveal on "Load more" below. Keeps the initial page light while
+// still letting a wholesale buyer browse the full nine-lot catalog in one visit.
+const INITIAL_VISIBLE = 5;
 import { withTargetWidth } from "../utils/helpers";
 
 export function GreenBeansPage() {
@@ -36,6 +40,9 @@ export function GreenBeansPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [qtyError, setQtyError] = useState("");
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const visibleGreenBeans = allGreenBeans.slice(0, visibleCount);
+  const hasMoreGreenBeans = visibleCount < allGreenBeans.length;
 
   const pricePerKg = selected ? getGreenPrice(selected.id) : 0;
   const subtotalCents = Math.round(pricePerKg * quantityKg);
@@ -109,32 +116,52 @@ export function GreenBeansPage() {
       </div>
 
       <div className="green-bean-grid">
-        {allGreenBeans.map((g) => (
-          <div
-            key={g.id}
-            className={`green-bean-card ${activeId === g.id ? "selected" : ""}`}
-            onClick={() => selectBean(g.id)}
-          >
-            <div className="green-bean-photo" style={{ backgroundImage: `url('${withTargetWidth(COUNTRY_JOURNEY_PHOTO[g.country], 450)}')` }} />
-            <div className="green-bean-info">
-              <p className="eyebrow" style={{ marginBottom: 2 }}>{g.country}</p>
-              <h3>{g.name}</h3>
-              <div className="green-bean-stats">
-                <span>Cupping <strong>{g.cuppingScore}</strong></span>
-                <span>{g.process}</span>
-                <span>Grade {g.grade}</span>
-                <span>Moisture {g.moisture}</span>
+        {visibleGreenBeans.map((g, i) => {
+          // Bundled real product photo (currently just the Kenya bag) takes priority; every
+          // other lot falls back to its own country's verified real photo -- never a shared,
+          // one-size-fits-all image the way the corrupted live rows were showing.
+          const photoUrl = GREEN_BEAN_PHOTO[g.id]
+            ? GREEN_BEAN_PHOTO[g.id]
+            : withTargetWidth(COUNTRY_JOURNEY_PHOTO[g.country], 450);
+          return (
+            <div
+              key={g.id}
+              className={`green-bean-card ${activeId === g.id ? "selected" : ""} ${i % 2 === 1 ? "reverse" : ""}`}
+              onClick={() => selectBean(g.id)}
+            >
+              <div className="green-bean-photo" style={{ backgroundImage: `url('${photoUrl}')` }} />
+              <div className="green-bean-info">
+                <p className="eyebrow" style={{ marginBottom: 2 }}>{g.country}</p>
+                <h3>{g.name}</h3>
+                <div className="green-bean-stats">
+                  <span>Cupping <strong>{g.cuppingScore}</strong></span>
+                  <span>{g.process}</span>
+                  <span>Grade {g.grade}</span>
+                  <span>Moisture {g.moisture}</span>
+                </div>
+                <p className="note">{g.notes}</p>
+                <div className="green-bean-price-row">
+                  <span className="green-bean-price">{format(getGreenPrice(g.id))}<span className="per-kg"> / kg</span></span>
+                  <span className={`green-bean-stock ${g.stockKg < 100 ? "low" : ""}`}>{g.stockKg}kg in stock</span>
+                </div>
+                <p className="hint" style={{ margin: "4px 0 0" }}>Minimum order {g.minOrderKg}kg</p>
               </div>
-              <p className="note">{g.notes}</p>
-              <div className="green-bean-price-row">
-                <span className="green-bean-price">{format(getGreenPrice(g.id))}<span className="per-kg"> / kg</span></span>
-                <span className={`green-bean-stock ${g.stockKg < 100 ? "low" : ""}`}>{g.stockKg}kg in stock</span>
-              </div>
-              <p className="hint" style={{ margin: "4px 0 0" }}>Minimum order {g.minOrderKg}kg</p>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {hasMoreGreenBeans && (
+        <div style={{ textAlign: "center", margin: "8px 0 32px" }}>
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => setVisibleCount((c) => Math.min(c + INITIAL_VISIBLE, allGreenBeans.length))}
+          >
+            Load more lots ({allGreenBeans.length - visibleCount} more)
+          </button>
+        </div>
+      )}
 
       <div className="service-inquiry">
         <div className="service-inquiry-inner">

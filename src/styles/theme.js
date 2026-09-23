@@ -1728,12 +1728,20 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Green Coffee (wholesale) page */
-.green-bean-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; max-width: 1200px; margin: -50px auto 40px; padding: 0 24px; position: relative; z-index: 2; }
-.green-bean-card { background: white; border: 2px solid transparent; border-radius: 18px; overflow: hidden; box-shadow: 0 12px 28px rgba(62,44,35,0.12); cursor: pointer; transition: border-color .2s ease, transform .2s ease; }
+/* Single-column stack of full-width rows -- each row shows the lot's photo and its info
+   side-by-side, and .reverse (applied to every other card, see GreenBeans.jsx) swaps which
+   side the photo sits on so the layout alternates left/right down the page. */
+.green-bean-grid { display: flex; flex-direction: column; gap: 22px; max-width: 1000px; margin: -50px auto 40px; padding: 0 24px; position: relative; z-index: 2; }
+.green-bean-card { display: flex; flex-wrap: wrap; background: white; border: 2px solid transparent; border-radius: 18px; overflow: hidden; box-shadow: 0 12px 28px rgba(62,44,35,0.12); cursor: pointer; transition: border-color .2s ease, transform .2s ease; }
 .green-bean-card:hover { transform: translateY(-3px); }
 .green-bean-card.selected { border-color: var(--terracotta-btn); }
-.green-bean-photo { height: 140px; background-size: cover; background-position: center; }
-.green-bean-info { padding: 18px 20px 20px; }
+.green-bean-card.reverse { flex-direction: row-reverse; }
+.green-bean-photo { flex: 1 1 280px; min-height: 220px; background-size: cover; background-position: center; }
+.green-bean-info { flex: 1 1 320px; padding: 22px 26px 24px; }
+@media (max-width: 680px) {
+  .green-bean-card, .green-bean-card.reverse { flex-direction: column; }
+  .green-bean-photo { min-height: 160px; }
+}
 .green-bean-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.8rem; color: var(--almond-text); margin: 6px 0 10px; }
 .green-bean-stats strong { color: var(--chestnut); }
 .green-bean-price-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; }

@@ -25,6 +25,7 @@ function publicGreenBean(row) {
     grade: row.grade,
     process: row.process,
     notes: row.notes,
+    photoUrl: row.photo_url,
   };
 }
 
@@ -66,16 +67,16 @@ router.post("/", requireAuth, requirePermission("Inventory"), async (req, res) =
   const validationError = validateGreenBeanInput(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
 
-  const { name, country, roastedId, pricePerKgCents, stockKg, minOrderKg, cuppingScore, moisture, grade, process, notes } = req.body;
+  const { name, country, roastedId, pricePerKgCents, stockKg, minOrderKg, cuppingScore, moisture, grade, process, notes, photoUrl } = req.body;
   const id = `green-${slugify(`${name}-${country}`)}`;
 
   const existing = await query("SELECT id FROM green_beans WHERE id = $1", [id]);
   if (existing.rows.length > 0) return res.status(409).json({ error: "A green coffee lot with this name and country already exists." });
 
   const result = await query(
-    `INSERT INTO green_beans (id, name, country, roasted_id, price_per_kg_cents, stock_kg, min_order_kg, cupping_score, moisture, grade, process, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-    [id, name.trim(), country.trim(), roastedId || null, pricePerKgCents, stockKg, minOrderKg, cuppingScore ?? null, moisture || null, grade || null, process || null, notes || null]
+    `INSERT INTO green_beans (id, name, country, roasted_id, price_per_kg_cents, stock_kg, min_order_kg, cupping_score, moisture, grade, process, notes, photo_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+    [id, name.trim(), country.trim(), roastedId || null, pricePerKgCents, stockKg, minOrderKg, cuppingScore ?? null, moisture || null, grade || null, process || null, notes || null, photoUrl || null]
   );
   res.status(201).json({ greenBean: publicGreenBean(result.rows[0]) });
 });
@@ -107,13 +108,14 @@ router.patch("/:id", requireAuth, requirePermission("Inventory"), async (req, re
     grade: b.grade !== undefined ? b.grade : current.grade,
     process: b.process !== undefined ? b.process : current.process,
     notes: b.notes !== undefined ? b.notes : current.notes,
+    photo_url: b.photoUrl !== undefined ? b.photoUrl : current.photo_url,
   };
 
   const result = await query(
     `UPDATE green_beans SET name = $1, country = $2, roasted_id = $3, price_per_kg_cents = $4, stock_kg = $5,
-       min_order_kg = $6, cupping_score = $7, moisture = $8, grade = $9, process = $10, notes = $11, updated_at = now()
-     WHERE id = $12 RETURNING *`,
-    [next.name, next.country, next.roasted_id, next.price_per_kg_cents, next.stock_kg, next.min_order_kg, next.cupping_score, next.moisture, next.grade, next.process, next.notes, req.params.id]
+       min_order_kg = $6, cupping_score = $7, moisture = $8, grade = $9, process = $10, notes = $11, photo_url = $12, updated_at = now()
+     WHERE id = $13 RETURNING *`,
+    [next.name, next.country, next.roasted_id, next.price_per_kg_cents, next.stock_kg, next.min_order_kg, next.cupping_score, next.moisture, next.grade, next.process, next.notes, next.photo_url, req.params.id]
   );
   res.json({ greenBean: publicGreenBean(result.rows[0]) });
 });

@@ -1187,7 +1187,15 @@ async function main() {
   check("returns 201", greenCreateOk.status === 201);
   check("id is generated as green-<slug>, matching the frontend's own id format exactly", greenCreateOk.body.greenBean && greenCreateOk.body.greenBean.id === "green-test-lot-testland");
   check("no roastedId by default -- a new admin-added lot has no retail counterpart", greenCreateOk.body.greenBean && greenCreateOk.body.greenBean.roastedId == null);
+  check("no photoUrl by default -- falls back to the country-keyed stock photo on the frontend", greenCreateOk.body.greenBean && greenCreateOk.body.greenBean.photoUrl == null);
   const testGreenBeanId = greenCreateOk.body.greenBean.id;
+
+  console.log("\nPATCH /green-beans/:id — set a real bundled per-bean photo (e.g. the Kenya bag mockup):");
+  const greenPatchPhoto = await patch(`/green-beans/${testGreenBeanId}`, { photoUrl: "/photos/green-beans/kenya-bag.jpg" }, token);
+  check("returns 200", greenPatchPhoto.status === 200);
+  check("photoUrl is genuinely persisted, not silently dropped", greenPatchPhoto.body.greenBean.photoUrl === "/photos/green-beans/kenya-bag.jpg");
+  const greenAfterPhotoPatch = await get("/green-beans");
+  check("the public list reflects the new photoUrl too", greenAfterPhotoPatch.body.greenBeans.find((g) => g.id === testGreenBeanId)?.photoUrl === "/photos/green-beans/kenya-bag.jpg");
 
   console.log("\nPOST /green-beans with the same name + country again:");
   const greenCreateDup = await post("/green-beans", { name: "Test Lot", country: "Testland", pricePerKgCents: 1000, stockKg: 50, minOrderKg: 5 }, token);

@@ -551,6 +551,13 @@ export const COUNTRIES = [
   },
 ];
 
+// One real, bundled Morning Aroma product photo for the Kenya green lot (the actual AA Kenya
+// bag mockup, not a stock photo) -- looked up by bean id in GreenBeansPage.jsx before falling
+// back to the country-keyed stock photo below for the other 8 lots.
+export const GREEN_BEAN_PHOTO = {
+  "green-kenya": "/photos/green-beans/kenya-bag.jpg",
+};
+
 export const COUNTRY_JOURNEY_PHOTO = {
   Panama: "https://images.unsplash.com/photo-1604401442263-e570cbcc68cf?auto=format&fit=crop&w=1600&q=68",
   Brazil: "https://images.unsplash.com/photo-1652020079010-038498f4b852?auto=format&fit=crop&w=1600&q=68",
