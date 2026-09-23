@@ -2280,7 +2280,11 @@ export function AdminContent() {
   const [countryDraft, setCountryDraft] = useState("");
 
   const startMomentEdit = (m) => { setEditingMoment(m.id); setMomentDraft({ benefit: m.benefit, description: m.description }); };
-  const saveMoment = (id) => { setMomentContent(id, momentDraft); setEditingMoment(null); addToast("Moment content updated"); };
+  const saveMoment = async (id) => {
+    const result = await setMomentContent(id, momentDraft);
+    setEditingMoment(null);
+    addToast(result.ok ? "Moment content updated" : result.error);
+  };
 
   const startCourseEdit = (c) => { setEditingCourse(c.id); setCourseDraft({ blurb: c.blurb, monthlyPriceCents: c.monthlyPriceCents, instructor: c.instructor, lessons: c.lessons }); };
   const saveCourse = async (id) => {
@@ -2482,7 +2486,11 @@ export function AdminContent() {
   };
 
   const startCountryEdit = (name) => { setEditingCountry(name); setCountryDraft(getCountryHistory(name)); };
-  const saveCountry = (name) => { setCountryHistory(name, countryDraft); setEditingCountry(null); addToast("Country history updated"); };
+  const saveCountry = async (name) => {
+    const result = await setCountryHistory(name, countryDraft);
+    setEditingCountry(null);
+    addToast(result.ok ? "Country history updated" : result.error);
+  };
 
   return (
     <div>

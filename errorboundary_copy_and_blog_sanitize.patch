@@ -1,0 +1,99 @@
+diff --git a/package-lock.json b/package-lock.json
+index 531b22d..3f038f8 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,14 +1,15 @@
+ {
+   "name": "morning-aroma",
+-  "version": "0.1.1",
++  "version": "0.1.2",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "morning-aroma",
+-      "version": "0.1.1",
++      "version": "0.1.2",
+       "dependencies": {
+         "@sentry/react": "^10.73.0",
++        "dompurify": "^3.4.15",
+         "express": "^5.2.1",
+         "helmet": "^8.3.0",
+         "jspdf": "^4.2.1",
+@@ -1678,11 +1679,10 @@
+       }
+     },
+     "node_modules/dompurify": {
+-      "version": "3.4.13",
+-      "resolved": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.13.tgz",
+-      "integrity": "sha512-2vmYIoqjze2d+kakP8S/nS5shfsl587kzwEjcGlTdiksUVgFHnFCsLYDVj/JNqJVOQZGSYBTmuycv0PodwmnMQ==",
++      "version": "3.4.15",
++      "resolved": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.15.tgz",
++      "integrity": "sha512-EUBjM+B+lkDE41iE82DDSCfkoPGfXx8IxFxPMjNzm/Uk4xDet77rTN9wqlxlVg71kK7XGuUMv6wUxJUwwv+Xyw==",
+       "license": "(MPL-2.0 OR Apache-2.0)",
+-      "optional": true,
+       "optionalDependencies": {
+         "@types/trusted-types": "^2.0.7"
+       }
+diff --git a/package.json b/package.json
+index 1d485e4..ab14557 100644
+--- a/package.json
++++ b/package.json
+@@ -22,6 +22,7 @@
+   ],
+   "dependencies": {
+     "@sentry/react": "^10.73.0",
++    "dompurify": "^3.4.15",
+     "express": "^5.2.1",
+     "helmet": "^8.3.0",
+     "jspdf": "^4.2.1",
+diff --git a/src/components/index.jsx b/src/components/index.jsx
+index a626dc5..8b4c1e4 100644
+--- a/src/components/index.jsx
++++ b/src/components/index.jsx
+@@ -1964,7 +1964,10 @@ export class ErrorBoundary extends React.Component {
+         <div className="error-boundary-screen" style={wrap}>
+           <div style={{ width: 34, height: 44, background: "#E8D5B5", borderRadius: "50%", margin: "0 auto 20px" }} />
+           <h2 style={{ marginBottom: 10 }}>Something went wrong brewing this page</h2>
+-          <p style={{ marginBottom: 8, opacity: 0.8 }}>A prototype hiccup, not your fault. Reloading usually clears it.</p>
++          {/* Was "A prototype hiccup, not your fault" -- leftover pre-launch wording that no
++              longer matches a live, production site. Reworded to the same reassuring tone
++              without implying the app itself is unfinished. */}
++          <p style={{ marginBottom: 8, opacity: 0.8 }}>Not your fault — reloading usually clears it.</p>
+           <button
+             style={btn}
+             onClick={() => {
+diff --git a/src/pages/Blog.jsx b/src/pages/Blog.jsx
+index 66a96db..8471a8e 100644
+--- a/src/pages/Blog.jsx
++++ b/src/pages/Blog.jsx
+@@ -1,8 +1,20 @@
+ import React from "react";
++import DOMPurify from "dompurify";
+ import { ImgWithSkeleton, ShareButtons } from "../components";
+ import { useAdmin, useRoute, pathFor } from "../context";
+ import { useStructuredData } from "../hooks";
+ 
++// The backend (server/src/routes/blog.js) already runs DOMPurify.sanitize() with a real allowlist
++// on every post create/update before storing it, so this isn't closing a live hole. It's a second,
++// independent sanitization pass on the same allowlist right before the one place this app ever
++// calls dangerouslySetInnerHTML -- so a future backend regression, a direct DB edit, or a second
++// admin-authored content path added later still can't reach a real XSS through this render path.
++const BLOG_ALLOWED_TAGS = ["p", "br", "strong", "b", "em", "i", "u", "h2", "h3", "a", "img", "ul", "ol", "li", "blockquote"];
++const BLOG_ALLOWED_ATTR = ["href", "src", "alt", "target", "rel"];
++function sanitizeBlogHtml(html) {
++  return DOMPurify.sanitize(html || "", { ALLOWED_TAGS: BLOG_ALLOWED_TAGS, ALLOWED_ATTR: BLOG_ALLOWED_ATTR });
++}
++
+ function fmtDate(iso) {
+   if (!iso) return "";
+   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+@@ -106,7 +118,7 @@ export function BlogPostPage({ id }) {
+       {post.coverImageUrl && (
+         <ImgWithSkeleton src={post.coverImageUrl} alt={post.title} wrapClassName="blog-post-cover-wrap" className="blog-post-cover" />
+       )}
+-      <div className="blog-post-body" dangerouslySetInnerHTML={{ __html: post.contentHtml }} />
++      <div className="blog-post-body" dangerouslySetInnerHTML={{ __html: sanitizeBlogHtml(post.contentHtml) }} />
+       <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid var(--gold)" }}>
+         <ShareButtons path={pathFor("blogpost", { id: post.slug })} text={post.title} label="Share this story" />
+       </div>

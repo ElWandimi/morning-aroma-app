@@ -280,7 +280,7 @@ async function query(text, params = []) {
   // and `items` as strings, when routes/users.js and routes/orders.js (correctly, for
   // production) expect and return real arrays.
   const parseJsonColumns = (row) => {
-    for (const col of ["permissions", "items", "tags", "profile", "data", "two_factor_backup_codes"]) {
+    for (const col of ["permissions", "items", "tags", "profile", "data", "two_factor_backup_codes", "moment_overrides", "country_history_overrides"]) {
       if (row && typeof row[col] === "string") {
         try { row[col] = JSON.parse(row[col]); } catch { /* leave as-is if malformed */ }
       }

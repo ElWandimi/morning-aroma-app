@@ -1,0 +1,367 @@
+diff --git a/server/migrations/030_content_overrides.sql b/server/migrations/030_content_overrides.sql
+new file mode 100644
+index 0000000..5a8176e
+--- /dev/null
++++ b/server/migrations/030_content_overrides.sql
+@@ -0,0 +1,14 @@
++-- Single-row, JSONB-based table for admin content-editing overrides -- mirrors the existing
++-- settings table pattern (007_settings.sql) rather than per-row relational tables, because these
++-- are small, low-cardinality keyed patches with no need for individual-row audit/CRUD:
++--   moment_overrides:         { [momentId]: { benefit?, description? } }
++--   country_history_overrides: { [countryName]: "freeform history text" }
++-- Deliberately no column for course overrides -- that mechanism (client-only courseOverrides
++-- state in src/context/index.jsx) was already fully superseded by realCourses, the real,
++-- backend-persisted Academy course data, and had zero remaining call sites anywhere in the app.
++CREATE TABLE IF NOT EXISTS content_overrides (
++  id                         INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
++  moment_overrides           JSONB NOT NULL DEFAULT '{}',
++  country_history_overrides  JSONB NOT NULL DEFAULT '{}',
++  updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
++);
+diff --git a/server/src/app.js b/server/src/app.js
+index a647c82..5341b4d 100644
+--- a/server/src/app.js
++++ b/server/src/app.js
+@@ -26,6 +26,7 @@ const quotationsRoutes = require("./routes/quotations");
+ const serviceInquiriesRoutes = require("./routes/serviceInquiries");
+ const greenOrdersRoutes = require("./routes/greenOrders");
+ const contactMessagesRoutes = require("./routes/contactMessages");
++const contentOverridesRoutes = require("./routes/content-overrides");
+ const webhooksRoutes = require("./routes/webhooks");
+ 
+ const app = express();
+@@ -173,6 +174,7 @@ app.use("/quotations", quotationsRoutes);
+ app.use("/service-inquiries", serviceInquiriesRoutes);
+ app.use("/green-orders", greenOrdersRoutes);
+ app.use("/contact-messages", contactMessagesRoutes);
++app.use("/content-overrides", contentOverridesRoutes);
+ 
+ app.use((req, res) => {
+   res.status(404).json({ error: "Not found" });
+diff --git a/server/src/routes/content-overrides.js b/server/src/routes/content-overrides.js
+new file mode 100644
+index 0000000..dd85892
+--- /dev/null
++++ b/server/src/routes/content-overrides.js
+@@ -0,0 +1,83 @@
++const express = require("express");
++const { query } = require("../db");
++const { requireAuth } = require("../middleware/requireAuth");
++const { requirePermission } = require("../middleware/requireAdmin");
++
++const router = express.Router();
++
++// Nothing yet migrated on a given deployment (this row hasn't been created) means no admin has
++// ever overridden a moment's copy or a country's history text -- an empty object for each is the
++// real, correct starting state, not a placeholder.
++const FALLBACK_OVERRIDES = { momentOverrides: {}, countryHistoryOverrides: {} };
++
++function toPublic(row) {
++  return {
++    momentOverrides: row.moment_overrides,
++    countryHistoryOverrides: row.country_history_overrides,
++  };
++}
++
++async function readCurrent() {
++  const existing = await query("SELECT moment_overrides, country_history_overrides FROM content_overrides WHERE id = 1", []);
++  return existing.rows[0] ? toPublic(existing.rows[0]) : FALLBACK_OVERRIDES;
++}
++
++async function writeCurrent(momentOverrides, countryHistoryOverrides) {
++  const result = await query(
++    `INSERT INTO content_overrides (id, moment_overrides, country_history_overrides, updated_at)
++     VALUES (1, $1, $2, now())
++     ON CONFLICT (id) DO UPDATE SET moment_overrides = $1, country_history_overrides = $2, updated_at = now()
++     RETURNING moment_overrides, country_history_overrides`,
++    [JSON.stringify(momentOverrides), JSON.stringify(countryHistoryOverrides)]
++  );
++  return toPublic(result.rows[0]);
++}
++
++// Public -- Moments, WorldJourney, and Growing all read these overrides to show every visitor
++// the admin-edited copy, same reasoning already applied to GET /settings.
++router.get("/", async (req, res) => {
++  res.json(await readCurrent());
++});
++
++// Patches exactly one moment's override, merging the given patch into whatever that moment
++// already had -- matches the existing frontend contract (setMomentContent(id, patch) has always
++// meant "apply these field changes to this one moment," never "replace every moment's overrides
++// with this object"). Merged at the application level, not Postgres's jsonb `||`, same
++// portability reasoning as settings.js: `||` means string concatenation in the SQLite test
++// harness, not JSONB merge.
++router.patch("/moments/:id", requireAuth, requirePermission("Content"), async (req, res) => {
++  const patch = req.body || {};
++  if (typeof patch !== "object" || patch === null || Array.isArray(patch)) {
++    return res.status(400).json({ error: "Request body must be an object." });
++  }
++  const allowedKeys = new Set(["benefit", "description"]);
++  const unknownKeys = Object.keys(patch).filter((k) => !allowedKeys.has(k));
++  if (unknownKeys.length > 0) {
++    return res.status(400).json({ error: `Unknown moment field(s): ${unknownKeys.join(", ")}` });
++  }
++
++  const current = await readCurrent();
++  const mergedMoments = {
++    ...current.momentOverrides,
++    [req.params.id]: { ...(current.momentOverrides[req.params.id] || {}), ...patch },
++  };
++  const result = await writeCurrent(mergedMoments, current.countryHistoryOverrides);
++  res.json(result);
++});
++
++// Replaces exactly one country's history text -- matches the existing frontend contract
++// (setCountryHistory(name, text) has always meant "this is now the full text for this one
++// country," not a merge, since it's a single freeform string field, not a patch of sub-fields).
++router.patch("/countries/:name", requireAuth, requirePermission("Content"), async (req, res) => {
++  const { text } = req.body || {};
++  if (typeof text !== "string") {
++    return res.status(400).json({ error: "text must be a string." });
++  }
++
++  const current = await readCurrent();
++  const mergedCountries = { ...current.countryHistoryOverrides, [req.params.name]: text };
++  const result = await writeCurrent(current.momentOverrides, mergedCountries);
++  res.json(result);
++});
++
++module.exports = router;
+diff --git a/server/test/db.sqlite.js b/server/test/db.sqlite.js
+index 1ce06a1..dca740f 100644
+--- a/server/test/db.sqlite.js
++++ b/server/test/db.sqlite.js
+@@ -280,7 +280,7 @@ async function query(text, params = []) {
+   // and `items` as strings, when routes/users.js and routes/orders.js (correctly, for
+   // production) expect and return real arrays.
+   const parseJsonColumns = (row) => {
+-    for (const col of ["permissions", "items", "tags", "profile", "data", "two_factor_backup_codes"]) {
++    for (const col of ["permissions", "items", "tags", "profile", "data", "two_factor_backup_codes", "moment_overrides", "country_history_overrides"]) {
+       if (row && typeof row[col] === "string") {
+         try { row[col] = JSON.parse(row[col]); } catch { /* leave as-is if malformed */ }
+       }
+diff --git a/server/test/run-e2e.js b/server/test/run-e2e.js
+index 759b497..ab739a3 100644
+--- a/server/test/run-e2e.js
++++ b/server/test/run-e2e.js
+@@ -1818,6 +1818,45 @@ async function main() {
+   await checkForAbandonedCarts();
+   check("an old but genuinely EMPTY cart doesn't get emailed -- nothing to abandon", resendMock.getSentEmails().filter((e) => e.to === "empty-cart@morningaroma.local").length === 0);
+ 
++  console.log("\nReal, backend-persisted content overrides -- previously entirely client-only, in-memory state (src/context/index.jsx's AdminDataProvider), meaning an admin's edits to a moment's copy or a country's history text never survived a page refresh:");
++  const overridesInitial = await get("/content-overrides");
++  check("GET /content-overrides is public, no auth needed", overridesInitial.status === 200);
++  check("a fresh deployment starts with empty overrides", Object.keys(overridesInitial.body.momentOverrides).length === 0 && Object.keys(overridesInitial.body.countryHistoryOverrides).length === 0);
++
++  const momentPatchNoAuth = await patch("/content-overrides/moments/morning-ritual", { benefit: "Hijacked" });
++  check("anonymous caller can't edit a moment's content", momentPatchNoAuth.status === 401);
++  const momentPatchAsCustomer = await patch("/content-overrides/moments/morning-ritual", { benefit: "Hijacked" }, customerToken);
++  check("a customer without the Content permission can't edit a moment's content", momentPatchAsCustomer.status === 403);
++
++  const momentPatchUnknownField = await patch("/content-overrides/moments/morning-ritual", { notARealField: "x" }, token);
++  check("an unknown moment field is genuinely rejected", momentPatchUnknownField.status === 400);
++
++  const momentPatchOk = await patch("/content-overrides/moments/morning-ritual", { benefit: "Real, admin-edited benefit text" }, token);
++  check("editing a moment's content returns 200 with the real, merged overrides", momentPatchOk.status === 200 && momentPatchOk.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
++
++  const momentPatchDescription = await patch("/content-overrides/moments/morning-ritual", { description: "A second, real field on the same moment" }, token);
++  check("a second patch to the same moment genuinely merges rather than overwriting the first field", momentPatchDescription.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text" && momentPatchDescription.body.momentOverrides["morning-ritual"].description === "A second, real field on the same moment");
++
++  const overridesAfterMomentPatch = await get("/content-overrides");
++  check("the moment edit genuinely persists across a fresh GET, not just in the PATCH response", overridesAfterMomentPatch.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
++
++  const countryPatchNoAuth = await patch("/content-overrides/countries/Kenya", { text: "Hijacked" });
++  check("anonymous caller can't edit a country's history text", countryPatchNoAuth.status === 401);
++  const countryPatchAsCustomer = await patch("/content-overrides/countries/Kenya", { text: "Hijacked" }, customerToken);
++  check("a customer without the Content permission can't edit a country's history text", countryPatchAsCustomer.status === 403);
++
++  const countryPatchBadBody = await patch("/content-overrides/countries/Kenya", { text: 12345 }, token);
++  check("a non-string text value is genuinely rejected", countryPatchBadBody.status === 400);
++
++  const countryPatchOk = await patch("/content-overrides/countries/Kenya", { text: "A real, admin-edited history for Kenya." }, token);
++  check("editing a country's history text returns 200 with the real, updated overrides", countryPatchOk.status === 200 && countryPatchOk.body.countryHistoryOverrides.Kenya === "A real, admin-edited history for Kenya.");
++
++  const countryPatchReplace = await patch("/content-overrides/countries/Kenya", { text: "A fully replaced second version of the text." }, token);
++  check("re-editing the same country's text genuinely replaces it (a single freeform field, not a sub-key merge like moments)", countryPatchReplace.body.countryHistoryOverrides.Kenya === "A fully replaced second version of the text.");
++
++  const overridesAfterCountryPatch = await get("/content-overrides");
++  check("the country edit genuinely persists, and the earlier moment edit is still there too (independent keys, one write doesn't clobber the other)", overridesAfterCountryPatch.body.countryHistoryOverrides.Kenya === "A fully replaced second version of the text." && overridesAfterCountryPatch.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
++
+   console.log(`\n${pass} passed, ${fail} failed`);
+   server.close();
+   process.exit(fail > 0 ? 1 : 0);
+diff --git a/server/test/schema.sqlite.sql b/server/test/schema.sqlite.sql
+index e0fc5dd..0cef91b 100644
+--- a/server/test/schema.sqlite.sql
++++ b/server/test/schema.sqlite.sql
+@@ -314,3 +314,11 @@ CREATE TABLE contact_messages (
+   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+ );
+ CREATE INDEX idx_contact_messages_read ON contact_messages (read);
++
++-- See migrations/030_content_overrides.sql for the real, full reasoning.
++CREATE TABLE content_overrides (
++  id                          INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
++  moment_overrides            TEXT NOT NULL DEFAULT '{}',
++  country_history_overrides   TEXT NOT NULL DEFAULT '{}',
++  updated_at                  TEXT NOT NULL DEFAULT (datetime('now'))
++);
+diff --git a/src/admin/index.jsx b/src/admin/index.jsx
+index e61941e..819b17d 100644
+--- a/src/admin/index.jsx
++++ b/src/admin/index.jsx
+@@ -2280,7 +2280,11 @@ export function AdminContent() {
+   const [countryDraft, setCountryDraft] = useState("");
+ 
+   const startMomentEdit = (m) => { setEditingMoment(m.id); setMomentDraft({ benefit: m.benefit, description: m.description }); };
+-  const saveMoment = (id) => { setMomentContent(id, momentDraft); setEditingMoment(null); addToast("Moment content updated"); };
++  const saveMoment = async (id) => {
++    const result = await setMomentContent(id, momentDraft);
++    setEditingMoment(null);
++    addToast(result.ok ? "Moment content updated" : result.error);
++  };
+ 
+   const startCourseEdit = (c) => { setEditingCourse(c.id); setCourseDraft({ blurb: c.blurb, monthlyPriceCents: c.monthlyPriceCents, instructor: c.instructor, lessons: c.lessons }); };
+   const saveCourse = async (id) => {
+@@ -2482,7 +2486,11 @@ export function AdminContent() {
+   };
+ 
+   const startCountryEdit = (name) => { setEditingCountry(name); setCountryDraft(getCountryHistory(name)); };
+-  const saveCountry = (name) => { setCountryHistory(name, countryDraft); setEditingCountry(null); addToast("Country history updated"); };
++  const saveCountry = async (name) => {
++    const result = await setCountryHistory(name, countryDraft);
++    setEditingCountry(null);
++    addToast(result.ok ? "Country history updated" : result.error);
++  };
+ 
+   return (
+     <div>
+diff --git a/src/context/index.jsx b/src/context/index.jsx
+index 30153c6..c6234ad 100644
+--- a/src/context/index.jsx
++++ b/src/context/index.jsx
+@@ -1043,9 +1043,28 @@ export function AdminDataProvider({ children }) {
+     }
+   };
+ 
++  // Real, backend-persisted content overrides (admin edits to a moment's copy or a country's
++  // history text) -- replacing what used to be purely client-side, in-memory state that never
++  // survived a page refresh, the same pre-migration pattern products and courses themselves used
++  // to have. Fetched the same way as realProducts/realGreenBeans/settings above: unconditionally
++  // on app load, since Moments/WorldJourney/Growing show these overrides to every visitor, not
++  // just admins.
+   const [momentOverrides, setMomentOverrides] = useState({});
+-  const [courseOverrides, setCourseOverrides] = useState({});
+   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
++  const [contentOverridesLoading, setContentOverridesLoading] = useState(true);
++  const [contentOverridesError, setContentOverridesError] = useState("");
++  const refetchContentOverrides = () => {
++    setContentOverridesLoading(true);
++    setContentOverridesError("");
++    api.getContentOverrides()
++      .then((body) => {
++        setMomentOverrides(pluck(body, "momentOverrides"));
++        setCountryHistoryOverrides(pluck(body, "countryHistoryOverrides"));
++      })
++      .catch((e) => setContentOverridesError(e.message))
++      .finally(() => setContentOverridesLoading(false));
++  };
++  useEffect(() => { refetchContentOverrides(); }, []);
+   // Real business settings, fetched the same way as realProducts/realGreenBeans above --
+   // unconditionally on app load, since the announcement banner and structured data (business
+   // name, contact info) are shown to every visitor, not gated behind an admin/staff role.
+@@ -1712,21 +1731,32 @@ export function AdminDataProvider({ children }) {
+   }, [user && user.role]);
+ 
+   const getMomentContent = (m) => ({ ...m, ...(momentOverrides[m.id] || {}) });
+-  const setMomentContent = (id, patch) => {
+-    setMomentOverrides((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+-    logAction("Moment content edited", id);
++  const setMomentContent = async (id, patch) => {
++    try {
++      const { momentOverrides: updated } = await api.updateMomentContent(id, patch);
++      setMomentOverrides(updated);
++      logAction("Moment content edited", id);
++      return { ok: true };
++    } catch (e) {
++      return { ok: false, error: e.message };
++    }
+   };
+ 
+-  const getCourseContent = (c) => ({ ...c, ...(courseOverrides[c.name] || {}) });
+-  const setCourseContent = (name, patch) => {
+-    setCourseOverrides((prev) => ({ ...prev, [name]: { ...(prev[name] || {}), ...patch } }));
+-    logAction("Course content edited", name);
+-  };
++  // courseOverrides/getCourseContent/setCourseContent were removed here -- that mechanism was
++  // purely a client-only, in-memory patch that never persisted past a page refresh, and had
++  // already been fully superseded by realCourses (real, backend-persisted Academy course data,
++  // fetched above) with zero remaining call sites anywhere else in the app.
+ 
+   const getCountryHistory = (countryName) => countryHistoryOverrides[countryName] ?? COUNTRY_HISTORY[countryName];
+-  const setCountryHistory = (countryName, text) => {
+-    setCountryHistoryOverrides((prev) => ({ ...prev, [countryName]: text }));
+-    logAction("Country history edited", countryName);
++  const setCountryHistory = async (countryName, text) => {
++    try {
++      const { countryHistoryOverrides: updated } = await api.updateCountryHistory(countryName, text);
++      setCountryHistoryOverrides(updated);
++      logAction("Country history edited", countryName);
++      return { ok: true };
++    } catch (e) {
++      return { ok: false, error: e.message };
++    }
+   };
+ 
+   const setSettings = async (patch) => {
+@@ -1750,19 +1780,18 @@ export function AdminDataProvider({ children }) {
+   // earlier this session -- exporting it suggested a real backup that Railway's own database
+   // backups already do properly, and "restoring" it would have silently overwritten real,
+   // fetched state with stale JSON, with zero actual effect on the real database.
++  // momentOverrides/courseOverrides/countryHistoryOverrides all used to be exported/restored
++  // here too, back when they were purely client-side, in-memory-only state -- removed from both,
++  // same real precedent already applied when orders/users/quotations/etc. became real: a live
++  // database needs its own real backup strategy (Railway's own database backups), not an ad-hoc
++  // JSON download, and "restoring" them here would silently overwrite real, fetched state with
++  // stale JSON, with zero actual effect on the real database.
+   const exportAdminData = () => ({
+     auditLog,
+-    momentOverrides, courseOverrides, countryHistoryOverrides,
+   });
+-  // Restores each piece independently rather than one big setState -- if the uploaded file is
+-  // missing a key (an older export, or a hand-edited partial file), that specific piece is simply
+-  // left as-is instead of the whole restore failing or wiping something the file didn't mention.
+   const restoreAdminData = (data) => {
+     if (!data || typeof data !== "object") return;
+     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
+-    if (data.momentOverrides) setMomentOverrides(data.momentOverrides);
+-    if (data.courseOverrides) setCourseOverrides(data.courseOverrides);
+-    if (data.countryHistoryOverrides) setCountryHistoryOverrides(data.countryHistoryOverrides);
+     logAction("Backup restored", `${Object.keys(data).length} data sets`);
+   };
+ 
+@@ -1799,8 +1828,8 @@ export function AdminDataProvider({ children }) {
+         feedbackList, addFeedback, toggleFeedbackReviewed,
+         newsletterSubscribers, newsletterSubscribersLoading, addNewsletterSubscriber, refetchNewsletterSubscribers,
+         getMomentContent, setMomentContent, momentOverrides,
+-        getCourseContent, setCourseContent, courseOverrides,
+         getCountryHistory, setCountryHistory,
++        contentOverridesLoading, contentOverridesError, refetchContentOverrides,
+         settings, setSettings, settingsLoading, settingsError, refetchSettings,
+         exportAdminData, restoreAdminData,
+       }}
+diff --git a/src/utils/api.js b/src/utils/api.js
+index 4d4d965..d8a63ac 100644
+--- a/src/utils/api.js
++++ b/src/utils/api.js
+@@ -325,4 +325,9 @@ export const api = {
+     request("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+   syncCart: (items) =>
+     request("/cart", { method: "PUT", body: JSON.stringify({ items }) }),
++  getContentOverrides: () => request("/content-overrides"),
++  updateMomentContent: (id, patch) =>
++    request(`/content-overrides/moments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
++  updateCountryHistory: (name, text) =>
++    request(`/content-overrides/countries/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify({ text }) }),
+ };
+\ No newline at end of file

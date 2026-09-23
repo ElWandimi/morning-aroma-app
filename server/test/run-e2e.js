@@ -1818,6 +1818,45 @@ async function main() {
   await checkForAbandonedCarts();
   check("an old but genuinely EMPTY cart doesn't get emailed -- nothing to abandon", resendMock.getSentEmails().filter((e) => e.to === "empty-cart@morningaroma.local").length === 0);
 
+  console.log("\nReal, backend-persisted content overrides -- previously entirely client-only, in-memory state (src/context/index.jsx's AdminDataProvider), meaning an admin's edits to a moment's copy or a country's history text never survived a page refresh:");
+  const overridesInitial = await get("/content-overrides");
+  check("GET /content-overrides is public, no auth needed", overridesInitial.status === 200);
+  check("a fresh deployment starts with empty overrides", Object.keys(overridesInitial.body.momentOverrides).length === 0 && Object.keys(overridesInitial.body.countryHistoryOverrides).length === 0);
+
+  const momentPatchNoAuth = await patch("/content-overrides/moments/morning-ritual", { benefit: "Hijacked" });
+  check("anonymous caller can't edit a moment's content", momentPatchNoAuth.status === 401);
+  const momentPatchAsCustomer = await patch("/content-overrides/moments/morning-ritual", { benefit: "Hijacked" }, customerToken);
+  check("a customer without the Content permission can't edit a moment's content", momentPatchAsCustomer.status === 403);
+
+  const momentPatchUnknownField = await patch("/content-overrides/moments/morning-ritual", { notARealField: "x" }, token);
+  check("an unknown moment field is genuinely rejected", momentPatchUnknownField.status === 400);
+
+  const momentPatchOk = await patch("/content-overrides/moments/morning-ritual", { benefit: "Real, admin-edited benefit text" }, token);
+  check("editing a moment's content returns 200 with the real, merged overrides", momentPatchOk.status === 200 && momentPatchOk.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
+
+  const momentPatchDescription = await patch("/content-overrides/moments/morning-ritual", { description: "A second, real field on the same moment" }, token);
+  check("a second patch to the same moment genuinely merges rather than overwriting the first field", momentPatchDescription.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text" && momentPatchDescription.body.momentOverrides["morning-ritual"].description === "A second, real field on the same moment");
+
+  const overridesAfterMomentPatch = await get("/content-overrides");
+  check("the moment edit genuinely persists across a fresh GET, not just in the PATCH response", overridesAfterMomentPatch.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
+
+  const countryPatchNoAuth = await patch("/content-overrides/countries/Kenya", { text: "Hijacked" });
+  check("anonymous caller can't edit a country's history text", countryPatchNoAuth.status === 401);
+  const countryPatchAsCustomer = await patch("/content-overrides/countries/Kenya", { text: "Hijacked" }, customerToken);
+  check("a customer without the Content permission can't edit a country's history text", countryPatchAsCustomer.status === 403);
+
+  const countryPatchBadBody = await patch("/content-overrides/countries/Kenya", { text: 12345 }, token);
+  check("a non-string text value is genuinely rejected", countryPatchBadBody.status === 400);
+
+  const countryPatchOk = await patch("/content-overrides/countries/Kenya", { text: "A real, admin-edited history for Kenya." }, token);
+  check("editing a country's history text returns 200 with the real, updated overrides", countryPatchOk.status === 200 && countryPatchOk.body.countryHistoryOverrides.Kenya === "A real, admin-edited history for Kenya.");
+
+  const countryPatchReplace = await patch("/content-overrides/countries/Kenya", { text: "A fully replaced second version of the text." }, token);
+  check("re-editing the same country's text genuinely replaces it (a single freeform field, not a sub-key merge like moments)", countryPatchReplace.body.countryHistoryOverrides.Kenya === "A fully replaced second version of the text.");
+
+  const overridesAfterCountryPatch = await get("/content-overrides");
+  check("the country edit genuinely persists, and the earlier moment edit is still there too (independent keys, one write doesn't clobber the other)", overridesAfterCountryPatch.body.countryHistoryOverrides.Kenya === "A fully replaced second version of the text." && overridesAfterCountryPatch.body.momentOverrides["morning-ritual"].benefit === "Real, admin-edited benefit text");
+
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();
   process.exit(fail > 0 ? 1 : 0);

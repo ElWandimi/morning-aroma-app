@@ -26,6 +26,7 @@ const quotationsRoutes = require("./routes/quotations");
 const serviceInquiriesRoutes = require("./routes/serviceInquiries");
 const greenOrdersRoutes = require("./routes/greenOrders");
 const contactMessagesRoutes = require("./routes/contactMessages");
+const contentOverridesRoutes = require("./routes/content-overrides");
 const webhooksRoutes = require("./routes/webhooks");
 
 const app = express();
@@ -173,6 +174,7 @@ app.use("/quotations", quotationsRoutes);
 app.use("/service-inquiries", serviceInquiriesRoutes);
 app.use("/green-orders", greenOrdersRoutes);
 app.use("/contact-messages", contactMessagesRoutes);
+app.use("/content-overrides", contentOverridesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

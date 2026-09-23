@@ -1043,9 +1043,28 @@ export function AdminDataProvider({ children }) {
     }
   };
 
+  // Real, backend-persisted content overrides (admin edits to a moment's copy or a country's
+  // history text) -- replacing what used to be purely client-side, in-memory state that never
+  // survived a page refresh, the same pre-migration pattern products and courses themselves used
+  // to have. Fetched the same way as realProducts/realGreenBeans/settings above: unconditionally
+  // on app load, since Moments/WorldJourney/Growing show these overrides to every visitor, not
+  // just admins.
   const [momentOverrides, setMomentOverrides] = useState({});
-  const [courseOverrides, setCourseOverrides] = useState({});
   const [countryHistoryOverrides, setCountryHistoryOverrides] = useState({});
+  const [contentOverridesLoading, setContentOverridesLoading] = useState(true);
+  const [contentOverridesError, setContentOverridesError] = useState("");
+  const refetchContentOverrides = () => {
+    setContentOverridesLoading(true);
+    setContentOverridesError("");
+    api.getContentOverrides()
+      .then((body) => {
+        setMomentOverrides(pluck(body, "momentOverrides"));
+        setCountryHistoryOverrides(pluck(body, "countryHistoryOverrides"));
+      })
+      .catch((e) => setContentOverridesError(e.message))
+      .finally(() => setContentOverridesLoading(false));
+  };
+  useEffect(() => { refetchContentOverrides(); }, []);
   // Real business settings, fetched the same way as realProducts/realGreenBeans above --
   // unconditionally on app load, since the announcement banner and structured data (business
   // name, contact info) are shown to every visitor, not gated behind an admin/staff role.
@@ -1712,21 +1731,32 @@ export function AdminDataProvider({ children }) {
   }, [user && user.role]);
 
   const getMomentContent = (m) => ({ ...m, ...(momentOverrides[m.id] || {}) });
-  const setMomentContent = (id, patch) => {
-    setMomentOverrides((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
-    logAction("Moment content edited", id);
+  const setMomentContent = async (id, patch) => {
+    try {
+      const { momentOverrides: updated } = await api.updateMomentContent(id, patch);
+      setMomentOverrides(updated);
+      logAction("Moment content edited", id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
-  const getCourseContent = (c) => ({ ...c, ...(courseOverrides[c.name] || {}) });
-  const setCourseContent = (name, patch) => {
-    setCourseOverrides((prev) => ({ ...prev, [name]: { ...(prev[name] || {}), ...patch } }));
-    logAction("Course content edited", name);
-  };
+  // courseOverrides/getCourseContent/setCourseContent were removed here -- that mechanism was
+  // purely a client-only, in-memory patch that never persisted past a page refresh, and had
+  // already been fully superseded by realCourses (real, backend-persisted Academy course data,
+  // fetched above) with zero remaining call sites anywhere else in the app.
 
   const getCountryHistory = (countryName) => countryHistoryOverrides[countryName] ?? COUNTRY_HISTORY[countryName];
-  const setCountryHistory = (countryName, text) => {
-    setCountryHistoryOverrides((prev) => ({ ...prev, [countryName]: text }));
-    logAction("Country history edited", countryName);
+  const setCountryHistory = async (countryName, text) => {
+    try {
+      const { countryHistoryOverrides: updated } = await api.updateCountryHistory(countryName, text);
+      setCountryHistoryOverrides(updated);
+      logAction("Country history edited", countryName);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   };
 
   const setSettings = async (patch) => {
@@ -1750,19 +1780,18 @@ export function AdminDataProvider({ children }) {
   // earlier this session -- exporting it suggested a real backup that Railway's own database
   // backups already do properly, and "restoring" it would have silently overwritten real,
   // fetched state with stale JSON, with zero actual effect on the real database.
+  // momentOverrides/courseOverrides/countryHistoryOverrides all used to be exported/restored
+  // here too, back when they were purely client-side, in-memory-only state -- removed from both,
+  // same real precedent already applied when orders/users/quotations/etc. became real: a live
+  // database needs its own real backup strategy (Railway's own database backups), not an ad-hoc
+  // JSON download, and "restoring" them here would silently overwrite real, fetched state with
+  // stale JSON, with zero actual effect on the real database.
   const exportAdminData = () => ({
     auditLog,
-    momentOverrides, courseOverrides, countryHistoryOverrides,
   });
-  // Restores each piece independently rather than one big setState -- if the uploaded file is
-  // missing a key (an older export, or a hand-edited partial file), that specific piece is simply
-  // left as-is instead of the whole restore failing or wiping something the file didn't mention.
   const restoreAdminData = (data) => {
     if (!data || typeof data !== "object") return;
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog);
-    if (data.momentOverrides) setMomentOverrides(data.momentOverrides);
-    if (data.courseOverrides) setCourseOverrides(data.courseOverrides);
-    if (data.countryHistoryOverrides) setCountryHistoryOverrides(data.countryHistoryOverrides);
     logAction("Backup restored", `${Object.keys(data).length} data sets`);
   };
 
@@ -1799,8 +1828,8 @@ export function AdminDataProvider({ children }) {
         feedbackList, addFeedback, toggleFeedbackReviewed,
         newsletterSubscribers, newsletterSubscribersLoading, addNewsletterSubscriber, refetchNewsletterSubscribers,
         getMomentContent, setMomentContent, momentOverrides,
-        getCourseContent, setCourseContent, courseOverrides,
         getCountryHistory, setCountryHistory,
+        contentOverridesLoading, contentOverridesError, refetchContentOverrides,
         settings, setSettings, settingsLoading, settingsError, refetchSettings,
         exportAdminData, restoreAdminData,
       }}

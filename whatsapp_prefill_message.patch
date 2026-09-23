@@ -1,0 +1,17 @@
+diff --git a/src/components/index.jsx b/src/components/index.jsx
+index a626dc5..2749335 100644
+--- a/src/components/index.jsx
++++ b/src/components/index.jsx
+@@ -1673,7 +1673,11 @@ export function CustomerCareWidget() {
+   useClickOutside(widgetRef, open, () => setOpen(false));
+ 
+   const digitsOnly = (s) => (s || "").replace(/[^\d]/g, "");
+-  const waHref = `https://wa.me/${digitsOnly(settings.whatsappNumber)}?text=${encodeURIComponent("Hi Morning Aroma, I have a question about ")}`;
++  // Was a bare "Hi Morning Aroma, I have a question about " -- gave the customer almost nothing
++  // to work with before they had to start typing their actual question. A little more of an
++  // opening (still ending on the same open blank) reads more like a real customer's own message,
++  // not a canned script, while giving them slightly more to anchor on before they finish it.
++  const waHref = `https://wa.me/${digitsOnly(settings.whatsappNumber)}?text=${encodeURIComponent("Hi Morning Aroma 👋 I'm a customer with a question about — ")}`;
+   const telHref = `tel:${(settings.phoneNumber || "").replace(/[^\d+]/g, "")}`;
+   const mailHref = `mailto:${settings.contactEmail}`;
+ 

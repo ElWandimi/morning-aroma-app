@@ -314,3 +314,11 @@ CREATE TABLE contact_messages (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_contact_messages_read ON contact_messages (read);
+
+-- See migrations/030_content_overrides.sql for the real, full reasoning.
+CREATE TABLE content_overrides (
+  id                          INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  moment_overrides            TEXT NOT NULL DEFAULT '{}',
+  country_history_overrides   TEXT NOT NULL DEFAULT '{}',
+  updated_at                  TEXT NOT NULL DEFAULT (datetime('now'))
+);

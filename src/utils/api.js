@@ -325,4 +325,9 @@ export const api = {
     request("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
   syncCart: (items) =>
     request("/cart", { method: "PUT", body: JSON.stringify({ items }) }),
+  getContentOverrides: () => request("/content-overrides"),
+  updateMomentContent: (id, patch) =>
+    request(`/content-overrides/moments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  updateCountryHistory: (name, text) =>
+    request(`/content-overrides/countries/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify({ text }) }),
 };
