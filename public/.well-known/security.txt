@@ -1,0 +1,5 @@
+Contact: mailto:hello@morning-aroma.com
+Contact: https://morning-aroma.com/contact
+Expires: 2027-09-24T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://morning-aroma.com/.well-known/security.txt
