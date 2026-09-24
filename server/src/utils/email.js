@@ -20,6 +20,14 @@ const SITE_URL = process.env.FRONTEND_URL || "https://morning-aroma-app-producti
 // Switch this to a real address on a verified domain once one exists.
 const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS || "Morning Aroma <onboarding@resend.dev>";
 
+// Escapes HTML-significant characters before interpolating user-controlled text (e.g. the
+// account's display name) into an HTML email body -- the same minimal escape used for the
+// site's own meta tags in server.cjs, reimplemented locally since that file isn't requirable
+// from here (a separate top-level script, not part of this module tree).
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 function logInDevOnly(label, to, subject, body) {
   if (process.env.NODE_ENV !== "production") {
     console.log(`[dev only] ${label} to ${to} — Subject: "${subject}"\n${body}`);
@@ -77,7 +85,7 @@ function buildWelcomeEmailHtml(user, products) {
           </tr>
           <tr>
             <td style="padding: 0 32px 24px; color: #3E2C23; font-size: 15px; line-height: 1.6;">
-              <p>Hi ${user.name},</p>
+              <p>Hi ${escapeHtml(user.name)},</p>
               <p>Thank you for creating an account with Morning Aroma. We're genuinely glad you're here.</p>
               <p>Every bag we sell publishes exactly what we paid the farmer for it — see the Source Library if you're curious where your coffee's money actually goes. Your Aroma Journey keeps a running log of what you've tried and liked, and gets sharper with each review you leave.</p>
             </td>

@@ -709,8 +709,11 @@ router.post("/2fa/disable", requireAuth, async (req, res) => {
   const ok = await verifyPassword(typeof password === "string" ? password : "", user.password_hash);
   if (!ok) return res.status(401).json({ error: "Incorrect password." });
 
+  // token_version bumped in this SAME update as the 2FA fields themselves -- disabling 2FA is a
+  // security downgrade, so any session token issued before this change must stop working, the
+  // same reasoning applied to password reset and account deletion elsewhere in this file.
   await query(
-    "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_pending_secret = NULL, two_factor_backup_codes = $1 WHERE id = $2",
+    "UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_pending_secret = NULL, two_factor_backup_codes = $1, token_version = token_version + 1 WHERE id = $2",
     [[], user.id]
   );
   res.json({ enabled: false });
