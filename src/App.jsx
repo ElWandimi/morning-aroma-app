@@ -81,7 +81,7 @@ function getPageMeta(route, realProducts, realCourses, blogPosts) {
       // product link shared on WhatsApp/Instagram/X had no preview image at all. Shop.jsx's own
       // separate Product structured-data block already guards against exactly this
       // (`url.startsWith("http") ? url : ...`) -- this applies the same real fix here.
-      const rawImage = getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 1200);
+      const rawImage = p ? getProductPhotoUrl(p, COUNTRY_JOURNEY_PHOTO, 1200) : undefined;
       const image = rawImage && !rawImage.startsWith("http") && !rawImage.startsWith("data:")
         ? `${window.location.origin}${rawImage}`
         : rawImage;
