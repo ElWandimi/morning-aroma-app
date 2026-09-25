@@ -148,6 +148,9 @@ async function renderRoute(browser, baseUrl, route) {
     // longer itself provides any of this settle time.
     await page.waitForTimeout(1500);
     const html = await page.content();
+    if (html.includes("error-boundary-screen")) {
+      return { ok: false, error: "captured an error-boundary screen instead of real content" };
+    }
     return { ok: true, html };
   } catch (err) {
     return { ok: false, error: String(err && err.message ? err.message : err) };
