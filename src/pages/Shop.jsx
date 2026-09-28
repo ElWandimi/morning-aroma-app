@@ -53,6 +53,11 @@ export function ShopPage() {
     return true;
   });
 
+  // Push sold-out products to the bottom of the grid while keeping relative order
+  // within each group (in-stock first, then out-of-stock), so browsing customers
+  // see what they can actually buy before what's unavailable.
+  const sorted = [...filtered].sort((a, b) => (getStock(a.id) === 0 ? 1 : 0) - (getStock(b.id) === 0 ? 1 : 0));
+
   const activeCount =
     filters.aroma.length + [filters.body, filters.acidity, filters.roast, filters.moment, filters.brew].filter(Boolean).length;
 
@@ -158,7 +163,7 @@ export function ShopPage() {
             </div>
           ) : (
             <div className="origin-showcase">
-              {filtered.map((p, i) => {
+              {sorted.map((p, i) => {
                 const stock = getStock(p.id);
                 const soldOut = stock === 0;
                 const reverse = i % 2 === 1;
