@@ -109,7 +109,7 @@ async function resolveMeta(pageRoute) {
   const { page, id } = pageRoute;
   if ((page === "product" || page === "growingprofile") && id) {
     const p = PRODUCTS.find((p) => p.id === id);
-    if (p) return { title: `${p.name} — ${p.country}${suffix}`, description: p.note };
+    if (p) return { title: `${p.name} — ${p.country}${suffix}`, description: p.note, image: `${SITE_ORIGIN}/photos/products/${p.id}.png` };
     return PAGE_META[page === "product" ? "shop" : "growing"];
   }
   if (page === "moment" && id) {
@@ -225,6 +225,7 @@ async function renderIndexWithMeta(urlPath) {
   const meta = await resolveMeta(parseRoutePath(urlPath));
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description || "");
+  const image = meta.image ? escapeHtml(meta.image) : null;
   // The real, current page's own URL -- was missing from this replacement list entirely before
   // this, meaning any crawler that doesn't execute JS (many social media link-preview bots: a
   // real, separate audience from Googlebot, which does run JS and would see the client-side fix
@@ -279,6 +280,11 @@ async function renderIndexWithMeta(urlPath) {
     .replace(/<link rel="canonical" href=".*?"\s*\/?>/, `<link rel="canonical" href="${realUrl}" />`)
     .replace(/<meta name="twitter:title" content=".*?"\s*\/?>/, `<meta name="twitter:title" content="${title}" />`)
     .replace(/<meta name="twitter:description" content=".*?"\s*\/?>/, `<meta name="twitter:description" content="${description}" />`);
+  if (image) {
+    html = html
+      .replace(/<meta property="og:image" content=".*?"\s*\/?>/, `<meta property="og:image" content="${image}" />`)
+      .replace(/<meta name="twitter:image" content=".*?"\s*\/?>/, `<meta name="twitter:image" content="${image}" />`);
+  }
   if (urlPath.split("?")[0] === "/privacy") {
     html = html.replace(
       /(Privacy Policy<\/a>\s*<\/p>)/,
@@ -288,12 +294,6 @@ async function renderIndexWithMeta(urlPath) {
   return html;
 }
 
-// Same reasoning and same deliberate CSP omission as the backend API's own helmet setup
-// (server/src/app.js) -- real, low-risk headers on every response this server sends (every real
-// page a visitor loads goes through this server, not just the API), CSP left for a dedicated
-// follow-up since getting it wrong here specifically risks breaking Google Fonts, Cloudinary/
-// Unsplash images, or Paystack's checkout script loading on the actual pages people see.
-//
 // crossOriginOpenerPolicy is overridden from helmet's own default ("same-origin") to
 // "same-origin-allow-popups" -- a real, live bug, not a hypothetical: helmet's default value
 // process-isolates this page from anything it opens via window.open(), which severs
@@ -305,36 +305,40 @@ async function renderIndexWithMeta(urlPath) {
 // the same process-isolation benefit for ordinary cross-origin navigations while specifically
 // preserving the opener relationship for popups this page itself opens, which is exactly the
 // carve-out documented for this exact scenario.
+//
+// CSP: started in report-only mode so violations surface in the browser console (and any
+// configured report-uri endpoint) without breaking anything live. Once no violations appear
+// across a real traffic window, flip Content-Security-Policy-Report-Only to
+// Content-Security-Policy to enforce. Sources allowed reflect what the app actually loads:
+// - fonts.googleapis.com + fonts.gstatic.com: Google Fonts stylesheet + font files
+// - res.cloudinary.com: product and country photos served via Cloudinary
+// - images.unsplash.com: background/ambient images used in several pages
+// - js.paystack.co: Paystack inline checkout script (loaded dynamically by PaystackPop.js)
+// - sentry.io CDN: Sentry browser SDK if loaded from CDN (not bundled)
+// - accounts.google.com: Google Sign In iframe
+// - unsafe-inline for styles: required by many CSS-in-JS patterns; tighten later with nonces
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy-Report-Only",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://js.paystack.co https://accounts.google.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data: https://res.cloudinary.com https://images.unsplash.com",
+      "connect-src 'self' https://api.paystack.co https://sentry.io https://*.sentry.io",
+      "frame-src https://accounts.google.com https://js.paystack.co",
+      "object-src 'none'",
+      "base-uri 'self'",
+    ].join("; ")
+  );
+  next();
+});
 app.use(helmet({ contentSecurityPolicy: false, crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" } }));
 
 // Railway's own health check -- kept ahead of the SPA fallback so it always gets a real response
 // regardless of what routes exist client-side, the same reasoning Railway's own SPA guide gives.
 app.get("/health", (req, res) => res.json({ ok: true }));
-
-// TEMPORARY diagnostic route -- lists what's actually on disk in dist/ and dist/assets/ in the
-// running container right now, to debug a live mismatch between the JS filename index.html
-// references and what express.static actually finds. Safe to remove once resolved: read-only,
-// lists filenames only (no file contents), and reveals nothing not already visible by requesting
-// the files directly.
-app.get("/__debug-dist", (req, res) => {
-  let distFiles = [];
-  let assetsFiles = [];
-  let indexHtmlScriptTag = null;
-  try { distFiles = fs.readdirSync(DIST_DIR); } catch (e) { distFiles = [String(e)]; }
-  try { assetsFiles = fs.readdirSync(path.join(DIST_DIR, "assets")); } catch (e) { assetsFiles = [String(e)]; }
-  try {
-    const liveIndexHtml = fs.readFileSync(path.join(DIST_DIR, "index.html"), "utf8");
-    indexHtmlScriptTag = liveIndexHtml.match(/<script[^>]*src="[^"]+"[^>]*>/g);
-  } catch (e) { indexHtmlScriptTag = String(e); }
-  res.json({
-    DIST_DIR,
-    distFiles,
-    assetsFilesCount: assetsFiles.length,
-    assetsFiles,
-    inMemoryIndexHtmlScriptTag: INDEX_HTML.match(/<script[^>]*src="[^"]+"[^>]*>/g),
-    liveIndexHtmlScriptTag: indexHtmlScriptTag,
-  });
-});
 
 // Fingerprinted build assets (Vite hashes filenames under /assets) are safe to cache forever --
 // a new deploy produces new filenames, it never reuses one with different content.

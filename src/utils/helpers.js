@@ -69,7 +69,11 @@ export function withTargetWidth(url, targetWidth) {
 // and is deliberately left untouched).
 export const getProductPhotoUrl = (p, countryPhotoMap, targetWidth) => {
   if (p.photoUrl) return withTargetWidth(withCloudinaryOptimization(p.photoUrl), targetWidth);
-  if (PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id)) return `/photos/products/${p.id}.png`;
+  // Serve WebP for bundled photos -- WebP files are pre-generated at build time alongside the
+  // originals (public/photos/products/*.webp). Supported by >97% of browsers as of 2025;
+  // PNG originals are kept as fallback for the og:image meta tag (served to crawlers that
+  // may not declare an Accept header with image/webp).
+  if (PRODUCTS_WITH_BUNDLED_PHOTOS.includes(p.id)) return `/photos/products/${p.id}.webp`;
   return withTargetWidth(countryPhotoMap[p.country], targetWidth);
 };
 

@@ -36,7 +36,7 @@ function signAccessToken(user, csrfToken) {
   return jwt.sign(
     { sub: user.id, email: user.email, role: user.role, csrf: csrfToken, tokenVersion: user.token_version ?? 0 },
     requireSecret(),
-    { expiresIn: "7d" }
+    { expiresIn: "7d", algorithm: "HS256" }
   );
 }
 
@@ -93,12 +93,12 @@ function signPendingTwoFactorToken(user) {
   return jwt.sign(
     { sub: user.id, type: "2fa_pending" },
     requireSecret(),
-    { expiresIn: "5m" }
+    { expiresIn: "5m", algorithm: "HS256" }
   );
 }
 
 function verifyPendingTwoFactorToken(token) {
-  const payload = jwt.verify(token, requireSecret());
+  const payload = jwt.verify(token, requireSecret(), { algorithms: ["HS256"] });
   if (payload.type !== "2fa_pending") {
     // Never actually reachable via a normally-issued real access token today (they don't carry a
     // `type` claim at all), but explicit rather than assumed -- if a second short-lived token type
@@ -116,12 +116,12 @@ function signPendingEmailVerificationToken(user) {
   return jwt.sign(
     { sub: user.id, type: "email_verification_pending" },
     requireSecret(),
-    { expiresIn: "5m" }
+    { expiresIn: "5m", algorithm: "HS256" }
   );
 }
 
 function verifyPendingEmailVerificationToken(token) {
-  const payload = jwt.verify(token, requireSecret());
+  const payload = jwt.verify(token, requireSecret(), { algorithms: ["HS256"] });
   if (payload.type !== "email_verification_pending") {
     throw new Error("Not a valid email verification session token.");
   }
@@ -129,7 +129,7 @@ function verifyPendingEmailVerificationToken(token) {
 }
 
 function verifyAccessToken(token) {
-  return jwt.verify(token, requireSecret());
+  return jwt.verify(token, requireSecret(), { algorithms: ["HS256"] });
 }
 
 // Password reset tokens: generate a random raw token, return it to the caller (to email to the
