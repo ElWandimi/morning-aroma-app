@@ -1,6 +1,12 @@
 node_modules
 dist
 dist-data
+# Prerendered HTML snapshots -- gitignored for local dev (stale snapshots would ship to prod if
+# committed from a machine without live backend access). The prerender GitHub Actions workflow
+# (.github/workflows/prerender.yml) regenerates these from scratch against the live Railway
+# backend after every push to main and commits them with `git add -f`, so they DO land in the
+# repo on every deploy -- Railway then serves them from dist-prerendered/ via server.cjs.
+dist-prerendered
 .DS_Store
 
 # Environment variables — never commit real secrets

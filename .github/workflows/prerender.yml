@@ -1,0 +1,100 @@
+# Prerenders every static/detail page after each push to main and commits the snapshots back to
+# the repo. server.cjs serves these frozen HTML snapshots to crawlers on first request, then the
+# real JS bundle hydrates on top -- so Googlebot sees real product/country/moment content in the
+# raw HTML, not just an empty <div id="root"></div> shell.
+#
+# Why this approach instead of running prerender at Railway deploy time:
+# - Railway build containers have no outbound access to the live backend API, which the prerender
+#   script requires (it boots a real headless browser, loads the actual built app, and waits for
+#   React to fetch and render real product/course data).
+# - Running here in GitHub Actions gives full outbound internet access to the live Railway backend.
+# - Committing snapshots to the repo means Railway picks them up on its own deploy from main --
+#   no extra Railway service, no separate deploy step, no disk-not-persisted-across-deploys issue.
+#
+# Snapshots land in dist-prerendered/ (gitignored by default -- this workflow adds them explicitly
+# so they CAN be committed). server.cjs reads them from that directory at request time and falls
+# back to the plain shell for any route whose snapshot doesn't exist on disk.
+#
+# This workflow only runs on push to main (not PRs) since it commits back to main. It also skips
+# itself if the HEAD commit was already made by this workflow, to prevent an infinite commit loop.
+
+name: Prerender snapshots
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  prerender:
+    name: Prerender & commit snapshots
+    runs-on: ubuntu-latest
+    # Skip if this commit was already made by this workflow, so we don't loop
+    if: "!contains(github.event.head_commit.message, '[prerender]')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use a token that can push back to main (the default GITHUB_TOKEN works if branch
+          # protection doesn't block bots; set a PAT as PRERENDER_PUSH_TOKEN secret if it does)
+          token: ${{ secrets.PRERENDER_PUSH_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies (including Playwright)
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        # Only installs the Chromium browser -- the one prerender.mjs actually uses. Installing
+        # all browsers (the default) takes ~500MB and ~2 minutes for browsers this script never
+        # touches.
+        run: npx playwright install --with-deps chromium
+
+      - name: Build app
+        run: npm run build
+        env:
+          # Pass the real production API URL so the build itself has the right backend base baked
+          # in -- same var the frontend reads at runtime via import.meta.env.VITE_API_URL.
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Regenerate sitemap with today's lastmod
+        # The build step already runs generate-sitemap.mjs, but running it again here ensures the
+        # lastmod date in the committed file is always today's date, even if the build itself
+        # happened overnight or the runner's clock differs slightly. Idempotent and fast (<1s).
+        run: node scripts/generate-sitemap.mjs
+        env:
+          SITE_ORIGIN: https://morning-aroma.com
+
+      - name: Prerender all routes
+        run: node scripts/prerender.mjs
+        env:
+          # Real live Railway backend -- the prerender script loads the actual built SPA in a
+          # headless Chromium, which needs this to fetch real product/course/blog data.
+          BACKEND_URL: ${{ secrets.VITE_API_URL }}
+          PRERENDER_CONCURRENCY: 4
+
+      - name: Commit and push snapshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Un-ignore dist-prerendered/ for this commit only -- it's in .gitignore so local dev
+          # doesn't accidentally commit stale snapshots, but this workflow's snapshots are always
+          # freshly generated against the real live backend, so they're safe to commit.
+          git add -f dist-prerendered/
+          # Also commit the regenerated sitemap (with fresh lastmod dates)
+          git add public/sitemap.xml
+          # Only commit if there's actually something new (snapshots unchanged = no commit needed)
+          git diff --cached --quiet && echo "No snapshot changes, skipping commit." && exit 0
+          git commit -m "chore: update prerendered snapshots and sitemap [prerender]
+
+          Automated snapshot regeneration after push to main.
+          Snapshots cover $(ls dist-prerendered/ | wc -l) files across all static + detail routes.
+          Sitemap lastmod updated to $(date -u +%Y-%m-%d).
+
+          Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+          Claude-Session: https://claude.ai/code/session_015TozgT5ZAXAx3MXjjdbhzZ"
+          git push
